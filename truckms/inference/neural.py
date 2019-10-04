@@ -125,8 +125,9 @@ class TruckDetector:
         """
 
         def plots_gen():
-            for (image, id_), (prediction, id_) in zip(images_iterable, predictions_iterable):
-                yield PredictionVisualizer.plot_over_image(image, prediction), id_
+            for (image, id_img), (prediction, id_pred) in zip(images_iterable, predictions_iterable):
+                assert id_img == id_pred
+                yield PredictionVisualizer.plot_over_image(image, prediction), id_img
 
         return plots_gen()
 

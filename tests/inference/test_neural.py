@@ -43,7 +43,7 @@ def test_TruckDetector_pred_iter_to_pandas():
     video_file = [osp.join(r, f) for (r, _, fs) in os.walk(auu_data_root) for f in fs if 'avi' in f or 'mkv' in f][0]
     #file 'Hjorringvej\\Hjorringvej-2\\cam1.mkv' has 6000 frames
     p = TruckDetector(max_operating_res=320, batch_size=10)
-    image_gen = image_generator(video_file, skip=6000//20)
+    image_gen = image_generator(video_file, skip=6000//30)
     image_gen1, image_gen2 = tee(image_gen)
 
     pred_gen = p.compute(image_gen1)
