@@ -1,35 +1,31 @@
 import torch
 import torchvision
-from torch.utils.data.dataloader import default_collate
 from truckms.inference.visuals import PredictionVisualizer
 import numpy as np
-import cv2
+
 
 class TruckDetector:
 
-    def __init__(self, conf_thr=0.5, max_operating_res=320, batch_size=5):
-        self.model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True, progress=False)
+    def __init__(self, conf_thr=0.5, max_operating_res=800, batch_size=5):
+        self.model = torchvision.models.detection.fasterrcnn_resnet50_fpn(pretrained=True, progress=False, min_size=max_operating_res, max_size=max_operating_res,
+                                                                          rpn_pre_nms_top_n_test=100,
+                                                                          rpn_post_nms_top_n_test=100,
+                                                                          box_score_thresh=conf_thr) #look into class FasterRCNN(GeneralizedRCNN): for more parameters
         self.model.eval()
         self.device = 'cuda' if torch.cuda.is_available() else "cpu"
         self.model = self.model.to(self.device)
-        self.conf_thr = conf_thr
         self.batch_size = batch_size
         self.max_operating_res = max_operating_res
         self.downsampling_f = None
 
     def iterable2batch(self, images_iterable):
         batch = []
-        image = next(images_iterable)
-        m = max(image.shape)
-        self.downsampling_f = self.max_operating_res / m
-        batch.append(cv2.resize(image, (0, 0), fx=self.downsampling_f, fy=self.downsampling_f))
-        for image in images_iterable:
-            batch.append(cv2.resize(image, (0, 0), fx=self.downsampling_f, fy=self.downsampling_f))
+        for idx, image in enumerate(images_iterable):
+            batch.append(torch.from_numpy(image.transpose((2, 0, 1)).astype(np.float32)).to(self.device) / 255.0)
             if len(batch) == self.batch_size:
                 yield batch
                 batch.clear()
         yield batch
-
 
     def compute(self, images_iterable):
         """
@@ -50,17 +46,17 @@ class TruckDetector:
 
         with torch.no_grad():
             for batch in self.iterable2batch(images_iterable):
-                batch = (default_collate(batch).permute(0, 3, 1, 2).float() / 255.0).to(self.device)
                 batch_pred = self.model(batch)
                 np_batch_p = [{key: pred[key].cpu().numpy() for key in pred} for pred in batch_pred]
                 for pred in np_batch_p:
-                    confi_indices = pred['scores'] > self.conf_thr
+                    indices_ttb = pred['labels'] == PredictionVisualizer.model_class_names.index('truck')
+                    indices_ttb = np.logical_or(indices_ttb, pred['labels'] == PredictionVisualizer.model_class_names.index('train'))
+                    indices_ttb = np.logical_or(indices_ttb, pred['labels'] == PredictionVisualizer.model_class_names.index('bus'))
                     confi_pred = {
-                        'boxes': (pred['boxes'][confi_indices] / self.downsampling_f).astype(np.int32),
-                        'scores': pred['scores'][confi_indices],
-                        'labels': pred['labels'][confi_indices],
+                        'boxes': pred['boxes'][indices_ttb],
+                        'scores': pred['scores'][indices_ttb],
+                        'labels': pred['labels'][indices_ttb],
                     }
-
                     yield confi_pred
 
     def plot_detections(self, images_iterable, predictions):
