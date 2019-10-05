@@ -2,11 +2,14 @@ import cv2
 from contextlib import contextmanager
 
 def image_generator(video_path, skip=5):
+    """
+    skip 0 is valid
+    """
     cap = cv2.VideoCapture(video_path)
     ret, image = cap.read()
     idx = 0
     while ret:
-        if idx % skip ==0:
+        if idx % (skip+1) ==0:
             yield image, idx
         idx+=1
         ret, image = cap.read()
