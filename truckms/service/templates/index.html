@@ -1,0 +1,27 @@
+{% extends "header.html" %}
+
+{% block content %}
+
+<link rel="stylesheet" href="assets/index.css">
+
+<!-- Page Content -->
+<div class="container">
+  <div class="card border-0 shadow my-5">
+    <div class="card-body p-5">
+      <h1 class="font-weight-light"> Welcome </h1>
+      <p class="lead"> For now, you are able to upload movies in order to be analyzed and check the status of the uploaded files </p>
+      <div style="height: 700px">
+        <button type="button" style="width:100%" class="btn btn-indigo btn-sm m-0" onclick="window.location.href='/upload_menu#'">
+          Upload menu
+        </button>
+        <button type="button" style="width:100%" class="btn btn-indigo btn-sm m-0" onclick="window.location.href='/check_status#'">
+          Check status
+        </button>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+
+{% endblock %}

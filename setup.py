@@ -16,7 +16,8 @@ setuptools.setup(
         'opencv-python',
         'matplotlib',
         'pillow',
-        'deprecated'
+        'deprecated',
+        'flask'
       ],
 
     keywords=['object', 'detection', 'truck']

@@ -1,0 +1,41 @@
+{% extends "header.html" %}
+
+{% block content %}
+
+<link rel="stylesheet" href="assets/index.css">
+
+<!-- Page Content -->
+<div class="container">
+  <div class="card border-0 shadow my-5">
+    <div class="card-body p-5">
+      <h1 class="font-weight-light"> Status of video files </h1>
+      <p class="lead"> You can see the status of video files by their mark </p>
+      <div style="height: 700px">
+        <table class="table table-striped table-responsive-md btn-table">
+            <thead>
+                <tr>
+                  <th scope="col">Filename</th>
+                  <th scope="col">Status</th>
+                </tr>
+              </thead>
+          <tbody>
+            {% for row in video_items %}
+              <tr>
+                  <td><button type="button"
+                              style="width:100%"
+                              class="btn btn-indigo btn-sm m-0"
+                              onclick="window.location.href='{{ partial_destination_url + row['filename'] }}'">
+                        {{ row['filename'] }}</button></td>
+                  <td>{{ row['status'] }}</td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+
+{% endblock %}
