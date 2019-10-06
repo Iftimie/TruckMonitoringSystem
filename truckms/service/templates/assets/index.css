@@ -7,8 +7,17 @@ body {
   -o-background-size: cover;
 }
 
+.carousel{
+  width:100%;
+  max-width: 400px;
+}
+
 .carousel-inner .carousel-item {
   transition: -webkit-transform 0.1s ease;
   transition: transform 0.1s ease;
   transition: transform 0.1s ease, -webkit-transform 0.1s ease;
 }
+
+
+
+
