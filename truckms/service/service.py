@@ -8,10 +8,10 @@ from truckms.inference.utils import image_generator
 from flask import Flask, render_template, send_from_directory, make_response, request, redirect, url_for, session
 import os.path as osp
 from flask_bootstrap import Bootstrap
-from io import BytesIO
 import base64
 import cv2
 import io
+import pandas as pd
 
 
 def analyze_movie(video_path, max_operating_res):
@@ -20,6 +20,26 @@ def analyze_movie(video_path, max_operating_res):
     pred_gen = p.compute(image_gen)
     df = p.pred_iter_to_pandas(pred_gen)
     df.to_csv(os.path.splitext(video_path)[0]+'.csv')
+
+
+def image2htmlstr(image):
+    is_success, buffer = cv2.imencode(".jpg", image)
+    io_buf = io.BytesIO(buffer)
+    figdata_png = base64.b64encode(io_buf.getvalue())
+    result = str(figdata_png)[2:-1]
+    return result
+
+
+def html_imgs_generator(video_path):
+    p = TruckDetector(max_operating_res=320, batch_size=10)
+    image_gen = image_generator(video_path, skip=0)
+
+
+    csv_file_path = os.path.splitext(video_path)[0] + ".csv"
+    pred_gen_from_df = p.pandas_to_pred_iter(pd.read_csv(csv_file_path))
+
+    for image, _ in p.plot_detections(image_gen, pred_gen_from_df):
+        yield image2htmlstr(image)
 
 
 def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_operating_res=800):
@@ -70,17 +90,10 @@ def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_op
 
     @app.route('/show_video')
     def show_video():
-        filename = request.args.get('filename')
+        filepath = osp.join(upload_directory, request.args.get('filename'))
+        plots_gen = html_imgs_generator(filepath)
 
-        image = cv2.imread(osp.join(osp.dirname(__file__), 'templates', 'assets', '32624372793_1fe69d0349_k.jpg'))
-        is_success, buffer = cv2.imencode(".jpg", image)
-        io_buf = io.BytesIO(buffer)
-
-
-        figdata_png = base64.b64encode(io_buf.getvalue())
-        result = str(figdata_png)[2:-1]
-
-        resp = make_response(render_template("show_video.html", result=result))
+        resp = make_response(render_template("show_video.html", first_image_str=next(plots_gen), images=plots_gen))
         return resp
 
 
