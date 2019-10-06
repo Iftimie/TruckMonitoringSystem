@@ -9,19 +9,17 @@
   <div class="card border-0 shadow my-5">
     <div class="card-body p-5">
       <h1 class="font-weight-light"> Upload menu </h1>
-        <form id="upload_form" action="{{ url_for('upload_recordings') }}" method="post">
+        <form id="upload_form" action="{{ url_for('upload_recordings') }}" method="post" enctype="multipart/form-data">
             <div class="input-group mb-3">
               <div class="input-group-prepend">
                 <span class="input-group-text" id="inputGroupFileAddon01" onclick="$('#upload_form').submit()">Upload</span>
               </div>
               <div class="custom-file">
-                <input type="file" class="custom-file-input" id="inputGroupFile01" aria-describedby="inputGroupFileAddon01">
+                <input type="file" class="custom-file-input" id="inputGroupFile01" aria-describedby="inputGroupFileAddon01" />
                 <label class="custom-file-label" for="inputGroupFile01">Choose file</label>
               </div>
             </div>
         </form>
-
-
       </div>
     </div>
   </div>
@@ -39,6 +37,7 @@
 
         //replace the "Choose a file" label
         $(this).next('.custom-file-label').html(fileName);
+        $('#inputGroupFile01').attr("name", fileName);
     })
 </script>
 

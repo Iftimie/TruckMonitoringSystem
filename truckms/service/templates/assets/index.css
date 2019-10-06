@@ -6,3 +6,9 @@ body {
   background-size: cover;
   -o-background-size: cover;
 }
+
+.carousel-inner .carousel-item {
+  transition: -webkit-transform 0.1s ease;
+  transition: transform 0.1s ease;
+  transition: transform 0.1s ease, -webkit-transform 0.1s ease;
+}

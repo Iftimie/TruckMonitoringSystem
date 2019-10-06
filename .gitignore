@@ -4,3 +4,4 @@ truckms.egg-info/
 .pytest_cache/
 *.pyc
 .idea/
+examples/up_dir/
