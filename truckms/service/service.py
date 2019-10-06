@@ -15,9 +15,13 @@ import pandas as pd
 from truckms.inference.analytics import filter_pred_detections, get_important_frames
 
 
-def analyze_movie(video_path, max_operating_res):
+def analyze_movie(video_path, max_operating_res, skip = 0):
+    """
+    Attention!!! if the movie is short or too fast and skip  is too big, then it may result with no detections
+    #TODO think about this
+    """
     p = TruckDetector(max_operating_res=max_operating_res, batch_size=10)
-    image_gen = image_generator(video_path, skip=0)
+    image_gen = image_generator(video_path, skip=skip)
     pred_gen = p.compute(image_gen)
     filtered_pred = filter_pred_detections(pred_gen)
     df = p.pred_iter_to_pandas(filtered_pred)
@@ -48,7 +52,7 @@ def html_imgs_generator(video_path):
         yield image2htmlstr(image)
 
 
-def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_operating_res=800):
+def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_operating_res=800, skip=5):
     """
     Creates a microservice ready to run. This microservice will accept upload requests. It has a default
     upload_directory that will be created relative to the current directory.
@@ -70,7 +74,7 @@ def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_op
             filename = secure_filename(filename)
             filepath = os.path.join(upload_directory, filename)
             f.save(filepath)
-            app.worker_pool.apply_async(func=analyze_movie, args=(filepath, max_operating_res))
+            app.worker_pool.apply_async(func=analyze_movie, args=(filepath, max_operating_res, skip))
             app.logger.info('started this shit')
 
         return redirect(url_for("index"))
@@ -99,7 +103,11 @@ def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_op
         filepath = osp.join(upload_directory, request.args.get('filename'))
         plots_gen = html_imgs_generator(filepath)
 
-        resp = make_response(render_template("show_video.html", first_image_str=next(plots_gen), images=plots_gen))
+        try:
+            first_image = next(plots_gen)
+            resp = make_response(render_template("show_video.html", first_image_str=first_image, images=plots_gen))
+        except StopIteration:
+            resp = make_response(render_template("show_video.html", first_image_str='', images=[]))
         return resp
 
 

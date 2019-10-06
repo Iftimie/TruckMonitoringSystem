@@ -14,14 +14,16 @@
           <center>
               <div id="carouselExampleControls" class="carousel slide" data-ride="carousel">
                   <div class="carousel-inner">
-                      <div class="carousel-item active">
-                          <img src="data:image/png;base64,{{ first_image_str }}" class="d-block w-100" alt="...">
-                      </div>
-                      {% for image_str in images %}
-                        <div class="carousel-item">
-                          <img src="data:image/png;base64,{{ image_str }}" class="d-block w-100" alt="...">
-                        </div>
-                      {% endfor %}
+                      {% if first_image_str != '' %}
+                          <div class="carousel-item active">
+                              <img src="data:image/png;base64,{{ first_image_str }}" class="d-block w-100" alt="...">
+                          </div>
+                          {% for image_str in images %}
+                            <div class="carousel-item">
+                              <img src="data:image/png;base64,{{ image_str }}" class="d-block w-100" alt="...">
+                            </div>
+                          {% endfor %}
+                      {% endif %}
                   </div>
                   <a class="carousel-control-prev" href="#carouselExampleControls" role="button" data-slide="prev">
                     <span class="carousel-control-prev-icon" aria-hidden="true"></span>

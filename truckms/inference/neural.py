@@ -3,6 +3,7 @@ import torchvision
 from truckms.inference.visuals import PredictionVisualizer
 import numpy as np
 import pandas as pd
+import math
 
 class TruckDetector:
 
@@ -107,8 +108,7 @@ class TruckDetector:
                 yield prediction, id_
                 id_ = img_id
                 list_boxes, list_scores, list_labels = [], [], []
-            if not any([datapoint['x1']is None, datapoint['y1'] is None, datapoint['x2'] is None, datapoint['y2'] is None,
-                   datapoint['score'] is None, datapoint['label']is None, datapoint['obj_id'] is None]):
+            if not any(datapoint[key] is None for key in datapoint) and not any(math.isnan(datapoint[k]) for k in datapoint if not isinstance(datapoint[k], str)):
                 list_boxes.append([datapoint['x1'], datapoint['y1'], datapoint['x2'], datapoint['y2']])
                 list_scores.append(datapoint['score'])
                 list_labels.append(PredictionVisualizer.model_class_names.index(datapoint['label']))
@@ -135,6 +135,7 @@ class TruckDetector:
 
         def plots_gen():
             for (image, id_img), (prediction, id_pred) in zip(images_iterable, predictions_iterable):
+                print (id_img, id_pred)
                 assert id_img == id_pred
                 yield PredictionVisualizer.plot_over_image(image, prediction), id_img
 
