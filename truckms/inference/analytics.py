@@ -281,3 +281,22 @@ def filter_pred_detections(pred_gen):
     for pred, img_id in pred_gen:
         filtered_pred, tracker_list, id_incrementer = pipeline(pred, tracker_list, id_incrementer=id_incrementer)
         yield filtered_pred, img_id
+
+
+def get_important_frames(df, columns=None):
+    if columns is None:
+        columns = ['truck', 'bus', 'train']
+    df = df.dropna()
+    df = df.astype({'obj_id': 'int32'})
+    df['area'] = (df['x2'] - df['x1']) * (df['y2'] - df['y1'])
+
+    bool_index = df['label'] == columns[0]
+    for c in columns[1:]:
+        bool_index = (bool_index) | (df['label'] == c)
+    df = df[bool_index]
+    df = df.set_index('img_id')
+
+    important_frames = []
+    for i in df['obj_id'].unique():
+        important_frames.append(df[df['obj_id'] == i]['area'].argmax())
+    return important_frames

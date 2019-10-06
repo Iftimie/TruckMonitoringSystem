@@ -12,13 +12,15 @@ import base64
 import cv2
 import io
 import pandas as pd
+from truckms.inference.analytics import filter_pred_detections
 
 
 def analyze_movie(video_path, max_operating_res):
     p = TruckDetector(max_operating_res=max_operating_res, batch_size=10)
     image_gen = image_generator(video_path, skip=0)
     pred_gen = p.compute(image_gen)
-    df = p.pred_iter_to_pandas(pred_gen)
+    filtered_pred = filter_pred_detections(pred_gen)
+    df = p.pred_iter_to_pandas(filtered_pred)
     df.to_csv(os.path.splitext(video_path)[0]+'.csv')
 
 

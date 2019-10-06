@@ -115,6 +115,12 @@ def test_dataframe_filtered():
     pred_gen_from_df = TruckDetector.pandas_to_pred_iter(pd.read_csv(csv_file_path))
     filtered_pred = filter_pred_detections(pred_gen_from_df)
     filtered_dataframe = TruckDetector.pred_iter_to_pandas(filtered_pred)
-    pass
+    csv_file_path = osp.join(osp.dirname(__file__), 'data', 'filtered_cut.csv')
+    filtered_dataframe.to_csv(csv_file_path)
 
 
+from truckms.inference.analytics import get_important_frames
+def test_get_important_frames():
+    csv_file_path = osp.join(osp.dirname(__file__), 'data', 'filtered_cut.csv')
+    df = pd.read_csv(csv_file_path)
+    get_important_frames(df)
