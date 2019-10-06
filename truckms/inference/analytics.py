@@ -299,4 +299,11 @@ def get_important_frames(df, columns=None):
     important_frames = []
     for i in df['obj_id'].unique():
         important_frames.append(df[df['obj_id'] == i]['area'].argmax())
-    return important_frames
+
+    df = df.ix[important_frames]
+    # df['img_id'] = df.index
+    df = df.reset_index()
+
+    important_df = df
+
+    return important_frames, important_df

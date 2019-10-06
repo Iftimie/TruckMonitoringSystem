@@ -15,6 +15,20 @@ def image_generator(video_path, skip=5):
         ret, image = cap.read()
 
 
+def image_generator_by_frame_ids(video_path, frame_ids):
+    """
+    skip 0 is valid
+    """
+    cap = cv2.VideoCapture(video_path)
+    ret, image = cap.read()
+    idx = 0
+    while ret:
+        if idx in frame_ids:
+            yield image, idx
+        idx+=1
+        ret, image = cap.read()
+
+
 @contextmanager
 def create_avi(path_to_avi, first_image):
     """

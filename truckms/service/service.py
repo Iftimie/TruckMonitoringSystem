@@ -4,7 +4,7 @@ from werkzeug import secure_filename
 from flask import Response
 import multiprocessing
 from truckms.inference.neural import TruckDetector
-from truckms.inference.utils import image_generator
+from truckms.inference.utils import image_generator, image_generator_by_frame_ids
 from flask import Flask, render_template, send_from_directory, make_response, request, redirect, url_for, session
 import os.path as osp
 from flask_bootstrap import Bootstrap
@@ -12,7 +12,7 @@ import base64
 import cv2
 import io
 import pandas as pd
-from truckms.inference.analytics import filter_pred_detections
+from truckms.inference.analytics import filter_pred_detections, get_important_frames
 
 
 def analyze_movie(video_path, max_operating_res):
@@ -33,12 +33,18 @@ def image2htmlstr(image):
 
 
 def html_imgs_generator(video_path):
-    image_gen = image_generator(video_path, skip=0)
-
     csv_file_path = os.path.splitext(video_path)[0] + ".csv"
     pred_gen_from_df = TruckDetector.pandas_to_pred_iter(pd.read_csv(csv_file_path))
+    filtered_pred = filter_pred_detections(pred_gen_from_df)
+    filtered_dataframe = TruckDetector.pred_iter_to_pandas(filtered_pred)
 
-    for image, _ in TruckDetector.plot_detections(image_gen, pred_gen_from_df):
+    important_frames, important_df = get_important_frames(filtered_dataframe)
+    image_gen = image_generator_by_frame_ids(video_path, important_frames)
+
+    pred_from_important = TruckDetector.pandas_to_pred_iter(important_df)
+
+    for image, id_ in TruckDetector.plot_detections(image_gen, pred_from_important):
+        print (id_)
         yield image2htmlstr(image)
 
 
