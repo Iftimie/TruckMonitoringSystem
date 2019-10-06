@@ -17,6 +17,8 @@ class Tracker():  # class for Kalman Filter-based tracker
         # Initialize parametes for tracker (history)
         self.id = 0  # tracker's id
         self.box = []  # list to store the coordinates for a bounding box
+        self.score = None
+        self.label = None
         self.hits = 0  # number of detection matches
         self.no_losses = 0  # number of unmatched tracks (track loss)
         # TODO maybe add the class of the tracked bbox
@@ -160,36 +162,68 @@ def assign_detections_to_trackers(trackers, detections, iou_thrd=0.3):
 
     return matches, np.array(unmatched_detections), np.array(unmatched_trackers)
 
-id_incrementer = 0
+
+class Detection:
+    def __init__(self, box, lablel, score, id=None):
+        self.box = box # x1, y1, x2, y2
+        self.label = lablel
+        self.score = score
+        self.id = id
 
 
-def pipeline(z_box, tracker_list, max_age=4, min_hits=3):
+def detections_list2_dict_numpy(all_boxes):
+    boxes, scores, labels, ids_ = [], [], [], []
+    for item in all_boxes:
+        boxes.append(item.box)
+        scores.append(item.score)
+        labels.append(item.label)
+        ids_.append(item.id)
+    pred = {"boxes":np.array(boxes),
+            'labels':np.array(labels),
+            'scores':np.array(scores),
+            'obj_id':np.array(ids_)}
+    return pred
+
+
+def dict_numpy2detections_list(pred):
+    detections = [Detection(pred['boxes'][i], pred['labels'][i], pred['scores'][i]) for i in range(len(pred['boxes']))]
+    return detections
+
+
+def pipeline(pred, tracker_list, id_incrementer, max_age=4, min_hits=3):
     '''
-    Pipeline function for detection and tracking
+        Pipeline function for detection and tracking
 
-    Args:
-        z_box: list of lists representing the bounding boxes. bbox is defined as x1,y1, x2, y2
-        max_age: no.of consecutive unmatched detection before a track is deleted
-        min_hits: no. of consecutive matches needed to establish a track
+        Args:
+            pred: output of neural network API
+            max_age: no.of consecutive unmatched detection before a track is deleted
+            min_hits: no. of consecutive matches needed to establish a track
 
     '''
-    global id_incrementer
-    x_box = []
 
-    if len(tracker_list) > 0:
-        for trk in tracker_list:
-            x_box.append(trk.box)
+    detections = dict_numpy2detections_list(pred)
 
-    matched, unmatched_dets, unmatched_trks \
-        = assign_detections_to_trackers(x_box, z_box, iou_thrd=0.3)
+    unique_labels = set([d.label for d in detections]).union([t.label for t in tracker_list])
+
+    all_good_boxes = []
+    all_good_trackers = []
+
+    for id_ in unique_labels:
+
+        trackers_list_id = [trk for trk in tracker_list if trk.label == id_]
+        detections_id = [det for det in detections if det.label == id_]
+
+        x_box = [trk.box for trk in trackers_list_id]
+        z_box = [det.box for det in detections_id]
 
 
-    # Deal with matched detections
-    if matched.size > 0:
+        matched, unmatched_dets, unmatched_trks = assign_detections_to_trackers(x_box, z_box, iou_thrd=0.3)
+
+        # Deal with matched detections
         for trk_idx, det_idx in matched:
             z = z_box[det_idx]
             z = np.expand_dims(z, axis=0).T
-            tmp_trk = tracker_list[trk_idx]
+            tmp_trk = trackers_list_id[trk_idx]
             tmp_trk.kalman_filter(z)
             xx = tmp_trk.x_state.T[0].tolist()
             xx = [xx[0], xx[2], xx[4], xx[6]]
@@ -198,8 +232,7 @@ def pipeline(z_box, tracker_list, max_age=4, min_hits=3):
             tmp_trk.hits += 1
             tmp_trk.no_losses = 0
 
-    # Deal with unmatched detections
-    if len(unmatched_dets) > 0:
+        # Deal with unmatched detections
         for idx in unmatched_dets:
             z = z_box[idx]
             z = np.expand_dims(z, axis=0).T
@@ -212,14 +245,15 @@ def pipeline(z_box, tracker_list, max_age=4, min_hits=3):
             xx = [xx[0], xx[2], xx[4], xx[6]]
             tmp_trk.box = xx
             tmp_trk.id = id_incrementer
+            tmp_trk.score = detections_id[idx].score
+            tmp_trk.label = detections_id[idx].label
             id_incrementer+=1
-            tracker_list.append(tmp_trk)
+            trackers_list_id.append(tmp_trk)
             x_box.append(xx)
 
-    # Deal with unmatched tracks
-    if len(unmatched_trks) > 0:
+        # Deal with unmatched tracks
         for trk_idx in unmatched_trks:
-            tmp_trk = tracker_list[trk_idx]
+            tmp_trk = trackers_list_id[trk_idx]
             tmp_trk.no_losses += 1
             tmp_trk.predict_only()
             xx = tmp_trk.x_state
@@ -229,15 +263,21 @@ def pipeline(z_box, tracker_list, max_age=4, min_hits=3):
             x_box[trk_idx] = xx
 
 
-    good_boxes = []
-    for trk in tracker_list:
-        if ((trk.hits >= min_hits) and (trk.no_losses <= max_age)):
-            x_cv2 = trk.box
+        good_boxes_id = []
+        for trk in trackers_list_id:
+            if ((trk.hits >= min_hits) and (trk.no_losses <= max_age)):
+                good_boxes_id.append(Detection(trk.box, trk.label, trk.score, trk.id))
+        all_good_boxes.extend(good_boxes_id)
 
-            good_boxes.append(x_cv2)
-            #TODO this is what I have to return x_cv2
+        trackers_list_id = [x for x in trackers_list_id if x.no_losses <= max_age]
+        all_good_trackers.extend(trackers_list_id)
+
+    return detections_list2_dict_numpy(all_good_boxes), all_good_trackers, id_incrementer
 
 
-    tracker_list = [x for x in tracker_list if x.no_losses <= max_age]
-
-    return good_boxes, tracker_list
+def filter_pred_detections(pred_gen):
+    tracker_list = []
+    id_incrementer = 0
+    for pred, img_id in pred_gen:
+        filtered_pred, tracker_list, id_incrementer = pipeline(pred, tracker_list, id_incrementer=id_incrementer)
+        yield filtered_pred, img_id

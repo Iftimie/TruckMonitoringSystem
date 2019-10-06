@@ -63,6 +63,7 @@ class TruckDetector:
                             'boxes': pred['boxes'][indices_ttb].astype(np.int32),
                             'scores': pred['scores'][indices_ttb],
                             'labels': pred['labels'][indices_ttb],
+                            'obj_id': [None] * np.sum(indices_ttb)
                         }
                         yield confi_pred, id_
 
@@ -70,18 +71,20 @@ class TruckDetector:
     def pred_iter_to_pandas(predictions_iterable):
         list_dict = []
         for prediction, id_ in predictions_iterable:
-            for box, label, score in zip(prediction['boxes'], prediction['labels'], prediction['scores']):
+            for box, label, score, obj_id in zip(prediction['boxes'], prediction['labels'], prediction['scores'], prediction['obj_id']):
                 x1, y1, x2, y2 = box
                 datapoint = {'img_id': id_,
                              'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
                              'score': score,
-                             'label':PredictionVisualizer.model_class_names[label]}
+                             'label':PredictionVisualizer.model_class_names[label],
+                             'obj_id':obj_id}
                 list_dict.append(datapoint)
             if len(prediction['boxes']) == 0:
                 list_dict.append({'img_id': id_,
                                   'x1': None, 'y1': None, 'x2': None, 'y2': None,
                                   'score': None,
-                                  'label': None})
+                                  'label': None,
+                                  'obj_id': None})
         return pd.DataFrame(data=list_dict)
 
     @staticmethod
@@ -91,7 +94,7 @@ class TruckDetector:
         """
         list_dict = list(data_frame.T.to_dict().values())
 
-        list_boxes, list_scores, list_labels = [], [], []
+        list_boxes, list_scores, list_labels, list_obj_id = [], [], [], []
         id_ = list_dict[0]['img_id']
 
         for datapoint in list_dict:
@@ -99,19 +102,22 @@ class TruckDetector:
             if img_id != id_:
                 prediction = {'boxes': np.array(list_boxes).astype(np.int32),
                               'scores': np.array(list_scores),
-                              'labels': np.array(list_labels)}
+                              'labels': np.array(list_labels),
+                              'obj_id': np.array(list_obj_id)}
                 yield prediction, id_
                 id_ = img_id
                 list_boxes, list_scores, list_labels = [], [], []
             if not any([datapoint['x1']is None, datapoint['y1'] is None, datapoint['x2'] is None, datapoint['y2'] is None,
-                   datapoint['score'] is None, datapoint['label']is None]):
+                   datapoint['score'] is None, datapoint['label']is None, datapoint['obj_id'] is None]):
                 list_boxes.append([datapoint['x1'], datapoint['y1'], datapoint['x2'], datapoint['y2']])
                 list_scores.append(datapoint['score'])
                 list_labels.append(PredictionVisualizer.model_class_names.index(datapoint['label']))
+                list_obj_id.append(datapoint['obj_id'])
 
         prediction = {'boxes': np.array(list_boxes).astype(np.int32),
                       'scores': np.array(list_scores),
-                      'labels': np.array(list_labels)}
+                      'labels': np.array(list_labels),
+                      'obj_id': np.array(list_obj_id)}
         yield prediction, id_
 
     @staticmethod

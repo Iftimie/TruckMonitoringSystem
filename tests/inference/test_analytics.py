@@ -4,7 +4,7 @@ import cv2
 import os.path as osp
 from truckms.inference.neural import TruckDetector
 import pandas as pd
-from truckms.inference.analytics import pipeline
+from truckms.inference.analytics import pipeline, Detection
 import os
 """
 credits to https://github.com/kcg2015/Vehicle-Detection-and-Tracking/
@@ -89,10 +89,32 @@ def test_pipeline():
     csv_file_path = osp.join(osp.dirname(__file__), 'data', 'cut.csv')
     pred_gen_from_df = TruckDetector.pandas_to_pred_iter(pd.read_csv(csv_file_path))
     tracker_list = []
+    id_incrementer = 0
     for idx, (pred, img_id) in enumerate(pred_gen_from_df):
-        z_box = pred['boxes'].tolist()
-        good_boxes, tracker_list = pipeline(z_box, tracker_list)
+        good_detections, tracker_list, id_incrementer = pipeline(pred, tracker_list, id_incrementer)
 
-        print (len(z_box))
-        print (len(good_boxes))
+        print (len(good_detections['boxes']))
         if idx == 10:break
+
+from truckms.inference.utils import image_generator
+from truckms.inference.analytics import filter_pred_detections
+def test_filter_predictions_generator():
+    csv_file_path = osp.join(osp.dirname(__file__), 'data', 'cut.csv')
+    pred_gen_from_df = TruckDetector.pandas_to_pred_iter(pd.read_csv(csv_file_path))
+    filtered_pred = filter_pred_detections(pred_gen_from_df)
+    # filtered_dataframe = TruckDetector.pred_iter_to_pandas(filtered_pred)
+
+    video_file = osp.join(osp.dirname(__file__), '..', 'service', 'data', 'cut.mkv')
+    image_gen = image_generator(video_file, skip=0)
+    for image, _ in TruckDetector.plot_detections(image_gen, filtered_pred):
+        cv2.imshow("image", image)
+        cv2.waitKey(0)
+
+def test_dataframe_filtered():
+    csv_file_path = osp.join(osp.dirname(__file__), 'data', 'cut.csv')
+    pred_gen_from_df = TruckDetector.pandas_to_pred_iter(pd.read_csv(csv_file_path))
+    filtered_pred = filter_pred_detections(pred_gen_from_df)
+    filtered_dataframe = TruckDetector.pred_iter_to_pandas(filtered_pred)
+    pass
+
+
