@@ -58,6 +58,7 @@ class TruckDetector:
                         indices_ttb = pred['labels'] == PredictionVisualizer.model_class_names.index('truck')
                         indices_ttb = np.logical_or(indices_ttb, pred['labels'] == PredictionVisualizer.model_class_names.index('train'))
                         indices_ttb = np.logical_or(indices_ttb, pred['labels'] == PredictionVisualizer.model_class_names.index('bus'))
+                        indices_ttb = np.logical_or(indices_ttb, pred['labels'] == PredictionVisualizer.model_class_names.index('car'))
                         confi_pred = {
                             'boxes': pred['boxes'][indices_ttb].astype(np.int32),
                             'scores': pred['scores'][indices_ttb],
@@ -65,8 +66,8 @@ class TruckDetector:
                         }
                         yield confi_pred, id_
 
-
-    def pred_iter_to_pandas(self, predictions_iterable):
+    @staticmethod
+    def pred_iter_to_pandas(predictions_iterable):
         list_dict = []
         for prediction, id_ in predictions_iterable:
             for box, label, score in zip(prediction['boxes'], prediction['labels'], prediction['scores']):
@@ -83,7 +84,8 @@ class TruckDetector:
                                   'label': None})
         return pd.DataFrame(data=list_dict)
 
-    def pandas_to_pred_iter(self, data_frame):
+    @staticmethod
+    def pandas_to_pred_iter(data_frame):
         """
         generator that yields detections for each frame and the frame id from a pandas dataframe
         """
@@ -112,7 +114,8 @@ class TruckDetector:
                       'labels': np.array(list_labels)}
         yield prediction, id_
 
-    def plot_detections(self, images_iterable, predictions_iterable):
+    @staticmethod
+    def plot_detections(images_iterable, predictions_iterable):
         """
         Plots over the images the detections. The number of images should match the number of predictions
 

@@ -17,7 +17,8 @@ setuptools.setup(
         'matplotlib',
         'pillow',
         'deprecated',
-        'flask'
+        'flask',
+        'sklearn'
       ],
 
     keywords=['object', 'detection', 'truck']

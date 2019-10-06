@@ -31,14 +31,12 @@ def image2htmlstr(image):
 
 
 def html_imgs_generator(video_path):
-    p = TruckDetector(max_operating_res=320, batch_size=10)
     image_gen = image_generator(video_path, skip=0)
 
-
     csv_file_path = os.path.splitext(video_path)[0] + ".csv"
-    pred_gen_from_df = p.pandas_to_pred_iter(pd.read_csv(csv_file_path))
+    pred_gen_from_df = TruckDetector.pandas_to_pred_iter(pd.read_csv(csv_file_path))
 
-    for image, _ in p.plot_detections(image_gen, pred_gen_from_df):
+    for image, _ in TruckDetector.plot_detections(image_gen, pred_gen_from_df):
         yield image2htmlstr(image)
 
 
