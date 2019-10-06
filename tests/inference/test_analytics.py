@@ -89,10 +89,10 @@ def test_pipeline():
     csv_file_path = osp.join(osp.dirname(__file__), 'data', 'cut.csv')
     pred_gen_from_df = TruckDetector.pandas_to_pred_iter(pd.read_csv(csv_file_path))
     tracker_list = []
-    for pred, img_id in pred_gen_from_df:
+    for idx, (pred, img_id) in enumerate(pred_gen_from_df):
         z_box = pred['boxes'].tolist()
         good_boxes, tracker_list = pipeline(z_box, tracker_list)
 
-        print (pred)
-        print (z_box)
-        break
+        print (len(z_box))
+        print (len(good_boxes))
+        if idx == 10:break
