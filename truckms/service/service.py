@@ -52,7 +52,7 @@ def html_imgs_generator(video_path):
         yield image2htmlstr(image)
 
 
-def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_operating_res=800, skip=5):
+def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_operating_res=800, skip=0):
     """
     Creates a microservice ready to run. This microservice will accept upload requests. It has a default
     upload_directory that will be created relative to the current directory.
