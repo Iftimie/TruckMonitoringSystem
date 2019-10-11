@@ -4,7 +4,7 @@ from truckms.api import FrameDatapoint
 from deprecated import deprecated
 
 
-def image_generator(video_path, skip=5) -> FrameDatapoint:
+def framedatapoint_generator(video_path, skip=5) -> FrameDatapoint:
     """
     Generator function for processing images and keeping account of their frame ids
 
@@ -26,8 +26,8 @@ def image_generator(video_path, skip=5) -> FrameDatapoint:
         ret, image = cap.read()
 
 
-@deprecated(reason="Not efficient")
-def image_generator_by_frame_ids(video_path, frame_ids) -> FrameDatapoint:
+@deprecated(reason="Not efficient. Use framedatapoint_generator_by_frame_ids2")
+def framedatapoint_generator_by_frame_ids(video_path, frame_ids) -> FrameDatapoint:
     """
     Generator function for processing images. Only the frames whose ids appear in the frame_ids argument are yielded
 
@@ -55,7 +55,17 @@ def image_generator_by_frame_ids(video_path, frame_ids) -> FrameDatapoint:
         ret, image = cap.read()
 
 
-def image_generator_by_frame_ids2(video_path, frame_ids) -> FrameDatapoint:
+def framedatapoint_generator_by_frame_ids2(video_path, frame_ids) -> FrameDatapoint:
+    """
+    Generator function for processing images. Only the frames whose ids appear in the frame_ids argument are yielded
+
+    Args:
+        video_path: path to a video file. .avi, .mkv, .mp4 should work
+        frame_ids: list or set of frame ids to be returned. the iterable must be sorted
+
+    Yields:
+        FrameDatapoint
+    """
     if len(frame_ids) == 0:
         return
     cap = cv2.VideoCapture(video_path)

@@ -1,9 +1,9 @@
 from truckms.inference.visuals import plot_over_image, model_class_names
-from truckms.inference.utils import batch_image_id_yielder, prediction_id_yielder
+from truckms.api import FrameDatapoint, BatchedFrameDatapoint, PredictionDatapoint
+from functools import reduce
 import numpy as np
 import pandas as pd
 import torchvision
-from functools import reduce
 import torch
 import math
 
@@ -24,100 +24,94 @@ def create_model(conf_thr=0.5, max_operating_res=800):
     return model
 
 
-# TODO do the following lines. the decorators should actually check this
-# @yielder(image_id_tuple)
-# @inputs({"images_ids_iterable": image_id_tuple})
-@batch_image_id_yielder
-def iterable2batch(images_ids_iterable, batch_size=5):
+def iterable2batch(fdp_iterable: FrameDatapoint, batch_size=5):
     """
-    Transforms an iterable of images and ids into batches of images and ids
+    Transforms an iterable of FrameDatapoint into BatchedFrameDatapoint
 
     Args:
-        images_ids_iterable: list, or generator that yields images and their frame ids
+        fdp_iterable: list, or generator that yields FrameDatapoint
         batch_size: the size of the yielded batch
 
     Yields:
-        batch of images as tensor of shape [batch_size, C, H, W]
-        batch of ids as list
+        BatchedFrameDatapoint
     """
     batch = []
     batch_ids = []
-    for idx, (image, id_) in enumerate(images_ids_iterable):
+    for idx, fdp in enumerate(fdp_iterable):
+        image = fdp.image
+        id_ = fdp.frame_id
         batch.append(torch.from_numpy(image.transpose((2, 0, 1)).astype(np.float32)).to(device) / 255.0)
         batch_ids.append(id_)
         if len(batch) == batch_size:
-            yield batch, batch_ids
+            yield BatchedFrameDatapoint(batch, batch_ids)
             batch.clear()
             batch_ids.clear()
-    yield batch, batch_ids
+    yield BatchedFrameDatapoint(batch, batch_ids)
 
 
-@prediction_id_yielder
-# @yielder(pred_id_tuple) # it does not output a list
-# @inputs({"images_ids_iterable": image_id_tuple})
-def compute(images_ids_iterable, model, filter_classes=None, ):
+def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None) -> PredictionDatapoint:
     """
-    Computes the predictions for a batch of images received as an iterable. It batches the images internally and works
-     out any size mismatches. The images must be in format H, W, C. Images must be in RGB format.
-    The iterable can be a list or a generator
+    Computes the predictions for an iterable of FrameDatapoint. It batches the images internally and works. The images
+    must be in format H, W, C. Images must be in RGB format.
 
     Args:
-        images_ids_iterable: list of tuples (images, id_) or generator. it assumes that all generated images have the
-            same resolution. batching is done internally to avoid memory issues. The image must have an id_. id_ can be
-            set to anything or to None, however it will help identify the position in movie if frames are skipped
+        fdp_iterable: list of FrameDatapoint or generator. it assumes that all generated images have the
+            same resolution.
         model: Faster-RCNN model
         filter_classes: only classes found in this argument will be yielded
 
     Yields:
-        dict having keys boxes, labels, scores and obj_id
-        id_ for the image
+        PredictionDatapoint
     """
     if filter_classes is None:
         filter_classes = ['truck', 'train', 'bus', 'car']
 
     with torch.no_grad():
-        for batch, batch_ids in iterable2batch(images_ids_iterable):
-            if len(batch) == 0:
+        for bfdp in iterable2batch(fdp_iterable):
+            if len(bfdp.batch_images) == 0:
                 break
 
-            batch_pred = [{key: pred[key].cpu().numpy() for key in pred} for pred in model(batch)]  # tensor to numpy
-            for pred, id_ in zip(batch_pred, batch_ids):
+            # tensor to numpy
+            batch_pred = [{key: pred[key].cpu().numpy() for key in pred} for pred in model(bfdp.batch_images)]
+            for pred, frame_id in zip(batch_pred, bfdp.batch_frames_ids):
                 valid_inds = reduce(np.logical_or,
                                     (pred['labels'] == model_class_names.index(lbl) for lbl in filter_classes),
-                                    np.ones(pred['labels'].shape, dtype=bool))
+                                    np.zeros(pred['labels'].shape, dtype=bool))
                 to_yield_pred = {
                     'boxes': pred['boxes'][valid_inds].astype(np.int32),
                     'scores': pred['scores'][valid_inds],
                     'labels': pred['labels'][valid_inds],
-                    'obj_id': [None] * np.sum(valid_inds)
+                    'obj_id': np.array([None] * np.sum(valid_inds))
                 }
-                yield to_yield_pred, id_
+                yield PredictionDatapoint(to_yield_pred, frame_id)
 
 
-# @inputs({"predictions_iterable": pred_id_tuple})
-def pred_iter_to_pandas(pred_id_iterable):
+
+def pred_iter_to_pandas(pdp_iterable):
     """
-    Transforms a list or generator of predictions with frame ids into a compact format such as a pandas dataframe.
+    Transforms a list or generator of PredictionDatapoint into a compact format such as a pandas dataframe.
 
     Args:
-        pred_id_iterable: list or generator of predictions with frame ids
+        pdp_iterable: list or generator of PredictionDatapoint
 
     Return:
-        pandas dataframe of detections
+        pandas dataframe with detections
     """
     list_dict = []
-    for prediction, id_ in pred_id_iterable:
+    for pdp in pdp_iterable:
+        prediction = pdp.pred
+        frame_id = pdp.frame_id
         for box, label, score, obj_id in zip(prediction['boxes'], prediction['labels'], prediction['scores'],
                                              prediction['obj_id']):
             x1, y1, x2, y2 = box
-            datapoint = {'img_id': id_,
+            datapoint = {'img_id': frame_id,
                          'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
                          'score': score,
                          'label': model_class_names[label],
                          'obj_id': obj_id}
             list_dict.append(datapoint)
         if len(prediction['boxes']) == 0:
-            list_dict.append({'img_id': id_,
+            list_dict.append({'img_id': frame_id,
                               'x1': None, 'y1': None, 'x2': None, 'y2': None,
                               'score': None,
                               'label': None,
@@ -125,32 +119,30 @@ def pred_iter_to_pandas(pred_id_iterable):
     return pd.DataFrame(data=list_dict)
 
 
-# @yielder({"predictions_iterable": pred_id_tuple})
-def pandas_to_pred_iter(data_frame):
+def pandas_to_pred_iter(data_frame) -> PredictionDatapoint:
     """
-    Generator that yields detections for each frame and the frame id from a pandas dataframe
+    Generator that yields PredictionDatapoint from a pandas dataframe
 
     Args:
         data_frame: pandas dataframe with detections
 
     Yields:
-        dict having keys boxes, labels, scores and obj_id
-        id_ for the image
+        PredictionDatapoint
     """
     list_dict = list(data_frame.T.to_dict().values())
 
     list_boxes, list_scores, list_labels, list_obj_id = [], [], [], []
-    id_ = list_dict[0]['img_id']
+    frame_id = list_dict[0]['img_id']
 
     for datapoint in list_dict:
         img_id = datapoint['img_id']
-        if img_id != id_:
+        if img_id != frame_id:
             prediction = {'boxes': np.array(list_boxes).astype(np.int32),
                           'scores': np.array(list_scores),
                           'labels': np.array(list_labels),
                           'obj_id': np.array(list_obj_id)}
-            yield prediction, id_
-            id_ = img_id
+            yield PredictionDatapoint(prediction, frame_id)
+            frame_id = img_id
             list_boxes, list_scores, list_labels = [], [], []
         if not any(datapoint[key] is None for key in datapoint if key != 'obj_id')\
                 and not any(math.isnan(datapoint[k]) for k in datapoint if k != 'obj_id' and not isinstance(datapoint[k], str)):
@@ -163,26 +155,26 @@ def pandas_to_pred_iter(data_frame):
                   'scores': np.array(list_scores),
                   'labels': np.array(list_labels),
                   'obj_id': np.array(list_obj_id)}
-    yield prediction, id_
+    yield PredictionDatapoint(prediction, frame_id)
 
 
-# @inputs({"image_id_iterable": image_id_tuple, "pred_id_iterable": pred_id_tuple})
-def plot_detections(image_id_iterable, pred_id_iterable):
+def plot_detections(fdp_iterable: FrameDatapoint, pdp_iterable: PredictionDatapoint):
     """
     Plots over the imtages the deections. The number of images should match the number of predictions
 
     Args:
-        image_id_iterable: list of tuples (images, id_) or generator
-        pred_id_iterable: list of tuples (prediction, id_) or generator
+        fdp_iterable: list of FrameDatapoint or generator
+        pdp_iterable: list of PredictionDatapoint or generator
             for example it can be the result of calling .compute() or pandas_to_pred_iter()
 
     Return:
-        generator with images with detections
+        generator with FrameDatapoint
     """
 
     def plots_gen():
-        for (image, id_img), (prediction, id_pred) in zip(image_id_iterable, pred_id_iterable):
-            assert id_img == id_pred
-            yield plot_over_image(image, prediction), id_img
+        for fdp, pdp in zip(fdp_iterable, pdp_iterable):
+            assert fdp.frame_id == pdp.frame_id
+            plotted_image = plot_over_image(fdp.image, pdp.pred)
+            yield FrameDatapoint(plotted_image, pdp.frame_id)
 
     return plots_gen()
