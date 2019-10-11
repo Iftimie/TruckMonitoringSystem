@@ -86,7 +86,6 @@ def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None) -> Predict
                 yield PredictionDatapoint(to_yield_pred, frame_id)
 
 
-
 def pred_iter_to_pandas(pdp_iterable):
     """
     Transforms a list or generator of PredictionDatapoint into a compact format such as a pandas dataframe.
@@ -158,7 +157,7 @@ def pandas_to_pred_iter(data_frame) -> PredictionDatapoint:
     yield PredictionDatapoint(prediction, frame_id)
 
 
-def plot_detections(fdp_iterable: FrameDatapoint, pdp_iterable: PredictionDatapoint):
+def plot_detections(fdp_iterable: FrameDatapoint, pdp_iterable: PredictionDatapoint) -> FrameDatapoint:
     """
     Plots over the imtages the deections. The number of images should match the number of predictions
 

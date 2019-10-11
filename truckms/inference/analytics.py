@@ -10,6 +10,7 @@ Implement and test tracker
 import numpy as np
 from numpy import dot
 from scipy.linalg import inv, block_diag
+from truckms.api import PredictionDatapoint
 
 
 class Tracker():  # class for Kalman Filter-based tracker
@@ -275,28 +276,45 @@ def pipeline(pred, tracker_list, id_incrementer, max_age=4, min_hits=3):
     return detections_list2_dict_numpy(all_good_boxes), all_good_trackers, id_incrementer
 
 
-def filter_pred_detections(pred_gen):
+def filter_pred_detections(pdp_iterable: PredictionDatapoint) -> PredictionDatapoint:
     """
-    Assigns obj_id to
-    :param pred_gen:
-    :return:
+    Assigns obj_id to predictions.
+
+    Args:
+        pdp_iterable: list or generator with PredictionDatapoint
+
+    Yields:
+        PredictionDatapoint with object ids
     """
     tracker_list = []
     id_incrementer = 0
-    for pred, img_id in pred_gen:
-        filtered_pred, tracker_list, id_incrementer = pipeline(pred, tracker_list, id_incrementer=id_incrementer)
-        yield filtered_pred, img_id
+    for pdp in pdp_iterable:
+        filtered_pred, tracker_list, id_incrementer = pipeline(pdp.pred, tracker_list, id_incrementer=id_incrementer)
+        yield PredictionDatapoint(filtered_pred, pdp.frame_id)
 
 
-def get_important_frames(df, columns=None):
-    if columns is None:
-        columns = ['truck', 'bus', 'train']
+def get_important_frames(df, labels_to_consider=None):
+    """
+    Given a dataframe having a set of tracked detections (obj_id is not None), return a partial dataframe containing the
+    set of frames where all of unique objects are found when their size (area of the bounding box) in the image is at
+    maximum.
+
+    Args:
+        df: pandas dataframe with obj_id column not None
+        labels_to_consider: model class names ['car', 'truck' etc]
+
+    Return:
+        list of sorted important frame ids,
+        dataframe with detections from the important frame ids
+    """
+    if labels_to_consider is None:
+        labels_to_consider = ['truck', 'bus', 'train']
     df = df.dropna()
     df = df.astype({'obj_id': 'int32'})
     df['area'] = (df['x2'] - df['x1']) * (df['y2'] - df['y1'])
 
-    bool_index = df['label'] == columns[0]
-    for c in columns[1:]:
+    bool_index = df['label'] == labels_to_consider[0]
+    for c in labels_to_consider[1:]:
         bool_index = (bool_index) | (df['label'] == c)
     df = df[bool_index]
     df = df.set_index('img_id')

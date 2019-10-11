@@ -27,12 +27,24 @@ for i in range(len(model_class_names)):
 opencv_colors = [[i * 255 for i in color] for color in colors]
 
 
-def plot_over_image(image, prediction):
-    for box, label, score in zip(prediction['boxes'], prediction['labels'], prediction['scores']):
+def plot_over_image(image, pred):
+    """
+    Plots the predicted bounding boxes onto an image
+
+    Args:
+        image: np.array
+        pred: dictionary with keys boxes, labels, scores, obj_id
+
+    Return:
+        plotted image with bounding boxes and a string over the bounding box containing the class name, confidence score
+        and object id (from tracking)
+    """
+    for box, label, score, obj_id in zip(pred['boxes'], pred['labels'], pred['scores'], pred['obj_id']):
+        obj_id = obj_id if obj_id is not None else -1
         x1, y1, x2, y2 = box
         color = opencv_colors[int(label)]
         cls_name = model_class_names[int(label)]
-        string_to_show = "%s %.2f" % (cls_name, score)
+        string_to_show = "%s %.2f %d" % (cls_name, score, obj_id)
         image = cv2.rectangle(image, (x1, y1), (x2, y2), color=color)
         image = cv2.putText(image, string_to_show, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.3, color)
     return image
