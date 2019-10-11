@@ -1,4 +1,4 @@
-from truckms.inference.visuals import plot_over_image
+from truckms.inference.visuals import plot_over_image, model_class_names
 from truckms.inference.utils import batch_image_id_yielder, prediction_id_yielder
 import numpy as np
 import pandas as pd
@@ -9,17 +9,6 @@ import math
 
 
 device = 'cuda' if torch.cuda.is_available() else "cpu"
-
-model_class_names = ["__background__ ", 'person', 'bicycle', 'car', 'motorbike', 'aeroplane', 'bus', 'train', 'truck',
-                     'boat', 'traffic light', 'fire hydrant', 'stop sign', 'parking meter', 'bench', 'bird', 'cat',
-                     'dog', 'horse', 'sheep', 'cow', 'elephant', 'bear', 'zebra', 'giraffe', 'backpack', 'umbrella',
-                     'handbag', 'tie', 'suitcase', 'frisbee', 'skis', 'snowboard', 'sports ball', 'kite',
-                     'baseball bat', 'baseball glove', 'skateboard', 'surfboard', 'tennis racket', 'bottle',
-                     'wine glass', 'cup', 'fork', 'knife', 'spoon', 'bowl', 'banana', 'apple', 'sandwich', 'orange',
-                     'broccoli', 'carrot', 'hot dog', 'pizza', 'donut', 'cake', 'chair', 'sofa', 'pottedplant', 'bed',
-                     'diningtable', 'toilet', 'tvmonitor', 'laptop', 'mouse', 'remote', 'keyboard', 'cell phone',
-                     'microwave', 'oven', 'toaster', 'sink', 'refrigerator', 'book', 'clock', 'vase', 'scissors',
-                     'teddy bear', 'hair drier', 'toothbrush']
 
 
 def create_model(conf_thr=0.5, max_operating_res=800):

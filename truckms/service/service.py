@@ -3,8 +3,8 @@ import os
 from werkzeug import secure_filename
 from flask import Response
 import multiprocessing
-from truckms.inference.neural import TruckDetector
-from truckms.inference.utils import image_generator, image_generator_by_frame_ids
+from truckms.inference.neural import create_model, pandas_to_pred_iter, pred_iter_to_pandas, plot_detections, compute
+from truckms.inference.utils import image_generator, image_generator_by_frame_ids2
 from flask import Flask, render_template, send_from_directory, make_response, request, redirect, url_for, session
 import os.path as osp
 from flask_bootstrap import Bootstrap
@@ -20,11 +20,11 @@ def analyze_movie(video_path, max_operating_res, skip = 0):
     Attention!!! if the movie is short or too fast and skip  is too big, then it may result with no detections
     #TODO think about this
     """
-    p = TruckDetector(max_operating_res=max_operating_res, batch_size=10)
+    model = create_model(max_operating_res=max_operating_res, batch_size=10)
     image_gen = image_generator(video_path, skip=skip)
-    pred_gen = p.compute(image_gen)
+    pred_gen = compute(image_gen, model=model)
     filtered_pred = filter_pred_detections(pred_gen)
-    df = p.pred_iter_to_pandas(filtered_pred)
+    df = pred_iter_to_pandas(filtered_pred)
     df.to_csv(os.path.splitext(video_path)[0]+'.csv')
 
 
@@ -38,16 +38,16 @@ def image2htmlstr(image):
 
 def html_imgs_generator(video_path):
     csv_file_path = os.path.splitext(video_path)[0] + ".csv"
-    pred_gen_from_df = TruckDetector.pandas_to_pred_iter(pd.read_csv(csv_file_path))
+    pred_gen_from_df = pandas_to_pred_iter(pd.read_csv(csv_file_path))
     filtered_pred = filter_pred_detections(pred_gen_from_df)
-    filtered_dataframe = TruckDetector.pred_iter_to_pandas(filtered_pred)
+    filtered_dataframe = pred_iter_to_pandas(filtered_pred)
 
     important_frames, important_df = get_important_frames(filtered_dataframe)
-    image_gen = image_generator_by_frame_ids(video_path, important_frames)
+    image_gen = image_generator_by_frame_ids2(video_path, important_frames)
 
-    pred_from_important = TruckDetector.pandas_to_pred_iter(important_df)
+    pred_from_important = pandas_to_pred_iter(important_df)
 
-    for image, id_ in TruckDetector.plot_detections(image_gen, pred_from_important):
+    for image, id_ in plot_detections(image_gen, pred_from_important):
         print (id_)
         yield image2htmlstr(image)
 

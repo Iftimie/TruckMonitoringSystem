@@ -72,3 +72,6 @@ something else should be called yielder???
 This pipeline interface will ensure some compatibility between generators and some clarity.
 
 The decorators are just for clarity so that some functions are clearly part of a pipeline. And can be easily combined??
+
+
+#TODO Instead of dictionary of keys, just create a class for the inputs and outputs

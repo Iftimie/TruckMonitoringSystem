@@ -20,7 +20,8 @@ setuptools.setup(
         'flask',
         'sklearn',
         'numpy',
-        'pandas'
+        'pandas',
+        'typing'
       ],
 
     keywords=['object', 'detection', 'truck']

@@ -6,7 +6,6 @@ from truckms.inference.utils import image_generator
 from itertools import tee
 
 
-
 def test_truck_detector():
     test_image = osp.join(osp.dirname(__file__), 'data', 'test_image.PNG')
     test_image = cv2.cvtColor(cv2.imread(test_image), cv2.COLOR_BGR2RGB)
@@ -56,7 +55,7 @@ def test_TruckDetector_pred_iter_to_pandas():
 
     for idx, (image, _) in enumerate(plot_detections(image_gen2, pred_gen_from_df)):
         cv2.imshow("image", image)
-        cv2.waitKey(0)
+        cv2.waitKey(1)
         if idx==5:break
 
 

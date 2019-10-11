@@ -1,38 +1,10 @@
 import cv2
 from contextlib import contextmanager
+from truckms.api import FrameDatapoint
+from deprecated import deprecated
 
 
-def image_id_yielder(f):
-    """
-    Decorator for clarity purposes. It serves as declaring that a generator or a function has a specific interface
-    You can define a generator that yields an image and id and annotate with this decorator just for clarity purposes.
-    #TODO It should  also check that the first yield does indeed yields an array and an integer
-
-    Example:
-        @image_id_yielder
-        def generator():
-            yield np.random((100,100)), 0
-
-    Args:
-        f: generator function to be decorated
-
-    Return:
-         decorated function
-    """
-    return f
-
-
-def batch_image_id_yielder(f):
-    #TODO same as image_id_yielder but it returns a batch of elements
-    return f
-
-
-def prediction_id_yielder(f):
-    return f
-
-
-@image_id_yielder
-def image_generator(video_path, skip=5):
+def image_generator(video_path, skip=5) -> FrameDatapoint:
     """
     Generator function for processing images and keeping account of their frame ids
 
@@ -41,7 +13,7 @@ def image_generator(video_path, skip=5):
         skip: number of frames to skip
 
     Yields:
-        image and id
+        FrameDatapoint
     """
     assert skip >= 0
     cap = cv2.VideoCapture(video_path)
@@ -49,32 +21,50 @@ def image_generator(video_path, skip=5):
     idx = 0
     while ret:
         if idx % (skip+1) == 0:
-            yield image, idx
+            yield FrameDatapoint(image, idx)
         idx += 1
         ret, image = cap.read()
 
 
-@image_id_yielder
-def image_generator_by_frame_ids(video_path, frame_ids):
+@deprecated(reason="Not efficient")
+def image_generator_by_frame_ids(video_path, frame_ids) -> FrameDatapoint:
     """
     Generator function for processing images. Only the frames whose ids appear in the frame_ids argument are yielded
 
     Args:
         video_path: path to a video file. .avi, .mkv, .mp4 should work
-        frame_ids: list or set of frame ids to be returned
+        frame_ids: list or set of frame ids to be returned. the iterable must be sorted
 
     Yields:
-        image and frame id
+        FrameDatapoint
     """
+    if len(frame_ids) == 0:
+        return
     cap = cv2.VideoCapture(video_path)
     ret, image = cap.read()
     idx = 0
-    frame_ids = set(frame_ids)
+    assert all(i < j for i, j in zip(frame_ids, frame_ids[1:]))
     while ret:
-        if idx in frame_ids:
-            yield image, idx
+        if len(frame_ids) > 0 and idx == frame_ids[0]:
+            frame_ids.pop(0)
+            yield FrameDatapoint(image, idx)
+        elif len(frame_ids) == 0:
+            break
+
         idx += 1
         ret, image = cap.read()
+
+
+def image_generator_by_frame_ids2(video_path, frame_ids) -> FrameDatapoint:
+    if len(frame_ids) == 0:
+        return
+    cap = cv2.VideoCapture(video_path)
+    assert all(i < j for i, j in zip(frame_ids, frame_ids[1:]))
+    for frame_num in frame_ids:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
+        res, image = cap.read()
+        if res:
+            yield FrameDatapoint(image, frame_num)
 
 
 @contextmanager

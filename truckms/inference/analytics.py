@@ -178,10 +178,10 @@ def detections_list2_dict_numpy(all_boxes):
         scores.append(item.score)
         labels.append(item.label)
         ids_.append(item.id)
-    pred = {"boxes":np.array(boxes),
-            'labels':np.array(labels),
-            'scores':np.array(scores),
-            'obj_id':np.array(ids_)}
+    pred = {"boxes": np.array(boxes),
+            'labels': np.array(labels),
+            'scores': np.array(scores),
+            'obj_id': np.array(ids_)}
     return pred
 
 
@@ -191,15 +191,15 @@ def dict_numpy2detections_list(pred):
 
 
 def pipeline(pred, tracker_list, id_incrementer, max_age=4, min_hits=3):
-    '''
+    """
         Pipeline function for detection and tracking
 
         Args:
-            pred: output of neural network API
+            pred: output of neural network API. dictionary with keys boxes, scores, labels and obj_id
             max_age: no.of consecutive unmatched detection before a track is deleted
             min_hits: no. of consecutive matches needed to establish a track
 
-    '''
+    """
 
     detections = dict_numpy2detections_list(pred)
 
@@ -276,6 +276,11 @@ def pipeline(pred, tracker_list, id_incrementer, max_age=4, min_hits=3):
 
 
 def filter_pred_detections(pred_gen):
+    """
+    Assigns obj_id to
+    :param pred_gen:
+    :return:
+    """
     tracker_list = []
     id_incrementer = 0
     for pred, img_id in pred_gen:
