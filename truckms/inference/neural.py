@@ -143,7 +143,7 @@ def pandas_to_pred_iter(data_frame) -> PredictionDatapoint:
                           'obj_id': np.array(list_obj_id)}
             yield PredictionDatapoint(prediction, frame_id)
             frame_id = img_id
-            list_boxes, list_scores, list_labels = [], [], []
+            list_boxes, list_scores, list_labels, list_obj_id = [], [], [], []
         if not any(datapoint[key] is None for key in datapoint if key != 'obj_id')\
                 and not any(math.isnan(datapoint[k]) for k in datapoint if k != 'obj_id' and not isinstance(datapoint[k], str)):
             list_boxes.append([datapoint['x1'], datapoint['y1'], datapoint['x2'], datapoint['y2']])

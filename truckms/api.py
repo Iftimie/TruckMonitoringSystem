@@ -47,7 +47,9 @@ class PredictionDatapoint:
         assert len(pred['scores'].shape) == 1
         assert len(pred['labels'].shape) == 1
         assert len(pred['obj_id'].shape) == 1
-        assert len(pred['obj_id'].shape[0] == pred['labels'].shape[0] == pred['scores'].shape[0] == pred['boxes'].shape[0])
+        assert pred['obj_id'].shape[0] == pred['labels'].shape[0]
+        assert pred['scores'].shape[0] == pred['boxes'].shape[0]
+        assert pred['scores'].shape[0] == pred['labels'].shape[0]
         self.pred = pred
         self.frame_id = frame_id
 

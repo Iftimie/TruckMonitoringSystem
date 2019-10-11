@@ -1,7 +1,7 @@
 from truckms.inference.neural import create_model, compute, plot_detections, pred_iter_to_pandas, pandas_to_pred_iter
 from truckms.inference.neural import iterable2batch
 from truckms.inference.utils import framedatapoint_generator_by_frame_ids2
-from truckms.api import FrameDatapoint
+from truckms.api import FrameDatapoint, PredictionDatapoint
 import os.path as osp
 import os
 import cv2
@@ -31,11 +31,11 @@ def test_truck_detector():
     predictions = list(compute(input_images, model))
     assert len(predictions) != 0
     assert isinstance(predictions, list)
-    assert isinstance(predictions[0], tuple)
-    assert isinstance(predictions[0][0], dict)
-    assert 'labels' in predictions[0][0]
-    assert 'scores' in predictions[0][0]
-    assert 'boxes' in predictions[0][0]
+    assert isinstance(predictions[0], PredictionDatapoint)
+    assert isinstance(predictions[0].pred, dict)
+    assert 'labels' in predictions[0].pred
+    assert 'scores' in predictions[0].pred
+    assert 'boxes' in predictions[0].pred
     # cv2.imshow("image", next(p.plot_detections(input_images, predictions)))
     # cv2.waitKey(0)
 
@@ -50,8 +50,8 @@ def test_auu_data():
         image_gen = framedatapoint_generator(video_path, skip=5)
         image_gen1, image_gen2 = tee(image_gen)
 
-        for idx, (image, _) in enumerate(plot_detections(image_gen1, compute(image_gen2, model))):
-            cv2.imshow("image", image)
+        for idx, fdp in enumerate(plot_detections(image_gen1, compute(image_gen2, model))):
+            cv2.imshow("image", fdp.image)
             cv2.waitKey(1)
             if idx==5:break
 
@@ -69,14 +69,8 @@ def test_TruckDetector_pred_iter_to_pandas():
 
     pred_gen_from_df = pandas_to_pred_iter(df)
 
-    for idx, (image, _) in enumerate(plot_detections(image_gen2, pred_gen_from_df)):
-        cv2.imshow("image", image)
+    for idx, fdp in enumerate(plot_detections(image_gen2, pred_gen_from_df)):
+        cv2.imshow("image", fdp.image)
         cv2.waitKey(1)
         if idx==5:break
-
-
-
-
-
-
 
