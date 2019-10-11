@@ -56,3 +56,19 @@ I need to select the intervals that represents truck activity and rerun the dete
 Once this is done the tracking algorithm can be executed and assign object ids for the frames with detections. Frames 
 without detections are just simply ignored.
 
+In each pipeline stage:
+
+Input is a tuple of
+* an image / tensor / batch of tensors
+* frame id / batch of frame ids
+
+Output is a tuple of:
+* list of predictions / batch of list of predictions
+* frame id / batch of frame ids 
+
+Thus we have generators as input. The functions that are generators and take as arguments another generator and yields 
+something else should be called yielder???
+
+This pipeline interface will ensure some compatibility between generators and some clarity.
+
+The decorators are just for clarity so that some functions are clearly part of a pipeline. And can be easily combined??

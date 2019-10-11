@@ -18,7 +18,9 @@ setuptools.setup(
         'pillow',
         'deprecated',
         'flask',
-        'sklearn'
+        'sklearn',
+        'numpy',
+        'pandas'
       ],
 
     keywords=['object', 'detection', 'truck']
