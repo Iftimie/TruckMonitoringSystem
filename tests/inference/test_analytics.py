@@ -2,7 +2,7 @@ from truckms.inference.analytics import Tracker
 import numpy as np
 import cv2
 import os.path as osp
-from truckms.inference.neural import TruckDetector
+from truckms.inference.neural import create_model, plot_detections, pandas_to_pred_iter, pred_iter_to_pandas
 import pandas as pd
 from truckms.inference.analytics import pipeline, Detection
 import os
@@ -87,7 +87,7 @@ def test_tracker():
 
 def test_pipeline():
     csv_file_path = osp.join(osp.dirname(__file__), 'data', 'cut.csv')
-    pred_gen_from_df = TruckDetector.pandas_to_pred_iter(pd.read_csv(csv_file_path))
+    pred_gen_from_df = pandas_to_pred_iter(pd.read_csv(csv_file_path))
     tracker_list = []
     id_incrementer = 0
     for idx, (pred, img_id) in enumerate(pred_gen_from_df):
@@ -100,21 +100,21 @@ from truckms.inference.utils import image_generator
 from truckms.inference.analytics import filter_pred_detections
 def test_filter_predictions_generator():
     csv_file_path = osp.join(osp.dirname(__file__), 'data', 'cut.csv')
-    pred_gen_from_df = TruckDetector.pandas_to_pred_iter(pd.read_csv(csv_file_path))
+    pred_gen_from_df = pandas_to_pred_iter(pd.read_csv(csv_file_path))
     filtered_pred = filter_pred_detections(pred_gen_from_df)
     # filtered_dataframe = TruckDetector.pred_iter_to_pandas(filtered_pred)
 
     video_file = osp.join(osp.dirname(__file__), '..', 'service', 'data', 'cut.mkv')
     image_gen = image_generator(video_file, skip=0)
-    for image, _ in TruckDetector.plot_detections(image_gen, filtered_pred):
+    for image, _ in plot_detections(image_gen, filtered_pred):
         cv2.imshow("image", image)
         cv2.waitKey(0)
 
 def test_dataframe_filtered():
     csv_file_path = osp.join(osp.dirname(__file__), 'data', 'cut.csv')
-    pred_gen_from_df = TruckDetector.pandas_to_pred_iter(pd.read_csv(csv_file_path))
+    pred_gen_from_df = pandas_to_pred_iter(pd.read_csv(csv_file_path))
     filtered_pred = filter_pred_detections(pred_gen_from_df)
-    filtered_dataframe = TruckDetector.pred_iter_to_pandas(filtered_pred)
+    filtered_dataframe = pred_iter_to_pandas(filtered_pred)
     csv_file_path = osp.join(osp.dirname(__file__), 'data', 'filtered_cut.csv')
     filtered_dataframe.to_csv(csv_file_path)
 
