@@ -4,7 +4,7 @@ from werkzeug import secure_filename
 from flask import Response
 import multiprocessing
 from truckms.inference.neural import create_model, pandas_to_pred_iter, pred_iter_to_pandas, plot_detections, compute
-from truckms.inference.utils import image_generator, image_generator_by_frame_ids2
+from truckms.inference.utils import framedatapoint_generator, framedatapoint_generator_by_frame_ids2
 from flask import Flask, render_template, send_from_directory, make_response, request, redirect, url_for, session
 import os.path as osp
 from flask_bootstrap import Bootstrap
@@ -20,9 +20,9 @@ def analyze_movie(video_path, max_operating_res, skip = 0):
     Attention!!! if the movie is short or too fast and skip  is too big, then it may result with no detections
     #TODO think about this
     """
-    model = create_model(max_operating_res=max_operating_res, batch_size=10)
-    image_gen = image_generator(video_path, skip=skip)
-    pred_gen = compute(image_gen, model=model)
+    model = create_model(max_operating_res=max_operating_res)
+    image_gen = framedatapoint_generator(video_path, skip=skip)
+    pred_gen = compute(image_gen, model=model, batch_size=5)
     filtered_pred = filter_pred_detections(pred_gen)
     df = pred_iter_to_pandas(filtered_pred)
     df.to_csv(os.path.splitext(video_path)[0]+'.csv')
@@ -43,13 +43,12 @@ def html_imgs_generator(video_path):
     filtered_dataframe = pred_iter_to_pandas(filtered_pred)
 
     important_frames, important_df = get_important_frames(filtered_dataframe)
-    image_gen = image_generator_by_frame_ids2(video_path, important_frames)
+    image_gen = framedatapoint_generator_by_frame_ids2(video_path, important_frames)
 
     pred_from_important = pandas_to_pred_iter(important_df)
 
-    for image, id_ in plot_detections(image_gen, pred_from_important):
-        print (id_)
-        yield image2htmlstr(image)
+    for fdp in plot_detections(image_gen, pred_from_important):
+        yield image2htmlstr(fdp.image)
 
 
 def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_operating_res=800, skip=0):

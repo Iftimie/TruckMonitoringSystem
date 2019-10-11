@@ -49,7 +49,7 @@ def iterable2batch(fdp_iterable: FrameDatapoint, batch_size=5):
     yield BatchedFrameDatapoint(batch, batch_ids)
 
 
-def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None) -> PredictionDatapoint:
+def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None, batch_size=5) -> PredictionDatapoint:
     """
     Computes the predictions for an iterable of FrameDatapoint. It batches the images internally and works. The images
     must be in format H, W, C. Images must be in RGB format.
@@ -59,6 +59,7 @@ def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None) -> Predict
             same resolution.
         model: Faster-RCNN model
         filter_classes: only classes found in this argument will be yielded
+        batch_size: number of images to forward at once
 
     Yields:
         PredictionDatapoint
@@ -67,7 +68,7 @@ def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None) -> Predict
         filter_classes = ['truck', 'train', 'bus', 'car']
 
     with torch.no_grad():
-        for bfdp in iterable2batch(fdp_iterable):
+        for bfdp in iterable2batch(fdp_iterable, batch_size=batch_size):
             if len(bfdp.batch_images) == 0:
                 break
 

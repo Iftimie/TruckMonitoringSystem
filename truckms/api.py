@@ -43,7 +43,10 @@ class PredictionDatapoint:
             frame_id: id of the frame
         """
         assert all(isinstance(pred[k], np.ndarray) for k in pred)
-        assert len(pred['boxes'].shape) == 2
+        if pred['boxes'].shape[0]:
+            assert len(pred['boxes'].shape) == 2
+        else:
+            assert len(pred['boxes'].shape) == 1
         assert len(pred['scores'].shape) == 1
         assert len(pred['labels'].shape) == 1
         assert len(pred['obj_id'].shape) == 1
