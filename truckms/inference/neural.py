@@ -82,7 +82,7 @@ def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None, batch_size
                     'boxes': pred['boxes'][valid_inds].astype(np.int32),
                     'scores': pred['scores'][valid_inds],
                     'labels': pred['labels'][valid_inds],
-                    'obj_id': np.array([None] * np.sum(valid_inds))
+                    'obj_id': np.array([np.nan] * np.sum(valid_inds))
                 }
                 yield PredictionDatapoint(to_yield_pred, frame_id)
 
@@ -112,10 +112,10 @@ def pred_iter_to_pandas(pdp_iterable):
             list_dict.append(datapoint)
         if len(prediction['boxes']) == 0:
             list_dict.append({'img_id': frame_id,
-                              'x1': None, 'y1': None, 'x2': None, 'y2': None,
-                              'score': None,
-                              'label': None,
-                              'obj_id': None})
+                              'x1': np.nan, 'y1': np.nan, 'x2': np.nan, 'y2': np.nan,
+                              'score': np.nan,
+                              'label': np.nan,
+                              'obj_id': np.nan})
     return pd.DataFrame(data=list_dict)
 
 
@@ -137,21 +137,21 @@ def pandas_to_pred_iter(data_frame) -> PredictionDatapoint:
     for datapoint in list_dict:
         img_id = datapoint['img_id']
         if img_id != frame_id:
-            prediction = {'boxes': np.array(list_boxes).astype(np.int32),
+            prediction = {'boxes': np.array(list_boxes).astype(np.int32).reshape(-1, 4),
                           'scores': np.array(list_scores),
                           'labels': np.array(list_labels),
                           'obj_id': np.array(list_obj_id)}
             yield PredictionDatapoint(prediction, frame_id)
             frame_id = img_id
             list_boxes, list_scores, list_labels, list_obj_id = [], [], [], []
-        if not any(datapoint[key] is None for key in datapoint if key != 'obj_id')\
+        if not any(math.isnan(datapoint[key]) for key in datapoint if key != 'label')\
                 and not any(math.isnan(datapoint[k]) for k in datapoint if k != 'obj_id' and not isinstance(datapoint[k], str)):
             list_boxes.append([datapoint['x1'], datapoint['y1'], datapoint['x2'], datapoint['y2']])
             list_scores.append(datapoint['score'])
             list_labels.append(model_class_names.index(datapoint['label']))
             list_obj_id.append(datapoint['obj_id'])
 
-    prediction = {'boxes': np.array(list_boxes).astype(np.int32),
+    prediction = {'boxes': np.array(list_boxes).astype(np.int32).reshape(-1, 4),
                   'scores': np.array(list_scores),
                   'labels': np.array(list_labels),
                   'obj_id': np.array(list_obj_id)}
@@ -178,3 +178,5 @@ def plot_detections(fdp_iterable: FrameDatapoint, pdp_iterable: PredictionDatapo
             yield FrameDatapoint(plotted_image, pdp.frame_id)
 
     return plots_gen()
+
+

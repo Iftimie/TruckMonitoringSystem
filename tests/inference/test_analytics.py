@@ -90,13 +90,13 @@ def test_pipeline():
     pred_gen_from_df = pandas_to_pred_iter(pd.read_csv(csv_file_path))
     tracker_list = []
     id_incrementer = 0
-    for idx, (pred, img_id) in enumerate(pred_gen_from_df):
-        good_detections, tracker_list, id_incrementer = pipeline(pred, tracker_list, id_incrementer)
+    for idx, pdp in enumerate(pred_gen_from_df):
+        good_detections, tracker_list, id_incrementer = pipeline(pdp.pred, tracker_list, id_incrementer)
 
         print (len(good_detections['boxes']))
         if idx == 10:break
 
-from truckms.inference.utils import image_generator
+from truckms.inference.utils import framedatapoint_generator
 from truckms.inference.analytics import filter_pred_detections
 def test_filter_predictions_generator():
     csv_file_path = osp.join(osp.dirname(__file__), 'data', 'cut.csv')
@@ -105,9 +105,9 @@ def test_filter_predictions_generator():
     # filtered_dataframe = TruckDetector.pred_iter_to_pandas(filtered_pred)
 
     video_file = osp.join(osp.dirname(__file__), '..', 'service', 'data', 'cut.mkv')
-    image_gen = image_generator(video_file, skip=0)
-    for image, _ in plot_detections(image_gen, filtered_pred):
-        cv2.imshow("image", image)
+    image_gen = framedatapoint_generator(video_file, skip=0)
+    for fdp in plot_detections(image_gen, filtered_pred):
+        cv2.imshow("image", fdp.image)
         cv2.waitKey(0)
 
 def test_dataframe_filtered():

@@ -179,7 +179,7 @@ def detections_list2_dict_numpy(all_boxes):
         scores.append(item.score)
         labels.append(item.label)
         ids_.append(item.id)
-    pred = {"boxes": np.array(boxes),
+    pred = {"boxes": np.array(boxes).astype(np.int32).reshape(-1, 4),
             'labels': np.array(labels),
             'scores': np.array(scores),
             'obj_id': np.array(ids_)}

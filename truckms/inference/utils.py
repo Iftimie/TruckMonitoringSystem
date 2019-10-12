@@ -4,7 +4,7 @@ from truckms.api import FrameDatapoint
 from deprecated import deprecated
 
 
-def framedatapoint_generator(video_path, skip=5) -> FrameDatapoint:
+def framedatapoint_generator(video_path, skip=5, max_frames=-1) -> FrameDatapoint:
     """
     Generator function for processing images and keeping account of their frame ids
 
@@ -23,6 +23,7 @@ def framedatapoint_generator(video_path, skip=5) -> FrameDatapoint:
         if idx % (skip+1) == 0:
             yield FrameDatapoint(image, idx)
         idx += 1
+        if idx == max_frames: break
         ret, image = cap.read()
 
 

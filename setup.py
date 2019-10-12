@@ -10,8 +10,8 @@ setuptools.setup(
     packages=setuptools.find_packages(),
     dependency_links=['https://download.pytorch.org/whl/torch_stable.html'],
     install_requires=[
-        'torch==1.2.0+cpu',
-        'torchvision==0.4.0+cpu',
+        'torch==1.3.0+cpu',
+        'torchvision==0.4.1+cpu',
         'opencv-contrib-python',
         'opencv-python',
         'matplotlib',

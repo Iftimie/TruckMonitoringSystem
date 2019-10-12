@@ -4,6 +4,7 @@ if platform.system() == "Linux":
     mpl.use('Agg')
 import matplotlib.pyplot as plt
 import cv2
+import math
 
 
 model_class_names = ["__background__ ", 'person', 'bicycle', 'car', 'motorbike', 'aeroplane', 'bus', 'train', 'truck',
@@ -40,7 +41,7 @@ def plot_over_image(image, pred):
         and object id (from tracking)
     """
     for box, label, score, obj_id in zip(pred['boxes'], pred['labels'], pred['scores'], pred['obj_id']):
-        obj_id = obj_id if obj_id is not None else -1
+        obj_id = obj_id if not math.isnan(obj_id) else -1
         x1, y1, x2, y2 = box
         color = opencv_colors[int(label)]
         cls_name = model_class_names[int(label)]
