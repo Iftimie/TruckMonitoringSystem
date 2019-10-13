@@ -154,13 +154,13 @@ def do_quantization():
     propagate_qconfig_(model, qconfig_spec)
     model.eval()
 
-    local_Data =None
-    for i, data in enumerate(val_loader):
-        X, y = data[0].to(device), data[1].to(device)
-        break
-
     def run_fn(model, run_agrs):
-        return model(X)
+        for i, data in enumerate(val_loader):
+            X, y = data[0].to(device), data[1].to(device)
+            outputs = model(X)
+            if i ==1:break
+            print (i)
+            # val_losses += loss_function(outputs, y)
     model = torch.quantization.quantize(model, run_fn=run_fn, run_args={}, mapping=DEFAULT_MODULE_MAPPING)
 
     print (model)
@@ -171,8 +171,11 @@ def do_quantization():
     with torch.no_grad():
         for i, data in enumerate(val_loader):
             X, y = data[0].to(device), data[1].to(device)
-            X = quantize_per_tensor(X, 1 / (2 ** 8), 0, torch.quint8)
+            X = quantize_per_tensor(X, 1 / (2 ** 8), 127, torch.quint8)
             outputs = model(X)
+
+            if i==10:break
+            print (i)
 
 
             predicted_classes = torch.max(outputs, 1)[1]
