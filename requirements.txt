@@ -8,3 +8,9 @@ deprecated
 numpy
 pandas
 typing
+youtube_dl
+flask
+sklearn
+pillow
+Flask-Bootstrap4
+pytest

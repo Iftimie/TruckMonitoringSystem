@@ -8,7 +8,8 @@ import torch
 import math
 
 
-device = 'cuda' if torch.cuda.is_available() else "cpu"
+# device = 'cuda' if torch.cuda.is_available() else "cpu"
+device = 'cpu'
 
 
 def create_model(conf_thr=0.5, max_operating_res=800):

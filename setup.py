@@ -21,7 +21,10 @@ setuptools.setup(
         'sklearn',
         'numpy',
         'pandas',
-        'typing'
+        'typing',
+        'youtube_dl',
+        'Flask-Bootstrap4',
+        'pytest'
       ],
 
     keywords=['object', 'detection', 'truck']

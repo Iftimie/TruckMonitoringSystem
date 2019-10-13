@@ -6,6 +6,7 @@ from itertools import tee
 import os
 import pandas as pd
 import numpy as np
+import os.path as osp
 
 def get_raw_df_from_movie(movie_path, model):
     g1 = framedatapoint_generator(movie_path, skip=0, max_frames=200)
@@ -46,7 +47,7 @@ def compare_raw_vs_filtered(video_file):
 
 
 def main():
-    video_file = r'D:\aau-rainsnow\Hasserisvej\Hasserisvej-2\cam1.mkv'
+    video_file = osp.join(osp.dirname(__file__),'..', '4K Traffic camera video - free download now!-MNn9qKG2UFI.webm')
     compare_raw_vs_filtered(video_file)
 
 if __name__ == "__main__":

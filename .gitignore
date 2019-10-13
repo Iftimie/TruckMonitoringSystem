@@ -5,3 +5,6 @@ truckms.egg-info/
 *.pyc
 .idea/
 examples/up_dir/
+*.webm
+*.mp4
+out.png
