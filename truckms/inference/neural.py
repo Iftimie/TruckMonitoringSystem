@@ -8,8 +8,7 @@ import torch
 import math
 
 
-# device = 'cuda' if torch.cuda.is_available() else "cpu"
-device = 'cpu'
+device = 'cuda' if torch.cuda.is_available() else "cpu"
 
 
 def create_model(conf_thr=0.5, max_operating_res=800):
@@ -25,7 +24,7 @@ def create_model(conf_thr=0.5, max_operating_res=800):
     return model
 
 
-def iterable2batch(fdp_iterable: FrameDatapoint, batch_size=5):
+def iterable2batch(fdp_iterable: FrameDatapoint, batch_size=5, cdevice=device):
     """
     Transforms an iterable of FrameDatapoint into BatchedFrameDatapoint
 
@@ -41,7 +40,7 @@ def iterable2batch(fdp_iterable: FrameDatapoint, batch_size=5):
     for idx, fdp in enumerate(fdp_iterable):
         image = fdp.image
         id_ = fdp.frame_id
-        batch.append(torch.from_numpy(image.transpose((2, 0, 1)).astype(np.float32)).to(device) / 255.0)
+        batch.append(torch.from_numpy(image.transpose((2, 0, 1)).astype(np.float32)).to(cdevice) / 255.0)
         batch_ids.append(id_)
         if len(batch) == batch_size:
             yield BatchedFrameDatapoint(batch, batch_ids)
@@ -50,7 +49,7 @@ def iterable2batch(fdp_iterable: FrameDatapoint, batch_size=5):
     yield BatchedFrameDatapoint(batch, batch_ids)
 
 
-def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None, batch_size=5) -> PredictionDatapoint:
+def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None, batch_size=5, cdevice=device) -> PredictionDatapoint:
     """
     Computes the predictions for an iterable of FrameDatapoint. It batches the images internally and works. The images
     must be in format H, W, C. Images must be in RGB format.
@@ -69,7 +68,7 @@ def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None, batch_size
         filter_classes = ['truck', 'train', 'bus', 'car']
 
     with torch.no_grad():
-        for bfdp in iterable2batch(fdp_iterable, batch_size=batch_size):
+        for bfdp in iterable2batch(fdp_iterable, batch_size=batch_size, cdevice=cdevice):
             if len(bfdp.batch_images) == 0:
                 break
 
