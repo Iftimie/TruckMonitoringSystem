@@ -1,9 +1,4 @@
-from torchvision.models.resnet import Bottleneck
-from truckms.inference.quantization import replace_frozenbatchnorm_batchnorm
-from torchvision.ops.misc import FrozenBatchNorm2d
-import torch
 import os.path as osp
-import os
 import cv2
 from truckms.api import FrameDatapoint, PredictionDatapoint
 from truckms.inference.neural import create_model, compute, plot_detections

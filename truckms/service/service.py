@@ -4,10 +4,12 @@ from werkzeug import secure_filename
 from flask import Response
 import multiprocessing
 from truckms.inference.neural import create_model, pandas_to_pred_iter, pred_iter_to_pandas, plot_detections, compute
+from truckms.inference.neural import create_model_efficient
 from truckms.inference.utils import framedatapoint_generator, framedatapoint_generator_by_frame_ids2
 from flask import Flask, render_template, send_from_directory, make_response, request, redirect, url_for, session
 import os.path as osp
 from flask_bootstrap import Bootstrap
+from functools import partial
 import base64
 import cv2
 import io
@@ -20,7 +22,7 @@ def analyze_movie(video_path, max_operating_res, skip = 0):
     Attention!!! if the movie is short or too fast and skip  is too big, then it may result with no detections
     #TODO think about this
     """
-    model = create_model(max_operating_res=max_operating_res)
+    model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=max_operating_res))
     image_gen = framedatapoint_generator(video_path, skip=skip)
     pred_gen = compute(image_gen, model=model, batch_size=5)
     filtered_pred = filter_pred_detections(pred_gen)

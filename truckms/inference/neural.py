@@ -1,5 +1,7 @@
 from truckms.inference.visuals import plot_over_image, model_class_names
 from truckms.api import FrameDatapoint, BatchedFrameDatapoint, PredictionDatapoint
+from truckms.inference.quantization import get_modules_to_fuse, replace_frozenbatchnorm_batchnorm, custom_fuse_func
+from torch.quantization.fuse_modules import fuse_modules
 from functools import reduce
 import numpy as np
 import pandas as pd
@@ -21,6 +23,20 @@ def create_model(conf_thr=0.5, max_operating_res=800):
     # look into class FasterRCNN(GeneralizedRCNN): for more parameters
     model.eval()
     model = model.to(device)
+    return model
+
+
+def create_model_efficient(model_creation_func=create_model):
+    """
+    Fuses batchnorm layers and applies ReLu activation inplace
+    """
+    model = model_creation_func()
+    modules_to_fuse = get_modules_to_fuse(model)
+    replace_frozenbatchnorm_batchnorm(model)
+    model.eval()
+    fuse_modules(model, modules_to_fuse, inplace=True, fuser_func=custom_fuse_func)
+    model = model.to(device)
+    model.eval()
     return model
 
 
