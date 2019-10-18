@@ -8,7 +8,9 @@ setuptools.setup(
     author='Alexandru Iftimie',
     author_email='iftimie.alexandru.florentin@gmail.com',
     packages=setuptools.find_packages(),
-    dependency_links=['https://download.pytorch.org/whl/torch_stable.html'],
+    dependency_links=['https://download.pytorch.org/whl/torch_stable.html',
+                      'https://github.com/philferriere/cocoapi/tarball/master#subdirectory=PythonAPI'],
+    #https://stackoverflow.com/questions/32688688/how-to-write-setup-py-to-include-a-git-repo-as-a-dependency
     install_requires=[
         'torch==1.3.0+cpu',
         'torchvision==0.4.1+cpu',
@@ -26,7 +28,8 @@ setuptools.setup(
         'Flask-Bootstrap4',
         'pytest',
         'progressbar',
-        'tqdm'
+        'tqdm',
+        'pycocotools'
       ],
 
     keywords=['object', 'detection', 'truck']

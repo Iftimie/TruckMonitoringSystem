@@ -16,3 +16,4 @@ Flask-Bootstrap4
 pytest
 progressbar
 tqdm
+-e git://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI

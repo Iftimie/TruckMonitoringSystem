@@ -20,6 +20,8 @@ class BatchedFrameDatapoint:
 
     The images must have an id_. id_ can be set to a list of integers or to a list of None, however it will help
              identify the position in movie if frames are skipped if it is an integer
+
+    #TODO do I really need this?
     """
     def __init__(self, batch_images, batch_frames_ids):
         assert isinstance(batch_images, list)
@@ -51,5 +53,22 @@ class PredictionDatapoint:
         assert pred['scores'].shape[0] == pred['boxes'].shape[0]
         assert pred['scores'].shape[0] == pred['labels'].shape[0]
         self.pred = pred
+        self.frame_id = frame_id
+
+
+class TargetDatapoint:
+    """
+    Encapsulated the ground truth for an image
+    """
+
+    def __init__(self, target, frame_id):
+        """
+        Args:
+            target: dictionary with keys "boxes", "labels"
+            frame_id: id of the frame
+        """
+        assert len(target['boxes'].shape) == 2
+        assert len(target['labels'].shape) == 1
+        self.target = target
         self.frame_id = frame_id
 
