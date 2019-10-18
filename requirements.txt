@@ -14,3 +14,5 @@ sklearn
 pillow
 Flask-Bootstrap4
 pytest
+progressbar
+tqdm

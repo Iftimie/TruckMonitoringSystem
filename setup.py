@@ -24,7 +24,9 @@ setuptools.setup(
         'typing',
         'youtube_dl',
         'Flask-Bootstrap4',
-        'pytest'
+        'pytest',
+        'progressbar',
+        'tqdm'
       ],
 
     keywords=['object', 'detection', 'truck']
