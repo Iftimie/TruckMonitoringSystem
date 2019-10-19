@@ -1,6 +1,6 @@
 -f https://download.pytorch.org/whl/torch_stable.html
-torch==1.3.0+cpu
-torchvision==0.4.1+cpu
+#torch==1.3.0+cpu
+#torchvision==0.4.1+cpu
 opencv-contrib-python
 opencv-python
 matplotlib
@@ -16,4 +16,7 @@ Flask-Bootstrap4
 pytest
 progressbar
 tqdm
--e git://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI
+Cython
+pytest-mock
+git+https://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI
+mock

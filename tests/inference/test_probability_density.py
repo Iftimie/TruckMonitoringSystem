@@ -1,7 +1,6 @@
 from truckms.inference.probability_density import estimate_next_frame_ids
 from truckms.inference.neural import pred_iter_to_pandas
-from truckms.api import PredictionDatapoint
-from truckms.inference.neural import model_class_names
+from truckms.api import PredictionDatapoint, model_class_names
 import matplotlib.pyplot as plt
 import pandas as pd
 from scipy.stats.kde import gaussian_kde

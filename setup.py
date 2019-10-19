@@ -29,7 +29,9 @@ setuptools.setup(
         'pytest',
         'progressbar',
         'tqdm',
-        'pycocotools'
+        'pycocotools',
+        'pytest-mock',
+        'mock'
       ],
 
     keywords=['object', 'detection', 'truck']

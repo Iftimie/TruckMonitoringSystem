@@ -1,4 +1,5 @@
-from truckms.inference.visuals import plot_over_image, model_class_names
+from truckms.inference.visuals import plot_over_image
+from truckms.api import model_class_names
 from truckms.api import FrameDatapoint, BatchedFrameDatapoint, PredictionDatapoint
 from truckms.inference.quantization import get_modules_to_fuse, replace_frozenbatchnorm_batchnorm, custom_fuse_func
 from torch.quantization.fuse_modules import fuse_modules
