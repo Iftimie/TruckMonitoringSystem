@@ -1,9 +1,11 @@
 from truckms.evaluation.evaluate import download_data_if_not_exists, get_dataset, gen_cocoitem2datapoints, \
-    target_iter_to_pandas, gen_cocoitem2targetdp
+    target_iter_to_pandas, gen_cocoitem2targetdp, gen_cocoitem2framedp, target_pred_iter_to_pandas
 from truckms.api import TargetDatapoint, FrameDatapoint, coco_val_2017_names
 import os
 import platform
 import json
+from itertools import tee
+from typing import Iterable, Tuple
 
 
 def test_download_data_if_not_exists(tmpdir):
@@ -61,6 +63,33 @@ def test_target_iter_to_pandas(mock_some_obj_some_method):
 
     coco_dset = get_dataset(datalake_path)
 
-    g2 = gen_cocoitem2targetdp(coco_dset)
+    g = gen_cocoitem2datapoints(coco_dset)
+    g2 = gen_cocoitem2targetdp(g)
     df = target_iter_to_pandas(g2)
-    pass
+
+
+from truckms.inference.neural import create_model_efficient, compute, create_model
+from functools import partial
+@mock.patch.object(CocoDetection, "__len__")
+def test_target_pred_iter_to_pandas(mock_some_obj_some_method):
+    mock_some_obj_some_method.return_value = 100
+
+    if platform.system() == "Linux":
+        datalake_path = r"/data1/workspaces/aiftimie/tms/tms_data"
+    else:
+        datalake_path = r"D:\tms_data"
+    download_data_if_not_exists(datalake_path)
+    coco_dset = get_dataset(datalake_path)
+
+    g_tdp_fdp_1: Iterable[Tuple[FrameDatapoint, TargetDatapoint]]
+    g_tdp_fdp_2: Iterable[Tuple[FrameDatapoint, TargetDatapoint]]
+    g_tdp_fdp_1, g_tdp_fdp_2 = tee(gen_cocoitem2datapoints(coco_dset))
+    g_tdp = gen_cocoitem2targetdp(g_tdp_fdp_1)
+    g_fdp = gen_cocoitem2framedp(g_tdp_fdp_2)
+
+
+    model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=400))
+    g_pred = compute(g_fdp, model, batch_size=10)
+
+    df = target_pred_iter_to_pandas(g_tdp, g_pred)
+

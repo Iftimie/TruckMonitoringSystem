@@ -3,10 +3,11 @@ import os
 from urllib.request import urlretrieve
 from torchvision.datasets import CocoDetection
 from tqdm import tqdm
-from truckms.api import FrameDatapoint, TargetDatapoint
+from truckms.api import FrameDatapoint, TargetDatapoint, PredictionDatapoint
 import numpy as np
 import pandas as pd
 from truckms.api import model_class_names, coco_val_2017_names
+from typing import Iterable, Tuple
 
 
 def get_progress_bar_hook():
@@ -66,13 +67,17 @@ def gen_cocoitem2datapoints(dataset: CocoDetection):
         yield fdp, tdp
 
 
-def gen_cocoitem2targetdp(dataset: CocoDetection):
-    g = gen_cocoitem2datapoints(dataset)
+def gen_cocoitem2targetdp(g: Iterable[Tuple[FrameDatapoint, TargetDatapoint]]):
     for fdp, tdp in g:
         yield tdp
 
 
-def target_iter_to_pandas(tdp_iterable: TargetDatapoint):
+def gen_cocoitem2framedp(g: Iterable[Tuple[FrameDatapoint, TargetDatapoint]]):
+    for fdp, tdp in g:
+        yield fdp
+
+
+def target_iter_to_pandas(tdp_iterable: Iterable[TargetDatapoint]):
     """
     Transforms a list or generator of TargetDatapoint into a compact format such as a pandas dataframe.
 
@@ -89,12 +94,57 @@ def target_iter_to_pandas(tdp_iterable: TargetDatapoint):
         for box, label in zip(target['boxes'], target['labels']):
             x1, y1, x2, y2 = box
             datapoint = {'img_id': frame_id,
-                         'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
-                         'label': coco_val_2017_names[label]}
+                         'target.x1': x1, 'target.y1': y1, 'target.x2': x2, 'target.y2': y2,
+                         'target.label': coco_val_2017_names[label]}
             list_dict.append(datapoint)
         if len(target['boxes']) == 0:
             list_dict.append({'img_id': frame_id,
+                              'target.x1': np.nan, 'target.y1': np.nan, 'target.x2': np.nan, 'target.y2': np.nan,
+                              'target.label': np.nan})
+    return pd.DataFrame(data=list_dict)
+
+
+def target_pred_iter_to_pandas(tdp_iterable: Iterable[TargetDatapoint], pdp_iterable: Iterable[PredictionDatapoint]):
+    """
+    Transforms an iterable of TargetDatapoint and an iterable of PredictionDatapoint to pandas dataframe
+
+    Args:
+        tdp_iterable: list or generator of TargetDatapoint
+        pdp_iterable: list or generator of PredictionDatapoint
+
+    Return:
+        pandas dataframe with ground truth and prediction
+    """
+    list_dict = []
+    for tdp, pdp in zip(tdp_iterable, pdp_iterable):
+        assert pdp.frame_id == tdp.frame_id
+        prediction = pdp.pred
+        frame_id = pdp.frame_id
+        target = tdp.target
+        for box, label, score, obj_id in zip(prediction['boxes'], prediction['labels'], prediction['scores'],
+                                             prediction['obj_id']):
+            x1, y1, x2, y2 = box
+            datapoint = {'img_id': frame_id,
+                         'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
+                         'score': score,
+                         'label': model_class_names[label],
+                         'obj_id': obj_id}
+            list_dict.append(datapoint)
+        if len(prediction['boxes']) == 0:
+            list_dict.append({'img_id': frame_id,
                               'x1': np.nan, 'y1': np.nan, 'x2': np.nan, 'y2': np.nan,
-                              'label': np.nan})
+                              'score': np.nan,
+                              'label': np.nan,
+                              'obj_id': np.nan})
+        for box, label in zip(target['boxes'], target['labels']):
+            x1, y1, x2, y2 = box
+            datapoint = {'img_id': frame_id,
+                         'target.x1': x1, 'target.y1': y1, 'target.x2': x2, 'target.y2': y2,
+                         'target.label': coco_val_2017_names[label]}
+            list_dict.append(datapoint)
+        if len(target['boxes']) == 0:
+            list_dict.append({'img_id': frame_id,
+                              'target.x1': np.nan, 'target.y1': np.nan, 'target.x2': np.nan, 'target.y2': np.nan,
+                              'target.label': np.nan})
     return pd.DataFrame(data=list_dict)
 

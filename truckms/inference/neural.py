@@ -31,7 +31,7 @@ def create_model_efficient(model_creation_func=create_model):
     """
     Fuses batchnorm layers and applies ReLu activation inplace
     """
-    model = model_creation_func()
+    model = model_creation_func().to('cpu')
     modules_to_fuse = get_modules_to_fuse(model)
     replace_frozenbatchnorm_batchnorm(model)
     model.eval()
