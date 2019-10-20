@@ -8,6 +8,7 @@ from itertools import tee
 import pickle
 import os.path as osp
 import pandas as pd
+from pprint import pprint
 
 
 def get_dataframes(datalake_path, pred_csv_path, target_csv_path):
@@ -18,7 +19,7 @@ def get_dataframes(datalake_path, pred_csv_path, target_csv_path):
     g_tdp = gen_cocoitem2targetdp(g_tdp_fdp_1)
     g_fdp = gen_cocoitem2framedp(g_tdp_fdp_2)
 
-    model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=800))
+    model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=800, conf_thr=0.05))
     g_pred = compute(g_fdp, model, batch_size=10, filter_classes=model_class_names)
 
     df_pred, df_target = target_pred_iter_to_pandas(g_tdp, g_pred)
@@ -38,11 +39,13 @@ def compute_stats_for_labels(df_pred, df_target, stats_path):
         det_df = label_dataframes[k][2]
         stats_label[k] = compute_stats(joined_df, ann_df, det_df)
 
-    pickle.dump(stats_label, open(stats_path))
+    pickle.dump(stats_label, open(stats_path, 'wb'))
+    return stats_label
 
 
 def main():
-    force_overwrite = True
+    force_overwrite_detection = False
+    force_overwrite_stats = False
     pred_csv_path, target_csv_path, stats_path = None, None, None
     df_target, df_pred = None, None
     if platform.system() == "Linux":
@@ -53,12 +56,18 @@ def main():
     else:
         datalake_path = r"D:\tms_data"
 
-    if force_overwrite or (not osp.exists(pred_csv_path) or not osp.exists(target_csv_path)):
+    if force_overwrite_detection or (not osp.exists(pred_csv_path) or not osp.exists(target_csv_path)):
         df_pred, df_target = get_dataframes(datalake_path, pred_csv_path, target_csv_path)
+    else:
+        df_pred = pd.read_csv(pred_csv_path)
+        df_target = pd.read_csv(target_csv_path)
 
-    if force_overwrite or not osp.exists(stats_path):
+    if force_overwrite_stats or not osp.exists(stats_path):
         stats_label = compute_stats_for_labels(df_pred, df_target, stats_path)
+    else:
+        stats_label = pickle.load(open(stats_path, 'rb'))
 
+    pprint (stats_label)
     print ()
 
 

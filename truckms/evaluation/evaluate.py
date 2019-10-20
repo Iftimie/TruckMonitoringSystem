@@ -275,7 +275,7 @@ def clean_and_set_index_df(df, index_key='img_id', drop_nan_row_by_columns=None)
         pandas dataframe cleaned and with the index set
     """
     if "Unnamed: 0" in df.columns:
-        df = df.drop(["Unnamed: 0"], axis=1)
+        df = df.rename({"Unnamed: 0": "Datapoint id"})
     df = df.set_index(index_key)
     if drop_nan_row_by_columns is not None:
         df = df.dropna(subset=drop_nan_row_by_columns)
@@ -326,7 +326,17 @@ def compute_iou_det_ann_df(ann_df, det_df, ann_lbl_col, det_lbl_col, iou_tr=0.3)
         joined_df = join_dataframes(ann_df_label, det_df_label)
         joined_df["iou"] = joined_df.apply(compute_iou, axis=1)
         joined_df["iou>iou_tr"] = joined_df["iou"] > iou_tr
-        res[label] = (joined_df, ann_df_label, det_df_label)
+
+        joined_df.reset_index(inplace=True)
+
+
+        # there may be more detected overlapping bounding boxes over the same ground truth image, thus the DR will be over 1
+        # we need to set to false positive, or just ignore those rows.
+        duplicated_predictions = joined_df[joined_df["iou>iou_tr"] == True]['Unnamed: 0ann'].duplicated()
+        duplicated_predictions = duplicated_predictions[duplicated_predictions == True]
+        joined_df_no_duplicate_predictions = joined_df.drop(duplicated_predictions.index)
+
+        res[label] = (joined_df_no_duplicate_predictions, ann_df_label, det_df_label)
 
     return res
 
