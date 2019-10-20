@@ -27,6 +27,7 @@ coco_val_2017_names = {1: 'person', 2: 'bicycle', 3: 'car', 4: 'motorbike', 5: '
                        76: 'keyboard', 77: 'cell phone', 78: 'microwave', 79: 'oven', 80: 'toaster', 81: 'sink',
                        82: 'refrigerator', 84: 'book', 85: 'clock', 86: 'vase', 87: 'scissors', 88: 'teddy bear',
                        89: 'hair drier', 90: 'toothbrush'}
+coco_id2model_id = {k: model_class_names.index(coco_val_2017_names[k]) for k in coco_val_2017_names}
 # these are from annotations
 
 

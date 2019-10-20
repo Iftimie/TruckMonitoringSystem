@@ -36,8 +36,8 @@ def test_truck_detector():
     assert 'labels' in predictions[0].pred
     assert 'scores' in predictions[0].pred
     assert 'boxes' in predictions[0].pred
-    # cv2.imshow("image", next(p.plot_detections(input_images, predictions)))
-    # cv2.waitKey(0)
+    cv2.imshow("image", next(plot_detections(input_images, predictions)).image)
+    cv2.waitKey(0)
 
 
 # @pytest.mark.skip(reason="depends on local data")
