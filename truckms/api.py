@@ -37,6 +37,8 @@ class FrameDatapoint:
 
     The image must have an id_. id_ can be set to anything or to None, however it will help
              identify the position in movie if frames are skipped
+
+    The image should be in RGB format. It the image was read from disk with opencv then it should be converted from BGR to RGB
     """
     def __init__(self, image, frame_id):
         assert isinstance(image, np.ndarray)

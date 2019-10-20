@@ -21,6 +21,7 @@ def framedatapoint_generator(video_path, skip=5, max_frames=-1) -> FrameDatapoin
     idx = 0
     while ret:
         if idx % (skip+1) == 0:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             yield FrameDatapoint(image, idx)
         idx += 1
         if idx == max_frames: break
@@ -48,6 +49,7 @@ def framedatapoint_generator_by_frame_ids(video_path, frame_ids) -> FrameDatapoi
     while ret:
         if len(frame_ids) > 0 and idx == frame_ids[0]:
             frame_ids.pop(0)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             yield FrameDatapoint(image, idx)
         elif len(frame_ids) == 0:
             break
@@ -75,6 +77,7 @@ def framedatapoint_generator_by_frame_ids2(video_path, frame_ids) -> FrameDatapo
         cap.set(cv2.CAP_PROP_POS_FRAMES, frame_num)
         res, image = cap.read()
         if res:
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             yield FrameDatapoint(image, frame_num)
 
 

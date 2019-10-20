@@ -23,8 +23,8 @@ def test_iterable2batch():
 
 
 def test_truck_detector():
-    test_image = osp.join(osp.dirname(__file__), 'data', 'test_image.PNG')
-    test_image = cv2.cvtColor(cv2.imread(test_image), cv2.COLOR_BGR2RGB)
+    test_image_path = osp.join(osp.dirname(__file__), 'data', 'test_image.PNG')
+    test_image = cv2.cvtColor(cv2.imread(test_image_path), cv2.COLOR_BGR2RGB)
     model = create_model()
 
     input_images = [FrameDatapoint(test_image, 1)]
@@ -42,7 +42,7 @@ def test_truck_detector():
 
 # @pytest.mark.skip(reason="depends on local data")
 def test_auu_data():
-    auu_data_root = r'D:\aau-rainsnow\Hjorringvej\Hjorringvej-2'
+    auu_data_root = r'D:\tms_data\aau-rainsnow\Hjorringvej\Hjorringvej-2'
     video_files = [osp.join(r, f) for (r, _, fs) in os.walk(auu_data_root) for f in fs if 'avi' in f or 'mkv' in f]
     model = create_model()
 
@@ -53,7 +53,7 @@ def test_auu_data():
         for idx, fdp in enumerate(plot_detections(image_gen1, compute(image_gen2, model))):
             cv2.imshow("image", fdp.image)
             cv2.waitKey(1)
-            if idx==5:break
+            # if idx == 5:break
 
 def test_TruckDetector_pred_iter_to_pandas():
     auu_data_root = r'D:\aau-rainsnow\Hjorringvej\Hjorringvej-2'

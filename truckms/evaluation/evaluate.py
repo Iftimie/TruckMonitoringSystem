@@ -8,6 +8,7 @@ import numpy as np
 import pandas as pd
 from truckms.api import model_class_names, coco_val_2017_names, coco_id2model_id
 from typing import Iterable, Tuple
+from truckms.inference.visuals import plot_over_image_target
 
 
 def get_progress_bar_hook():
@@ -57,22 +58,39 @@ def get_dataset(datalake_path):
     return dataset
 
 
-def gen_cocoitem2datapoints(dataset: CocoDetection):
+def gen_cocoitem2datapoints(dataset: CocoDetection, frame_ids=None):
     """
     CocoDetection dataset returns coordinates as x,y,w,h, but I set the convention to x1,y1,x2,y2
     """
+    id_images_without_targets = len(dataset)
     for i in range(len(dataset)):
         img, gt_target = dataset[i]
-        fdp = FrameDatapoint(np.array(img), gt_target[0]['image_id'])
+        if len(gt_target) != 0:
+            if frame_ids is not None and gt_target[0]['image_id'] not in frame_ids:
+                continue
+            fdp = FrameDatapoint(np.array(img), gt_target[0]['image_id'])
 
-        boxes_xywh = np.array([t['bbox'] for t in gt_target])
-        boxes_x1y1x2y2 = boxes_xywh.copy()
-        boxes_x1y1x2y2[:, 2] = boxes_xywh[:, 0] + boxes_xywh[:, 2]
-        boxes_x1y1x2y2[:, 3] = boxes_xywh[:, 1] + boxes_xywh[:, 3]
-        tdp = TargetDatapoint(target={"boxes": boxes_x1y1x2y2.astype(np.int32),
-                                      "labels": np.array([coco_id2model_id[t['category_id']] for t in gt_target])},
-                              frame_id=gt_target[0]['image_id'])
-        yield fdp, tdp
+            boxes_xywh = np.array([t['bbox'] for t in gt_target])
+            boxes_x1y1x2y2 = boxes_xywh.copy()
+            boxes_x1y1x2y2[:, 2] = boxes_xywh[:, 0] + boxes_xywh[:, 2]
+            boxes_x1y1x2y2[:, 3] = boxes_xywh[:, 1] + boxes_xywh[:, 3]
+            tdp = TargetDatapoint(target={"boxes": boxes_x1y1x2y2.astype(np.int32),
+                                          "labels": np.array([coco_id2model_id[t['category_id']] for t in gt_target])},
+                                  frame_id=gt_target[0]['image_id'])
+            yield fdp, tdp
+        else:
+            if frame_ids is not None: continue
+            fdp = FrameDatapoint(np.array(img), id_images_without_targets)
+
+            boxes_xywh = np.array([t['bbox'] for t in gt_target]).reshape(-1, 4)
+            boxes_x1y1x2y2 = boxes_xywh.copy()
+            boxes_x1y1x2y2[:, 2] = boxes_xywh[:, 0] + boxes_xywh[:, 2]
+            boxes_x1y1x2y2[:, 3] = boxes_xywh[:, 1] + boxes_xywh[:, 3]
+            tdp = TargetDatapoint(target={"boxes": boxes_x1y1x2y2.astype(np.int32),
+                                          "labels": np.array([coco_id2model_id[t['category_id']] for t in gt_target])},
+                                  frame_id=id_images_without_targets)
+            id_images_without_targets += 1
+            yield fdp, tdp
 
 
 def gen_cocoitem2targetdp(g: Iterable[Tuple[FrameDatapoint, TargetDatapoint]]):
@@ -159,4 +177,22 @@ def target_pred_iter_to_pandas(tdp_iterable: Iterable[TargetDatapoint], pdp_iter
     return pd.DataFrame(data=list_dict_pred), pd.DataFrame(data=list_dict_target)
 
 
+def plot_targets(fdp_iterable: FrameDatapoint, tdp_iterable: TargetDatapoint) -> FrameDatapoint:
+    """
+    Plots over the imtages the targets. The number of images should match the number of predictions
+
+    Args:
+        fdp_iterable: list of FrameDatapoint or generator
+        tdp_iterable: list of TargetDatapoint or generator
+
+    Return:
+        generator with FrameDatapoint
+    """
+
+    def plots_gen():
+        for fdp, pdp in zip(fdp_iterable, tdp_iterable):
+            assert fdp.frame_id == pdp.frame_id
+            plotted_image = plot_over_image_target(fdp.image, pdp.target)
+            yield FrameDatapoint(plotted_image, pdp.frame_id)
+    return plots_gen()
 
