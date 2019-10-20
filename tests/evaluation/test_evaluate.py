@@ -128,7 +128,7 @@ def test_dataset_by_frame_ids():
     g_tdp_fdp_2: Iterable[Tuple[FrameDatapoint, TargetDatapoint]]
     g_tdp_fdp_1, g_tdp_fdp_2 = tee(gen_cocoitem2datapoints(coco_dset, frame_ids))
     g_tdp = gen_cocoitem2targetdp(g_tdp_fdp_1)
-    g_fdp_1, g_fdp_2, g_fdp_3 = tee(gen_cocoitem2framedp(g_tdp_fdp_2),3)
+    g_fdp_1, g_fdp_2, g_fdp_3 = tee(gen_cocoitem2framedp(g_tdp_fdp_2), 3)
 
     model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=800))
     g_pred = compute(g_fdp_1, model, batch_size=5, filter_classes=model_class_names)

@@ -168,7 +168,7 @@ def target_pred_iter_to_pandas(tdp_iterable: Iterable[TargetDatapoint], pdp_iter
             x1, y1, x2, y2 = box
             datapoint = {'img_id': frame_id,
                          'target.x1': x1, 'target.y1': y1, 'target.x2': x2, 'target.y2': y2,
-                         'target.label': coco_val_2017_names[label]}
+                         'target.label': model_class_names[label]}
             list_dict_target.append(datapoint)
         if len(target['boxes']) == 0:
             list_dict_target.append({'img_id': frame_id,
