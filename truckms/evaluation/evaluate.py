@@ -276,6 +276,8 @@ def clean_and_set_index_df(df, index_key='img_id', drop_nan_row_by_columns=None)
     """
     if 'Unnamed: 0' in df.columns:
         df = df.rename(columns={'Unnamed: 0': "Datapoint id"})
+    else:
+        df["Datapoint id"] = np.arange(df.shape[0])
     df = df.set_index(index_key)
     if drop_nan_row_by_columns is not None:
         df = df.dropna(subset=drop_nan_row_by_columns)
