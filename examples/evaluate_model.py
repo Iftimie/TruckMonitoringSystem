@@ -10,10 +10,11 @@ import os.path as osp
 import pandas as pd
 from pprint import pprint
 import numpy as np
+import os
 import matplotlib.pyplot as plt
 
 
-def get_dataframes(datalake_path, pred_csv_path, target_csv_path):
+def get_dataframes(datalake_path, pred_csv_path, target_csv_path, max_operating_res):
     download_data_if_not_exists(datalake_path)
     coco_dset = get_dataset(datalake_path)
 
@@ -21,7 +22,7 @@ def get_dataframes(datalake_path, pred_csv_path, target_csv_path):
     g_tdp = gen_cocoitem2targetdp(g_tdp_fdp_1)
     g_fdp = gen_cocoitem2framedp(g_tdp_fdp_2)
 
-    model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=800, conf_thr=0.05))
+    model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=max_operating_res, conf_thr=0.05))
     g_pred = compute(g_fdp, model, batch_size=10, filter_classes=model_class_names)
 
     df_pred, df_target = target_pred_iter_to_pandas(g_tdp, g_pred)
@@ -67,40 +68,45 @@ def plot_prec_rec_curves(stats_label, prec_rec_curve_path):
 
 
 def main():
+    intermediate_dir, datalake_path = None, None
     force_overwrite_detection = False
     force_overwrite_stats = False
     force_compute_iou = False
-    pred_csv_path, target_csv_path, stats_path, iou_dataframes_path, prec_rec_curve_path = None, None, None, None, None
-    df_target, df_pred = None, None
+
     if platform.system() == "Linux":
         datalake_path = r"/data1/workspaces/aiftimie/tms/tms_data"
-        pred_csv_path = "/data1/workspaces/aiftimie/tms/tms_experiments/pandas_dataframes/coco_pred.csv"
-        target_csv_path = "/data1/workspaces/aiftimie/tms/tms_experiments/pandas_dataframes/coco_target.csv"
-        stats_path = "/data1/workspaces/aiftimie/tms/tms_experiments/pandas_dataframes/stats.pkl"
-        iou_dataframes_path = "/data1/workspaces/aiftimie/tms/tms_experiments/pandas_dataframes/iou_dataframes.pkl"
-        prec_rec_curve_path = "/data1/workspaces/aiftimie/tms/tms_experiments/pandas_dataframes/prec_rec_curve_"
+        intermediate_dir = r'/data1/workspaces/aiftimie/tms/tms_experiments/pandas_dataframes/'
     else:
-        datalake_path = r"D:\tms_data"
+        pass
+    for max_operating_res in [320, 400, 480, 560, 620, 700, 780, 860, 920, 1000, 1080]:
+        intermediate_dir = osp.join(intermediate_dir, str(max_operating_res))
+        if not osp.exists(intermediate_dir):
+            os.mkdir(intermediate_dir)
+        pred_csv_path = osp.join(intermediate_dir, "coco_pred.csv")
+        target_csv_path = osp.join(intermediate_dir, "coco_target.csv")
+        stats_path = osp.join(intermediate_dir, "stats.pkl")
+        iou_dataframes_path = osp.join(intermediate_dir, "iou_dataframes.pkl")
+        prec_rec_curve_path = osp.join(intermediate_dir, "prec_rec_curve_")
 
-    if force_overwrite_detection or (not osp.exists(pred_csv_path) or not osp.exists(target_csv_path)):
-        df_pred, df_target = get_dataframes(datalake_path, pred_csv_path, target_csv_path)
-    else:
-        df_pred = pd.read_csv(pred_csv_path)
-        df_target = pd.read_csv(target_csv_path)
+        if force_overwrite_detection or (not osp.exists(pred_csv_path) or not osp.exists(target_csv_path)):
+            df_pred, df_target = get_dataframes(datalake_path, pred_csv_path, target_csv_path, max_operating_res)
+        else:
+            df_pred = pd.read_csv(pred_csv_path)
+            df_target = pd.read_csv(target_csv_path)
 
-    if force_compute_iou or not osp.exists(iou_dataframes_path):
-        label_dataframes = compute_iou_det_ann_df(df_target, df_pred, ann_lbl_col='target.label', det_lbl_col='label')
-        pickle.dump(label_dataframes, open(iou_dataframes_path, 'wb'))
-    else:
-        label_dataframes = pickle.load(open(iou_dataframes_path, 'rb'))
-    if force_overwrite_stats or not osp.exists(stats_path):
-        stats_label = compute_stats_for_labels(label_dataframes, stats_path)
-    else:
-        stats_label = pickle.load(open(stats_path, 'rb'))
-    plot_prec_rec_curves(stats_label, prec_rec_curve_path)
+        if force_compute_iou or not osp.exists(iou_dataframes_path):
+            label_dataframes = compute_iou_det_ann_df(df_target, df_pred, ann_lbl_col='target.label', det_lbl_col='label')
+            pickle.dump(label_dataframes, open(iou_dataframes_path, 'wb'))
+        else:
+            label_dataframes = pickle.load(open(iou_dataframes_path, 'rb'))
+        if force_overwrite_stats or not osp.exists(stats_path):
+            stats_label = compute_stats_for_labels(label_dataframes, stats_path)
+        else:
+            stats_label = pickle.load(open(stats_path, 'rb'))
+        plot_prec_rec_curves(stats_label, prec_rec_curve_path)
 
-    pprint (stats_label)
-    print ()
+        pprint (stats_label)
+        print ()
 
 
 
