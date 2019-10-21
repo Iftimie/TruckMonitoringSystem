@@ -363,6 +363,8 @@ def compute_stats(joined_with_iou_df, ann_df, det_df):
     all_markings = ann_df.shape[0]
     all_detections = det_df.shape[0]
 
+    # best definition ever
+    # https://scikit-learn.org/stable/auto_examples/model_selection/plot_precision_recall.html
     dr = valid_detections / all_markings if all_markings > 0 else 0
 
     precision = valid_detections/all_detections
