@@ -61,6 +61,8 @@ def plot_prec_rec_curves(stats_label, prec_rec_curve_path):
         ax = stats_label[k].plot(x='recall/DR', y='precision', legend=False)
         ax.set_ylabel('precision')
         ax.set_title('recall-precision curve '+ k)
+        ax.set_xlim((0, 1))
+        ax.set_ylim((0, 1))
         label_point_orig(stats_label[k]['recall/DR'], stats_label[k]['precision'], stats_label[k].index.to_series(), ax)
 
         plt.savefig(prec_rec_curve_path+k+".png")
@@ -75,11 +77,11 @@ def main():
 
     if platform.system() == "Linux":
         datalake_path = r"/data1/workspaces/aiftimie/tms/tms_data"
-        intermediate_dir = r'/data1/workspaces/aiftimie/tms/tms_experiments/pandas_dataframes/'
+        dumping_dir = r'/data1/workspaces/aiftimie/tms/tms_experiments/pandas_dataframes/'
     else:
         pass
     for max_operating_res in [320, 400, 480, 560, 620, 700, 780, 860, 920, 1000, 1080]:
-        intermediate_dir = osp.join(intermediate_dir, str(max_operating_res))
+        intermediate_dir = osp.join(dumping_dir, str(max_operating_res))
         if not osp.exists(intermediate_dir):
             os.mkdir(intermediate_dir)
         pred_csv_path = osp.join(intermediate_dir, "coco_pred.csv")
