@@ -31,7 +31,8 @@ setuptools.setup(
         'tqdm',
         'pycocotools',
         'pytest-mock',
-        'mock'
+        'mock',
+        'gputil'
       ],
 
     keywords=['object', 'detection', 'truck']
