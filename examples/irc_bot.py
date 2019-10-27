@@ -1,7 +1,9 @@
 #!/usr/bin/python3
 import socket
 
-# https://linuxacademy.com/blog/linux-academy/creating-an-irc-bot-with-python3/
+# https://linuxacademy.com/blog/linux-academy/creating-an-irc-bot-with-python3/\
+
+# also look here for commands https://gist.github.com/xero/2d6e4b061b4ecbeb9f99
 
 # This first variable is the socket we’ll be using to connect and communicate with the IRC server. Sockets are complicated and can be used for many tasks in many ways.
 # See here if you’d like more information on sockets: https://docs.python.org/3/howto/sockets.html.
