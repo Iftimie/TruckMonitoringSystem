@@ -131,10 +131,10 @@ def plot_pareto_plane(pareto_coordinates):
     # unintentionally I put the color of the surface right
 
     mres = max(pareto_coordinates.keys())
-    z_mres = pareto_coordinates[res][label]['precision'].tolist()
-    x_mres = pareto_coordinates[res][label]['speed'].tolist()
-    y_mres = pareto_coordinates[res][label]['recall/DR'].tolist()
-    t_mres = pareto_coordinates[res][label].index.tolist()
+    z_mres = pareto_coordinates[mres][label]['precision'].tolist()
+    x_mres = pareto_coordinates[mres][label]['speed'].tolist()
+    y_mres = pareto_coordinates[mres][label]['recall/DR'].tolist()
+    t_mres = pareto_coordinates[mres][label].index.tolist()
     for t, x, y, z in zip(t_mres, x_mres, y_mres, z_mres):
         label = '%.2f' % (t, )
         ax.text(x, y, z, label, fontsize=7)
