@@ -41,11 +41,11 @@ jobs:
       # other common Python testing frameworks include pytest and nose
       # https://pytest.org
       # https://nose.readthedocs.io
+      # set PYTHONPATH=./
       - run:
           name: run tests
           command: |
             . venv/bin/activate
-#            set PYTHONPATH=./
             export PYTHONPATH=./
             pytest ./
 
