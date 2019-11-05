@@ -1,8 +1,10 @@
 from truckms.service.service import create_microservice
 import os.path as osp
 import json
+import pytest
 
 
+@pytest.mark.skip(reason="takes too long on circleci")
 def test_create_microservice(tmpdir):
 
     up_dir = osp.join(tmpdir.strpath, 'up_dir')
