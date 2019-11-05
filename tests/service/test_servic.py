@@ -13,11 +13,11 @@ def test_create_microservice(tmpdir):
     # aau-rainsnow dataset. found on kaggle
     data = {'cut.mkv': open(osp.join(osp.dirname(__file__), 'data', 'cut.mkv'), 'rb')}
 
-    res = client.post("/upload_recording", data=data)
-    assert (res.status_code == 200)
-    ret = json.loads(res.data)
-    assert "message" in ret
-    assert (ret["message"] == 'files uploaded successfully and started analyzing')
+    res = client.post("/upload_recordings", data=data)
+    assert (res.status_code == 302) # 302 is found redirect
+    # ret = json.loads(res.data)
+    # assert "message" in ret
+    # assert (ret["message"] == 'files uploaded successfully and started analyzing')
 
     assert osp.exists(osp.join(tmpdir.strpath, 'up_dir', 'cut.mkv'))
     app.worker_pool.close()

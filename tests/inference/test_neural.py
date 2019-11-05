@@ -7,6 +7,7 @@ import os
 import cv2
 from truckms.inference.utils import framedatapoint_generator
 from itertools import tee
+import pytest
 
 
 def test_iterable2batch():
@@ -23,6 +24,7 @@ def test_iterable2batch():
 
 
 def test_truck_detector():
+    show_image = False
     test_image_path = osp.join(osp.dirname(__file__), 'data', 'test_image.PNG')
     test_image = cv2.cvtColor(cv2.imread(test_image_path), cv2.COLOR_BGR2RGB)
     model = create_model()
@@ -36,11 +38,12 @@ def test_truck_detector():
     assert 'labels' in predictions[0].pred
     assert 'scores' in predictions[0].pred
     assert 'boxes' in predictions[0].pred
-    cv2.imshow("image", next(plot_detections(input_images, predictions)).image)
-    cv2.waitKey(0)
+    if show_image:
+        cv2.imshow("image", next(plot_detections(input_images, predictions)).image)
+        cv2.waitKey(0)
 
 
-# @pytest.mark.skip(reason="depends on local data")
+@pytest.mark.skip(reason="depends on local data")
 def test_auu_data():
     auu_data_root = r'D:\tms_data\aau-rainsnow\Hjorringvej\Hjorringvej-2'
     video_files = [osp.join(r, f) for (r, _, fs) in os.walk(auu_data_root) for f in fs if 'avi' in f or 'mkv' in f]
@@ -55,6 +58,8 @@ def test_auu_data():
             cv2.waitKey(1)
             # if idx == 5:break
 
+
+@pytest.mark.skip(reason="depends on local data")
 def test_TruckDetector_pred_iter_to_pandas():
     auu_data_root = r'D:\aau-rainsnow\Hjorringvej\Hjorringvej-2'
     video_file = [osp.join(r, f) for (r, _, fs) in os.walk(auu_data_root) for f in fs if 'avi' in f or 'mkv' in f][0]

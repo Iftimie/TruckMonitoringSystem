@@ -10,7 +10,7 @@ import os
 credits to https://github.com/kcg2015/Vehicle-Detection-and-Tracking/
 """
 
-def draw_box_label(img, bbox_cv2, box_color=(0, 255, 255), show_label=True):
+def draw_box_label(img, bbox_cv2, box_color=(0, 255, 255), show_label=False):
     '''
     Helper funciton for drawing the bounding boxes and the labels
     bbox_cv2 = [left, top, right, bottom]
@@ -37,6 +37,7 @@ def draw_box_label(img, bbox_cv2, box_color=(0, 255, 255), show_label=True):
     return img
 
 def test_tracker():
+    show_plots=False
     import matplotlib.pyplot as plt
     import glob
 
@@ -82,7 +83,8 @@ def test_tracker():
     ax = plt.subplot(3, 1, 3)
     plt.imshow(img)
     plt.title('Updated: ' + str(x_updated_box))
-    plt.show()
+    if show_plots:
+        plt.show()
 
 
 def test_pipeline():
@@ -99,6 +101,7 @@ def test_pipeline():
 from truckms.inference.utils import framedatapoint_generator
 from truckms.inference.analytics import filter_pred_detections
 def test_filter_predictions_generator():
+    show_video = False
     csv_file_path = osp.join(osp.dirname(__file__), 'data', 'cut.csv')
     pred_gen_from_df = pandas_to_pred_iter(pd.read_csv(csv_file_path))
     filtered_pred = filter_pred_detections(pred_gen_from_df)
@@ -106,17 +109,18 @@ def test_filter_predictions_generator():
 
     video_file = osp.join(osp.dirname(__file__), '..', 'service', 'data', 'cut.mkv')
     image_gen = framedatapoint_generator(video_file, skip=0)
-    for fdp in plot_detections(image_gen, filtered_pred):
-        cv2.imshow("image", fdp.image)
-        cv2.waitKey(0)
+    if show_video:
+        for fdp in plot_detections(image_gen, filtered_pred):
+            cv2.imshow("image", fdp.image)
+            cv2.waitKey(0)
 
 def test_dataframe_filtered():
     csv_file_path = osp.join(osp.dirname(__file__), 'data', 'cut.csv')
     pred_gen_from_df = pandas_to_pred_iter(pd.read_csv(csv_file_path))
     filtered_pred = filter_pred_detections(pred_gen_from_df)
     filtered_dataframe = pred_iter_to_pandas(filtered_pred)
-    csv_file_path = osp.join(osp.dirname(__file__), 'data', 'filtered_cut.csv')
-    filtered_dataframe.to_csv(csv_file_path)
+    # csv_file_path = osp.join(osp.dirname(__file__), 'data', 'filtered_cut.csv')
+    # filtered_dataframe.to_csv(csv_file_path)
 
 
 from truckms.inference.analytics import get_important_frames

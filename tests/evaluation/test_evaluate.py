@@ -16,8 +16,10 @@ from truckms.inference.visuals import plot_over_image
 from torchvision.datasets import CocoDetection
 from truckms.evaluation.evaluate import plot_targets
 import cv2
+import pytest
 
 
+@pytest.mark.skip(reason="Currently skipping this. It downloads a large dataset")
 def test_download_data_if_not_exists(tmpdir):
     download_data_if_not_exists(tmpdir)
     assert os.path.exists(os.path.join(tmpdir, "coco_val_2017"))
@@ -34,6 +36,7 @@ def test_download_data_if_not_exists(tmpdir):
             assert { item['id'] :item['name'] for item in js['categories']} == coco_val_2017_names
 
 
+@pytest.mark.skip(reason="Currently skipping this. It downloads a large dataset")
 def test_get_dataset():
     if platform.system() == "Linux":
         datalake_path = r"D:\tms_data"
@@ -45,6 +48,7 @@ def test_get_dataset():
     assert len(coco_dset) == 5000
 
 
+@pytest.mark.skip(reason="Currently skipping this. It downloads a large dataset")
 @mock.patch.object(CocoDetection, "__len__")
 def test_gen_cocoitem2datapoints(mock_some_obj_some_method):
     mock_some_obj_some_method.return_value = 100
@@ -67,6 +71,7 @@ def test_gen_cocoitem2datapoints(mock_some_obj_some_method):
         assert isinstance(tdp, TargetDatapoint)
 
 
+@pytest.mark.skip(reason="Currently skipping this. It downloads a large dataset")
 @mock.patch.object(CocoDetection, "__len__")
 def test_target_iter_to_pandas(mock_some_obj_some_method):
     mock_some_obj_some_method.return_value = 100
@@ -86,6 +91,7 @@ def test_target_iter_to_pandas(mock_some_obj_some_method):
 
 from truckms.inference.neural import create_model_efficient, compute, create_model
 from functools import partial
+@pytest.mark.skip(reason="Currently skipping this. It downloads a large dataset")
 @mock.patch.object(CocoDetection, "__len__")
 def test_target_pred_iter_to_pandas(mock_some_obj_some_method):
     mock_some_obj_some_method.return_value = 100
@@ -115,6 +121,7 @@ def test_target_pred_iter_to_pandas(mock_some_obj_some_method):
         pass
 
 
+@pytest.mark.skip(reason="Currently skipping this. It downloads a large dataset")
 def test_dataset_by_frame_ids():
     frame_ids= set([724, 1532, 5037, 5992, 6040, 6723, 7088, 7386, 7977, 8762, 9769, 9891])
     if platform.system() == "Linux":

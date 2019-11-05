@@ -32,7 +32,7 @@ setuptools.setup(
         'pycocotools',
         'pytest-mock',
         'mock',
-        'gputil'
+        'gputil',
       ],
 
     keywords=['object', 'detection', 'truck']

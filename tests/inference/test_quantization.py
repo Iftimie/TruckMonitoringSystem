@@ -6,6 +6,7 @@ from pprint import pprint
 from torch.quantization.fuse_modules import _get_module
 from truckms.inference.quantization import *
 from torch.quantization.fuse_modules import fuse_modules
+import pytest
 
 
 def test_replace_frozenbatchnorm_batchnorm():
@@ -88,6 +89,7 @@ def size_of_model(model):
     return 10
 
 
+@pytest.mark.skip(reason="I will just keep this test here. Maybe I will come back to it")
 def test_quantiaztion():
     with torch.no_grad():
         test_image = osp.join(osp.dirname(__file__), 'data', 'test_image.PNG')
@@ -150,7 +152,7 @@ def test_quantiaztion():
         # assert optimized < unoptimized
         print("time UNOPTIMIZED VS OPTIMIZED", unoptimized, optimized)
         print("size UNOPTIMIZED VS OPTIMIZED", unoptimized_model_size, optimized_model_size)
-        cv2.imwrite("/home/aiftimie/out.png", next(plot_detections(input_images, actual_predictions)).image)
+        # cv2.imwrite("/home/aiftimie/out.png", next(plot_detections(input_images, actual_predictions)).image)
 
         # assert optimized_model_size < unoptimized_model_size
         # UNOPTIMIZED VS OPTIMIZED 0.9593331384658813 0.8527213740348816 batch of 5 images
