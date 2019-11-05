@@ -10,8 +10,10 @@ import torchvision
 import torch
 import math
 
-
-device = 'cuda' if torch.cuda.is_available() else "cpu"
+try:
+    device
+except NameError:
+    device = 'cuda' if torch.cuda.is_available() else "cpu"
 
 
 def create_model(conf_thr=0.5, max_operating_res=800):

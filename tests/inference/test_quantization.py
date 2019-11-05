@@ -14,14 +14,15 @@ def test_replace_frozenbatchnorm_batchnorm():
     test_image = cv2.cvtColor(cv2.imread(test_image), cv2.COLOR_BGR2RGB)
     input_images = [FrameDatapoint(test_image, 1)]
     model = create_model()
-    expected_predictions = list(compute(input_images, model))
+    model = model.eval().to('cpu')
+    expected_predictions = list(compute(input_images, model,cdevice='cpu'))
 
     replace_frozenbatchnorm_batchnorm(model)
     for child in model.modules():
         assert not isinstance(child, FrozenBatchNorm2d)
-    model = model.eval().to('cuda')
+    model = model.eval().to('cpu')
 
-    actual_predictions = list(compute(input_images, model))
+    actual_predictions = list(compute(input_images, model,cdevice='cpu'))
     assert len(actual_predictions) == len(expected_predictions)
     assert (actual_predictions[0].pred['boxes'] == expected_predictions[0].pred['boxes']).all()
 
@@ -67,15 +68,16 @@ def test_fusing():
     test_image = cv2.cvtColor(cv2.imread(test_image), cv2.COLOR_BGR2RGB)
     input_images = [FrameDatapoint(test_image, 1)]
     model = create_model()
-    expected_predictions = list(compute(input_images, model))
+    model = model.to('cpu')
+    expected_predictions = list(compute(input_images, model, cdevice='cpu'))
 
     model = model.to('cpu')
     modules_to_fuse = get_modules_to_fuse(model)
     replace_frozenbatchnorm_batchnorm(model)
     model.eval()
     fuse_modules(model, modules_to_fuse, inplace=True, fuser_func=custom_fuse_func)
-    model = model.to('cuda')
-    actual_predictions = list(compute(input_images, model))
+    model = model.to('cpu')
+    actual_predictions = list(compute(input_images, model, cdevice='cpu'))
     assert len(expected_predictions) == len(actual_predictions)
     assert (expected_predictions[0].pred['boxes'] == actual_predictions[0].pred['boxes']).all()
     assert abs((expected_predictions[0].pred['scores'] - actual_predictions[0].pred['scores'])).sum() < 0.1
