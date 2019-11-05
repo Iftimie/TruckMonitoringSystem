@@ -1,3 +1,4 @@
+[![CircleCI](https://circleci.com/gh/Iftimie/TruckMonitoringSystem.svg?style=svg)](https://circleci.com/gh/Iftimie/TruckMonitoringSystem)
 # TruckMonitoringSystem
 > Work in progress
 
