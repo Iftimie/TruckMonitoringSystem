@@ -43,10 +43,14 @@ jobs:
       # https://nose.readthedocs.io
       # set PYTHONPATH=./
       - run:
+          name: "Setup custom environment variables"
+          command: |
+            echo 'export PYTHONPATH=$PYTHONPATH:./' >> $BASH_ENV # Redirect MY_ENV_VAR into $BASH_ENV
+
+      - run:
           name: run tests
           command: |
             . venv/bin/activate
-            export PYTHONPATH=./
             pytest ./
 
       - store_artifacts:
