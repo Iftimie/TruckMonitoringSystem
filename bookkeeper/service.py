@@ -1,16 +1,12 @@
 from flask import Flask, make_response, request, jsonify
 from collections import namedtuple
-
-def shutdown():
-    func = request.environ.get('werkzeug.server.shutdown')
-    if func is None:
-        raise RuntimeError('Not running with the Werkzeug Server')
-    func()
-    return 'Server shutting down...'
+from flask import Blueprint
 
 
 NodeState = namedtuple('NodeState', ['ip', 'port', 'workload', 'hardware', 'nickname', 'node_type', 'email'])
 set_states = set()  # TODO replace with a local syncronized database
+
+
 def node_states():
     if request.method == 'POST':
         content = request.json
@@ -20,13 +16,15 @@ def node_states():
     else:
         return jsonify(list(set_states))
 
-def create_microservice(debug=False):
+
+def create_blueprint():
+    bookkeeper_bp = Blueprint("bookkeeper_bp", __name__)
+    bookkeeper_bp.route("/node_states", methods=['POST', 'GET'])(node_states)
+    return bookkeeper_bp
+
+
+def create_microservice():
     app = Flask(__name__)
-
-    if debug:
-        app.route('/shutdown', methods=['POST'])(shutdown)
-    app.route("/node_states", methods=['POST', 'GET'])(node_states)
-
-
+    app.register_blueprint(create_blueprint())
 
     return app

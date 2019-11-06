@@ -20,7 +20,7 @@ class ServerThread(threading.Thread):
 
 
 def test_method_of_service():
-    app = create_microservice(debug=True)
+    app = create_microservice()
 
     current_port = 5000
     server = ServerThread(app, port=current_port)
@@ -40,8 +40,8 @@ def test_method_of_service():
 
 
 def test_two_services():
-    server1 = ServerThread(create_microservice(debug=True), port=5000)
-    server2 = ServerThread(create_microservice(debug=True), port=5001)
+    server1 = ServerThread(create_microservice(), port=5000)
+    server2 = ServerThread(create_microservice(), port=5001)
     server1.start()
     server2.start()
     data = {'port': 5000, 'workload': 0, 'hardware': "Nvidia GTX 960M Intel i7", 'nickname': "rmstn",
@@ -51,7 +51,10 @@ def test_two_services():
             'node_type': "worker", 'email': 'iftimie.alexandru.florentin@gmail.com'}
     res = requests.post('http://localhost:5000/node_states', json=data)
 
-    res = requests.get('http://localhost:5000/node_states').json()  # will get the data defined above
-    assert len(res) == 2
+    res1 = requests.get('http://localhost:5000/node_states').json()  # will get the data defined above
+    res2 = requests.get('http://localhost:5001/node_states').json()  # will get the data defined above
+    assert len(res1) == 2
+    assert len(res2) == 2
+    assert res1 == res2
     server1.shutdown()
     server2.shutdown()
