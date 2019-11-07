@@ -6,7 +6,7 @@ import multiprocessing
 from truckms.inference.neural import create_model, pandas_to_pred_iter, pred_iter_to_pandas, plot_detections, compute
 from truckms.inference.neural import create_model_efficient
 from truckms.inference.utils import framedatapoint_generator, framedatapoint_generator_by_frame_ids2
-from flask import Flask, render_template, send_from_directory, make_response, request, redirect, url_for, session
+from flask import Flask, render_template, send_from_directory, make_response, request, redirect, url_for, session, jsonify
 import os.path as osp
 from flask_bootstrap import Bootstrap
 from functools import partial
@@ -17,7 +17,7 @@ import pandas as pd
 from truckms.inference.analytics import filter_pred_detections, get_important_frames
 
 
-def analyze_movie(video_path, max_operating_res, skip = 0):
+def analyze_movie(video_path, max_operating_res, skip=0):
     """
     Attention!!! if the movie is short or too fast and skip  is too big, then it may result with no detections
     #TODO think about this
@@ -97,6 +97,19 @@ def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_op
         resp = make_response(render_template("check_status.html", partial_destination_url=partial_destination_url,
                                              video_items=video_items))
         return resp
+
+    @app.route('/file_select', methods=['GET', 'POST'])
+    def file_select():
+        if request.remote_addr != '127.0.0.1':
+            make_response("Just what do you think you're doing, Dave?", 403)
+        from tkinter import Tk
+        from tkinter.filedialog import askopenfilename
+        root = Tk()
+        root.withdraw()
+        # ensure the file dialog pops to the top window
+        root.wm_attributes('-topmost', 1)
+        fname = askopenfilename(parent=root)
+        return jsonify({'filepath': fname})
 
 
     @app.route('/show_video')

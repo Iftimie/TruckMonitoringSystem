@@ -20,4 +20,6 @@ Cython
 pytest-mock
 mock
 gputil
+eel
+flaskwebgui
 

@@ -9,6 +9,8 @@
   <div class="card border-0 shadow my-5">
     <div class="card-body p-5">
       <h1 class="font-weight-light"> Upload menu </h1>
+        The first option is to upload the files directly. Maybe something useful would be to suggest a free worker to upload to. Or a broker. Should brokers implement the same interface as workers but just redirect the workload?
+
         <form id="upload_form" action="{{ url_for('upload_recordings') }}" method="post" enctype="multipart/form-data">
             <div class="input-group mb-3">
               <div class="input-group-prepend">
@@ -17,6 +19,16 @@
               <div class="custom-file">
                 <input type="file" class="custom-file-input" id="inputGroupFile01" aria-describedby="inputGroupFileAddon01" />
                 <label class="custom-file-label" for="inputGroupFile01">Choose file</label>
+              </div>
+            </div>
+
+            <div class="input-group mb-3">
+              <div class="input-group-prepend">
+                <span class="input-group-text" id="inputGroupFileAddon02" onclick="$('#upload_form').submit()">Upload</span>
+              </div>
+              <div class="custom-file">
+                <input type="button" class="custom-file-input" id="inputGroupFile02" aria-describedby="inputGroupFileAddon02" />
+                <label class="custom-file-label" for="inputGroupFile02">Choose file</label>
               </div>
             </div>
         </form>
@@ -38,6 +50,24 @@
         //replace the "Choose a file" label
         $(this).next('.custom-file-label').html(fileName);
         $('#inputGroupFile01').attr("name", fileName);
+    })
+
+    $('#inputGroupFile02').on('click',function(){
+
+        $.get('/file_select', function(data, status){
+          console.log(JSON.stringify(data));
+        });
+        //get the file name
+        //var fileName = $(this).val();
+
+        //if(fileName.match(/fakepath/)) {
+            // update the file-path text using case-insensitive regex
+        //    fileName = fileName.replace(/C:\\fakepath\\/i, '');
+        //}
+
+        //replace the "Choose a file" label
+        //$(this).next('.custom-file-label').html(fileName);
+        //$('#inputGroupFile01').attr("name", fileName);
     })
 </script>
 
