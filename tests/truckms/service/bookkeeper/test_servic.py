@@ -1,7 +1,8 @@
-from truckms.service.bookkeeper import create_microservice
+from truckms.service.bookkeeper import create_microservice, NodeState
 import requests
 from werkzeug.serving import make_server
 import threading
+import time
 
 
 class ServerThread(threading.Thread):
@@ -61,3 +62,36 @@ def test_two_services():
     assert res1 == res2
     server1.shutdown()
     server2.shutdown()
+
+
+def test_three_services():
+    server1 = ServerThread(create_microservice(), port=5000)
+    server1.start() # at ths step there is only one node state, and only server1 knows about it (about itself)
+    server2 = ServerThread(create_microservice(), port=5001, central_host='127.0.0.1', central_port=5000)
+    server2.start() # at this step server 1 knows about itself and server 2
+                    # server 2 knows about itself and server 1
+    server3 = ServerThread(create_microservice(), port=5002, central_host='127.0.0.1', central_port=5000)
+    server3.start() # at this step server 1 knows about itself, server 2 and server 3
+                    # server 2 knows about itself and server 1
+                    # server 3 knows about itself, server 1 and server 2
+    res1 = requests.get('http://localhost:5000/node_states').json()  # will get the data defined above
+    res2 = requests.get('http://localhost:5001/node_states').json()  # will get the data defined above
+    res3 = requests.get('http://localhost:5002/node_states').json()  # will get the data defined above
+    assert len(res1) == 3
+    assert len(res2) == 2
+    assert len(res3) == 3
+
+    # server 2 will make a network discovery
+    discovered_states = []
+    for state in res2:
+        discovered_states += requests.get('http://{}:{}/node_states'.format(state['ip'], state['port'])).json() # TODO should rename everything from host to ip
+    server2.client.post("/node_states", json=discovered_states)
+    # time.sleep(1.0)
+
+    res2 = requests.get('http://localhost:5001/node_states').json()  # will get the data defined above
+    assert len(res2) == 3
+    assert set(NodeState(**item) for item in res1) == set(NodeState(**item) for item in res2)
+    assert set(NodeState(**item) for item in res2) == set(NodeState(**item) for item in res3)
+    server1.shutdown()
+    server2.shutdown()
+    server3.shutdown()
