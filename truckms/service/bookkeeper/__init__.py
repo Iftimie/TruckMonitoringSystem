@@ -1,17 +1,17 @@
 from flask import Flask, make_response, request, jsonify
 from collections import namedtuple
 from flask import Blueprint
+from functools import partial, wraps
 
 
 NodeState = namedtuple('NodeState', ['ip', 'port', 'workload', 'hardware', 'nickname', 'node_type', 'email'])
-set_states = set()  # TODO replace with a local syncronized database
 
 
-def node_states():
+def node_states(set_states):
     if request.method == 'POST':
-        content = request.json
-        content['ip'] = request.environ['REMOTE_ADDR']
-        set_states.add(NodeState(**content))
+        received_states = request.json
+        received_states = set(NodeState(**content) for content in received_states)
+        set_states.update(received_states)
         return make_response("done", 200)
     else:
         return jsonify(list(set_states))
@@ -19,7 +19,9 @@ def node_states():
 
 def create_blueprint():
     bookkeeper_bp = Blueprint("bookkeeper_bp", __name__)
-    bookkeeper_bp.route("/node_states", methods=['POST', 'GET'])(node_states)
+    set_states = set()  # TODO replace with a local syncronized database
+    func = (wraps(node_states)(partial(node_states, set_states)))
+    bookkeeper_bp.route("/node_states", methods=['POST', 'GET'])(func)
     return bookkeeper_bp
 
 
