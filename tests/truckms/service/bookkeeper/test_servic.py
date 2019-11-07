@@ -86,7 +86,6 @@ def test_three_services():
     for state in res2:
         discovered_states += requests.get('http://{}:{}/node_states'.format(state['ip'], state['port'])).json() # TODO should rename everything from host to ip
     server2.client.post("/node_states", json=discovered_states)
-    # time.sleep(1.0)
 
     res2 = requests.get('http://localhost:5001/node_states').json()  # will get the data defined above
     assert len(res2) == 3
