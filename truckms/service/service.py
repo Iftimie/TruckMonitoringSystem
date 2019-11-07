@@ -80,14 +80,13 @@ def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_op
 
         return redirect(url_for("index"))
 
-
     @app.route("/upload_menu")
     def upload_menu():
         resp = make_response(render_template("upload.html"))
         return resp
 
     @app.route('/check_status')
-    def check_status_menu():
+    def check_status():
         video_items = []
         for file in filter(lambda x: '.csv' not in x, os.listdir(upload_directory)):
 
@@ -98,7 +97,7 @@ def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_op
                                              video_items=video_items))
         return resp
 
-    @app.route('/file_select', methods=['GET', 'POST'])
+    @app.route('/file_select')
     def file_select():
         if request.remote_addr != '127.0.0.1':
             make_response("Just what do you think you're doing, Dave?", 403)
@@ -109,7 +108,14 @@ def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_op
         # ensure the file dialog pops to the top window
         root.wm_attributes('-topmost', 1)
         fname = askopenfilename(parent=root)
-        return jsonify({'filepath': fname})
+
+        # TODO do something with this filename
+        # the file must not be move, however the .csv file must stay somewhere else? nope. it should stay near the file
+        # however once the file was registered for working, when check status is reached, it should look for .csv  wherever it may be found
+        # app.worker_pool.apply_async(func=analyze_movie, args=(fname, max_operating_res, skip))
+        # app.logger.info('started this shit')
+
+        return redirect(url_for("check_status"))
 
 
     @app.route('/show_video')

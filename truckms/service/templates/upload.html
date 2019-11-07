@@ -27,7 +27,7 @@
                 <span class="input-group-text" id="inputGroupFileAddon02" onclick="$('#upload_form').submit()">Upload</span>
               </div>
               <div class="custom-file">
-                <input type="button" class="custom-file-input" id="inputGroupFile02" aria-describedby="inputGroupFileAddon02" />
+                <input type="button" class="custom-file-input" id="inputGroupFile02" aria-describedby="inputGroupFileAddon02" onclick="window.location.href = '/file_select'" />
                 <label class="custom-file-label" for="inputGroupFile02">Choose file</label>
               </div>
             </div>
@@ -52,11 +52,11 @@
         $('#inputGroupFile01').attr("name", fileName);
     })
 
-    $('#inputGroupFile02').on('click',function(){
+    //$('#inputGroupFile02').on('click',function(){
 
-        $.get('/file_select', function(data, status){
-          console.log(JSON.stringify(data));
-        });
+    //    $.get('/file_select', function(data, status){
+    //      console.log(JSON.stringify(data));
+    //    });
         //get the file name
         //var fileName = $(this).val();
 
@@ -68,7 +68,7 @@
         //replace the "Choose a file" label
         //$(this).next('.custom-file-label').html(fileName);
         //$('#inputGroupFile01').attr("name", fileName);
-    })
+    //})
 </script>
 
 
