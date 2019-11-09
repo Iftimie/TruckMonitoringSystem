@@ -3,14 +3,24 @@ from truckms.service.worker.client import get_job_dispathcher
 import os.path as osp
 from mock import Mock
 from truckms.service import service
-from truckms.service import worker
 from truckms.service.model import create_session, VideoStatuses
+from truckms.service import worker
 
-# client.analyze_movie()
+# in order for the thread to pickle the mock object I need to do this
+# from pickle import dumps, loads
+# loads(dumps(analyze_movie))
+class PickableMock(Mock):
+    def __init__(self):
+        super(Mock, self).__init__()
+        self.return_value = "dummy_results.csv"
+
+    def __reduce__(self):
+        return (PickableMock, ())
+
 def test_new_microservice(tmpdir):
     service.gui_select_file = Mock(return_value="dummy_filename")
-    worker.client.analyze_movie = Mock(return_value="dummy_results.csv")
-    # client.analyze_movie =
+    worker.client.analyze_movie = PickableMock()
+
     up_dir = osp.join(tmpdir.strpath, 'up_dir')
     db_url = 'sqlite:///' + osp.join(tmpdir.strpath, 'database.sqlite')
     work_func, worker_pool, list_futures = get_job_dispathcher(db_url=db_url, num_workers=1, max_operating_res=320, skip=0)
