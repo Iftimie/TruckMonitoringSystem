@@ -1,5 +1,4 @@
 import os
-from werkzeug import secure_filename
 from truckms.inference.neural import pandas_to_pred_iter, pred_iter_to_pandas, plot_detections
 from truckms.inference.utils import framedatapoint_generator_by_frame_ids2
 from flask import Flask, render_template, make_response, request, redirect, url_for
@@ -60,18 +59,6 @@ def create_microservice(db_url, dispatch_work_func):
                 static_folder=osp.join(osp.dirname(__file__), 'templates', 'assets'))
 
     bootstrap = Bootstrap(app)
-
-    @app.route("/upload_recordings", methods=['POST'])
-    def upload_recordings():
-        for filename in request.files:
-            f = request.files[filename]
-            filename = secure_filename(filename)
-            filepath = os.path.join(upload_directory, filename)
-            f.save(filepath)
-            app.worker_pool.apply_async(func=analyze_movie, args=(filepath, max_operating_res, skip))
-            app.logger.info('started this shit')
-
-        return redirect(url_for("index"))
 
     @app.route('/check_status')
     def check_status():

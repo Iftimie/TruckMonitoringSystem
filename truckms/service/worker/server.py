@@ -5,6 +5,11 @@ from truckms.inference.analytics import filter_pred_detections
 from functools import partial
 import os
 from truckms.service.model import create_session, VideoStatuses
+from flask import Blueprint, Flask
+from flask import request, make_response
+from werkzeug import secure_filename
+from functools import partial, wraps
+import multiprocessing
 
 
 def analyze_movie(video_path, max_operating_res, skip=0):
@@ -35,7 +40,32 @@ def analyze_and_updatedb(db_url, video_path, analysis_func):
     VideoStatuses.update_results_path(session, file_path=video_path, new_results_path=destination)
 
 
+def upload_recordings(up_dir, db_url, worker_pool):
+    for filename in request.files:
+        f = request.files[filename]
+        filename = secure_filename(filename)
+        filepath = os.path.join(up_dir, filename)
+        f.save(filepath)
+
+        detector_options = request.json
+        max_operating_res = detector_options['max_operating_res']
+        skip = detector_options['skip']
+
+        analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
+        worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
+
+    return make_response("Files uploaded and started runniing the detector. Check later for the results", 200)
 
 
-def create_worker_blueprint():
-    pass
+def create_worker_blueprint(up_dir, db_url, num_workers):
+    worker_pool = multiprocessing.Pool(num_workers)
+    bookkeeper_bp = Blueprint("worker_bp", __name__)
+    func = (wraps(upload_recordings)(partial(upload_recordings, up_dir, db_url, worker_pool)))
+    bookkeeper_bp.route("/upload_recordings", methods=['POST'])(func)
+    return bookkeeper_bp, worker_pool
+
+
+def create_worker_microservice(up_dir, db_url, num_workers):
+    app = Flask(__name__)
+    app.register_blueprint(create_worker_blueprint(up_dir, db_url, num_workers))
+    return app
