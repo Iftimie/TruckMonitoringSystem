@@ -4,6 +4,7 @@ from truckms.inference.utils import framedatapoint_generator
 from truckms.inference.analytics import filter_pred_detections
 from functools import partial
 import os
+from truckms.service.model import create_session, VideoStatuses
 
 
 def analyze_movie(video_path, max_operating_res, skip=0):
@@ -19,6 +20,21 @@ def analyze_movie(video_path, max_operating_res, skip=0):
     destination = os.path.splitext(video_path)[0]+'.csv'
     df.to_csv(destination)
     return destination
+
+
+def analyze_and_updatedb(db_url, video_path, analysis_func):
+    """
+    Args:
+        db_url: url for database
+        video_path: path to a file on the local disk
+        analysis_func: a function that receives an argument with the video path and returns the path to results.csv
+    """
+    session = create_session(db_url)
+    VideoStatuses.add_video_status(session, file_path=video_path, results_path=None)
+    destination = analysis_func(video_path)
+    VideoStatuses.update_results_path(session, file_path=video_path, new_results_path=destination)
+
+
 
 
 def create_worker_blueprint():

@@ -8,3 +8,4 @@ examples/up_dir/
 *.webm
 *.mp4
 out.png
+*.sqlite

@@ -49,12 +49,10 @@ def gui_select_file():
     return fname
 
 
-def create_microservice(upload_directory, dispatch_work_func):
+def create_microservice(db_url, dispatch_work_func):
     """
-    Creates a microservice ready to run. This microservice will accept upload requests. It has a default
-    upload_directory that will be created relative to the current directory.
-
     Args:
+        db_url: url to a database
         dispatch_work_func: function that receives a string as argument. This argument is a video file path. The function
             should do something with that file
     """
@@ -62,10 +60,6 @@ def create_microservice(upload_directory, dispatch_work_func):
                 static_folder=osp.join(osp.dirname(__file__), 'templates', 'assets'))
 
     bootstrap = Bootstrap(app)
-
-    if not os.path.exists(upload_directory):
-        os.mkdir(upload_directory)
-
 
     @app.route("/upload_recordings", methods=['POST'])
     def upload_recordings():
@@ -79,14 +73,15 @@ def create_microservice(upload_directory, dispatch_work_func):
 
         return redirect(url_for("index"))
 
-
     @app.route('/check_status')
     def check_status():
+        from truckms.service.model import create_session, VideoStatuses
+        session = create_session(db_url)
+        query = VideoStatuses.get_video_statuses(session)
         video_items = []
-        for file in filter(lambda x: '.csv' not in x, os.listdir(upload_directory)):
-
-            video_items.append({'filename': file,
-                                'status': 'ready' if osp.exists(osp.join(upload_directory, os.path.splitext(file)[0]+'.csv')) else 'processing'})
+        for item in query:
+            video_items.append({'filename': item.file_path,
+                                'status': 'ready' if item.results_path is not None else 'processing'})
         partial_destination_url = '/show_video?filename='
         resp = make_response(render_template("check_status.html", partial_destination_url=partial_destination_url,
                                              video_items=video_items))
@@ -102,7 +97,6 @@ def create_microservice(upload_directory, dispatch_work_func):
 
         return redirect(url_for("check_status"))
 
-
     @app.route('/show_video')
     def show_video():
         filepath = osp.join(upload_directory, request.args.get('filename'))
@@ -115,7 +109,6 @@ def create_microservice(upload_directory, dispatch_work_func):
             resp = make_response(render_template("show_video.html", first_image_str='', images=[]))
         return resp
 
-
     @app.route('/')
     def root():
         return redirect(url_for("index"))
@@ -124,6 +117,5 @@ def create_microservice(upload_directory, dispatch_work_func):
     def index():
         resp = make_response(render_template("index.html"))
         return resp
-
 
     return app

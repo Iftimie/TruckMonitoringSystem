@@ -1,6 +1,6 @@
 import multiprocessing
-from truckms.service.worker.server import analyze_movie
-from truckms.service.model import create_session
+from functools import partial
+from truckms.service.worker.server import analyze_movie, analyze_and_updatedb
 
 
 def evaluate_workload():
@@ -24,12 +24,11 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip):
         function that can be called with a video_path
     """
     worker_pool = multiprocessing.Pool(num_workers)
-    session = create_session(db_url)
 
     def dispatch_work(video_path):
-        return
         if evaluate_workload() < 0.5:
-            destination = analyze_movie(video_path, max_operating_res, skip)
+            analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
+            worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
         else:
             pass
             # do work remotely
