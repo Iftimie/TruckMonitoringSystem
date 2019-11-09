@@ -29,7 +29,6 @@ def test_new_microservice(tmpdir):
     res = client.get("/file_select")
     assert (res.status_code == 302)  # 302 is found redirect
     assert res.location == 'http://localhost/check_status'
-    list_futures[0].get()
     worker_pool.close()
     worker_pool.join()
     session = create_session(db_url)

@@ -1,6 +1,7 @@
 import multiprocessing
 from functools import partial
 from truckms.service.worker.server import analyze_movie, analyze_and_updatedb
+import requests
 
 
 def evaluate_workload():
@@ -9,6 +10,15 @@ def evaluate_workload():
     1 means no more work can be done efficiently.
     """
     return 0
+
+
+def select_lru_worker():
+    """
+    Selects the least recently used worker from the known states and returns its IP and PORT
+    """
+    res1 = requests.get('http://localhost:5000/node_states').json()  # will get the data defined above
+    res1 = sorted(res1, key=lambda x: x['workload'])
+    return res1[0]['ip'], res1[0]['port']
 
 
 def get_job_dispathcher(db_url, num_workers, max_operating_res, skip):
@@ -29,9 +39,9 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip):
     def dispatch_work(video_path):
         if evaluate_workload() < 0.5:
             analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
-            res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
-            list_futures.append(res)
+            worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
         else:
+            lru_ip, lru_port = select_lru_worker()
             pass
             # do work remotely
 
