@@ -22,4 +22,5 @@ mock
 gputil
 eel
 flaskwebgui
+sqlalchemy
 

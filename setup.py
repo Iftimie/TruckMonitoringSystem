@@ -33,6 +33,7 @@ setuptools.setup(
         'pytest-mock',
         'mock',
         'gputil',
+        'sqlalchemy',
       ],
 
     keywords=['object', 'detection', 'truck']
