@@ -23,4 +23,5 @@ gputil
 eel
 flaskwebgui
 sqlalchemy
+tkinter
 

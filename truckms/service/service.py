@@ -35,10 +35,28 @@ def html_imgs_generator(video_path):
         yield image2htmlstr(fdp.image)
 
 
-def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_operating_res=800, skip=0):
+def gui_select_file():
+    """
+    Opens a file selection dialog. Returns a string with the filepath
+    """
+    from tkinter import Tk
+    from tkinter.filedialog import askopenfilename
+    root = Tk()
+    root.withdraw()
+    # ensure the file dialog pops to the top window
+    root.wm_attributes('-topmost', 1)
+    fname = askopenfilename(parent=root)
+    return fname
+
+
+def create_microservice(upload_directory, dispatch_work_func):
     """
     Creates a microservice ready to run. This microservice will accept upload requests. It has a default
     upload_directory that will be created relative to the current directory.
+
+    Args:
+        dispatch_work_func: function that receives a string as argument. This argument is a video file path. The function
+            should do something with that file
     """
     app = Flask(__name__, template_folder=osp.join(osp.dirname(__file__), 'templates'),
                 static_folder=osp.join(osp.dirname(__file__), 'templates', 'assets'))
@@ -78,19 +96,9 @@ def create_microservice(upload_directory="tms_upload_dir", num_workers=1, max_op
     def file_select():
         if request.remote_addr != '127.0.0.1':
             make_response("Just what do you think you're doing, Dave?", 403)
-        from tkinter import Tk
-        from tkinter.filedialog import askopenfilename
-        root = Tk()
-        root.withdraw()
-        # ensure the file dialog pops to the top window
-        root.wm_attributes('-topmost', 1)
-        fname = askopenfilename(parent=root)
 
-        # TODO do something with this filename
-        # the file must not be move, however the .csv file must stay somewhere else? nope. it should stay near the file
-        # however once the file was registered for working, when check status is reached, it should look for .csv  wherever it may be found
-        app.worker_pool.apply_async(func=analyze_movie, args=(fname, max_operating_res, skip))
-        app.logger.info('started this shit')
+        fname = gui_select_file()
+        dispatch_work_func(fname)
 
         return redirect(url_for("check_status"))
 

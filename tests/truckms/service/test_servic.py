@@ -1,30 +1,19 @@
 from truckms.service.service import create_microservice
+from truckms.service.worker.client import get_job_dispathcher
 import os.path as osp
-import json
-import pytest
+from mock import Mock
+from truckms.service import service
 
 
-@pytest.mark.skip(reason="takes too long on circleci")
-def test_create_microservice(tmpdir):
-
+def test_new_microservice(tmpdir):
+    service.gui_select_file = Mock(return_value="dummy_filename")
     up_dir = osp.join(tmpdir.strpath, 'up_dir')
-    app = create_microservice(up_dir, max_operating_res=320)
-    assert osp.exists(up_dir)
-
+    db_url = 'sqlite:///' + osp.join(tmpdir.strpath, 'database.sqlite')
+    work_func = get_job_dispathcher(db_url=db_url, num_workers=1, max_operating_res=320, skip=0)
+    app = create_microservice(up_dir, dispatch_work_func=work_func)
     client = app.test_client()
-    # aau-rainsnow dataset. found on kaggle
-    data = {'cut.mkv': open(osp.join(osp.dirname(__file__), 'data', 'cut.mkv'), 'rb')}
-
-    res = client.post("/upload_recordings", data=data)
-    assert (res.status_code == 302) # 302 is found redirect
-    # ret = json.loads(res.data)
-    # assert "message" in ret
-    # assert (ret["message"] == 'files uploaded successfully and started analyzing')
-
-    assert osp.exists(osp.join(tmpdir.strpath, 'up_dir', 'cut.mkv'))
-    app.worker_pool.close()
-    app.worker_pool.join()
-    assert osp.exists(osp.join(tmpdir.strpath, 'up_dir', 'cut.csv'))
-
+    res = client.get("/file_select")
+    assert (res.status_code == 302)  # 302 is found redirect
+    assert res.location == 'http://localhost/check_status'
 
 
