@@ -41,13 +41,17 @@ def analyze_and_updatedb(db_url, video_path, analysis_func):
 
 
 def upload_recordings(up_dir, db_url, worker_pool):
+    """
+    request must contain the file data and the options for running the detector
+    max_operating_res, skip
+    """
     for filename in request.files:
         f = request.files[filename]
         filename = secure_filename(filename)
         filepath = os.path.join(up_dir, filename)
         f.save(filepath)
 
-        detector_options = request.json
+        detector_options = request.form
         max_operating_res = detector_options['max_operating_res']
         skip = detector_options['skip']
 
@@ -59,13 +63,14 @@ def upload_recordings(up_dir, db_url, worker_pool):
 
 def create_worker_blueprint(up_dir, db_url, num_workers):
     worker_pool = multiprocessing.Pool(num_workers)
-    bookkeeper_bp = Blueprint("worker_bp", __name__)
+    worker_bp = Blueprint("worker_bp", __name__)
     func = (wraps(upload_recordings)(partial(upload_recordings, up_dir, db_url, worker_pool)))
-    bookkeeper_bp.route("/upload_recordings", methods=['POST'])(func)
-    return bookkeeper_bp, worker_pool
+    worker_bp.route("/upload_recordings", methods=['POST'])(func)
+    return worker_bp, worker_pool
 
 
 def create_worker_microservice(up_dir, db_url, num_workers):
     app = Flask(__name__)
-    app.register_blueprint(create_worker_blueprint(up_dir, db_url, num_workers))
-    return app
+    worker_bp, worker_pool = create_worker_blueprint(up_dir, db_url, num_workers)
+    app.register_blueprint(worker_bp)
+    return app, worker_pool
