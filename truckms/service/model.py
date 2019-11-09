@@ -52,7 +52,7 @@ def create_session(db_url):
     Args:
         db_url: url to database. For example 'sqlite:///sales.db'
     """
-    engine = create_engine(db_url, echo=True)
+    engine = create_engine(db_url, echo=False)
     Session = sessionmaker(bind=engine)
     session = Session()
 

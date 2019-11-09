@@ -24,13 +24,15 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip):
         function that can be called with a video_path
     """
     worker_pool = multiprocessing.Pool(num_workers)
+    list_futures = []
 
     def dispatch_work(video_path):
         if evaluate_workload() < 0.5:
             analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
-            worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
+            res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
+            list_futures.append(res)
         else:
             pass
             # do work remotely
 
-    return dispatch_work
+    return dispatch_work, worker_pool, list_futures
