@@ -8,11 +8,17 @@ Base = declarative_base()
 class VideoStatuses(Base):
     """
     ORM for keeping account of video files submitted for processing
+
+    file_path: local path to the video file
+    results_path: local path to the results file
+    remote_ip, remote_port: if the file cannot be processed locally it will be processed remotely
     """
     __tablename__ = 'video_statuses'
     id = Column(Integer, primary_key=True)
     file_path = Column(String, index=True)
     results_path = Column(String, nullable=True)
+    remote_ip = Column(String, nullable=True)
+    remore_port = Column(Integer, nullable=True)
 
     @staticmethod
     def get_video_statuses(session):
@@ -20,6 +26,12 @@ class VideoStatuses(Base):
         Returns an iterable of items containing statuses of video files.
         Each item is an instance of VideoStatus and can access id, file_path and results_path
         """
+        query = session.query(VideoStatuses).filter(VideoStatuses.results_path == None,
+                                                    VideoStatuses.remote_ip != None,
+                                                    VideoStatuses.remore_port != None).all()
+
+
+
         result = session.query(VideoStatuses).all()
         return result
 
@@ -43,6 +55,15 @@ class VideoStatuses(Base):
         item = query[0]
         item.results_path = new_results_path
         session.commit()
+
+    @staticmethod
+    def find_results_path(session, file_path):
+        """
+        Finds the results path given a file_path
+        """
+        query = session.query(VideoStatuses).filter_by(file_path=file_path).all()
+        assert len(query) == 1
+        return query[0]
 
 
 def create_session(db_url):

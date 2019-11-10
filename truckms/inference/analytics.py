@@ -321,7 +321,7 @@ def get_important_frames(df, labels_to_consider=None):
 
     important_frames = []
     for i in df['obj_id'].unique():
-        important_frames.append(df[df['obj_id'] == i]['area'].argmax())
+        important_frames.append(df[df['obj_id'] == i]['area'].idxmax())
 
     important_frames = sorted(list(set(important_frames)))
 

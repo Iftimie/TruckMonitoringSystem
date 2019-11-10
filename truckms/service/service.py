@@ -1,4 +1,3 @@
-import os
 from truckms.inference.neural import pandas_to_pred_iter, pred_iter_to_pandas, plot_detections
 from truckms.inference.utils import framedatapoint_generator_by_frame_ids2
 from flask import Flask, render_template, make_response, request, redirect, url_for
@@ -9,6 +8,7 @@ import cv2
 import io
 import pandas as pd
 from truckms.inference.analytics import filter_pred_detections, get_important_frames
+from truckms.service.model import create_session, VideoStatuses
 
 
 def image2htmlstr(image):
@@ -19,9 +19,8 @@ def image2htmlstr(image):
     return result
 
 
-def html_imgs_generator(video_path):
-    csv_file_path = os.path.splitext(video_path)[0] + ".csv"
-    pred_gen_from_df = pandas_to_pred_iter(pd.read_csv(csv_file_path))
+def html_imgs_generator(video_path, csv_path):
+    pred_gen_from_df = pandas_to_pred_iter(pd.read_csv(csv_path))
     filtered_pred = filter_pred_detections(pred_gen_from_df)
     filtered_dataframe = pred_iter_to_pandas(filtered_pred)
 
@@ -58,13 +57,13 @@ def create_microservice(db_url, dispatch_work_func):
     app = Flask(__name__, template_folder=osp.join(osp.dirname(__file__), 'templates'),
                 static_folder=osp.join(osp.dirname(__file__), 'templates', 'assets'))
 
-    bootstrap = Bootstrap(app)
+    Bootstrap(app)
 
     @app.route('/check_status')
     def check_status():
-        from truckms.service.model import create_session, VideoStatuses
         session = create_session(db_url)
         query = VideoStatuses.get_video_statuses(session)
+        session.close()
         video_items = []
         for item in query:
             video_items.append({'filename': item.file_path,
@@ -80,14 +79,19 @@ def create_microservice(db_url, dispatch_work_func):
             make_response("Just what do you think you're doing, Dave?", 403)
 
         fname = gui_select_file()
-        dispatch_work_func(fname)
-
-        return redirect(url_for("check_status"))
+        if fname != '':
+            dispatch_work_func(fname)
+            return redirect(url_for("check_status"))
+        else:
+            return redirect(url_for("index"))
 
     @app.route('/show_video')
     def show_video():
-        filepath = osp.join(upload_directory, request.args.get('filename'))
-        plots_gen = html_imgs_generator(filepath)
+        session = create_session(db_url)
+        item = VideoStatuses.find_results_path(session, request.args.get('filename'))
+        session.close()
+
+        plots_gen = html_imgs_generator(item.file_path, item.results_path)
 
         try:
             first_image = next(plots_gen)

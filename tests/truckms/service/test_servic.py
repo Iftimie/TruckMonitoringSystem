@@ -37,3 +37,23 @@ def test_new_microservice(tmpdir):
     assert query[0].results_path == "dummy_results.csv"
 
 
+def test_execution(tmpdir):
+    input_file = osp.join(osp.dirname(__file__), 'data', 'cut.mkv')
+    service.gui_select_file = Mock(return_value=input_file)
+
+    db_url = 'sqlite:///' + osp.join(tmpdir.strpath, 'database.sqlite')
+    work_func, worker_pool, list_futures = get_job_dispathcher(db_url=db_url, num_workers=1, max_operating_res=320, skip=0)
+    app = create_microservice(db_url, dispatch_work_func=work_func)
+    client = app.test_client()
+    res = client.get("/file_select")
+    assert (res.status_code == 302)  # 302 is found redirect
+    assert res.location == 'http://localhost/check_status'
+    worker_pool.close()
+    worker_pool.join()
+    session = create_session(db_url)
+    query = VideoStatuses.get_video_statuses(session)
+    assert len(query) == 1
+    assert query[0].file_path == input_file
+    assert query[0].results_path == input_file.replace('mkv', 'csv')
+
+

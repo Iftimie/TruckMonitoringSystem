@@ -2,6 +2,7 @@ import multiprocessing
 from functools import partial
 from truckms.service.worker.server import analyze_movie, analyze_and_updatedb
 import requests
+from truckms.service.model import create_session, VideoStatuses
 
 
 def evaluate_workload():
@@ -39,9 +40,14 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip):
     def dispatch_work(video_path):
         if evaluate_workload() < 0.5:
             analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
-            worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
+            res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
+            list_futures.append(res)
         else:
             lru_ip, lru_port = select_lru_worker()
+            session = create_session(db_url)
+            VideoStatuses.add_video_status(session, file_path=video_path, results_path=None, remote_ip=lru_ip, remote_port=lru_port)
+
+            session.close()
             pass
             # do work remotely
 

@@ -9,3 +9,4 @@ examples/up_dir/
 *.mp4
 out.png
 *.sqlite
+tests/truckms/service/data/cut.csv

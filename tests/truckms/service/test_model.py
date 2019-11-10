@@ -44,3 +44,11 @@ def test_high_level_api(tmpdir):
     assert len(results) == 1
     assert results[0].file_path == "blabla.avi"
     assert results[0].results_path == "new_blabla.csv"
+
+
+def test_remote_columns(tmpdir):
+    url = 'sqlite:///' + os.path.join(tmpdir.strpath, "video_statuses.db")
+    session = create_session(url)
+    VideoStatuses.add_video_status(session, file_path="blabla.avi", results_path=None, remote_ip="127.0.0.1", remore_port=5000)
+    results = VideoStatuses.get_video_statuses(session)
+    assert len(results) == 1

@@ -5,7 +5,7 @@ from truckms.inference.analytics import filter_pred_detections
 from functools import partial
 import os
 from truckms.service.model import create_session, VideoStatuses
-from flask import Blueprint, Flask
+from flask import Blueprint, Flask, send_file, send_from_directory
 from flask import request, make_response
 from werkzeug import secure_filename
 from functools import partial, wraps
@@ -38,6 +38,8 @@ def analyze_and_updatedb(db_url, video_path, analysis_func):
     VideoStatuses.add_video_status(session, file_path=video_path, results_path=None)
     destination = analysis_func(video_path)
     VideoStatuses.update_results_path(session, file_path=video_path, new_results_path=destination)
+    session.close()
+    return destination
 
 
 def upload_recordings(up_dir, db_url, worker_pool):
@@ -56,16 +58,37 @@ def upload_recordings(up_dir, db_url, worker_pool):
         skip = detector_options['skip']
 
         analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
-        worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
-
+        res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
+        pass
     return make_response("Files uploaded and started runniing the detector. Check later for the results", 200)
+
+
+def download_results(up_dir, db_url):
+    """
+    """
+    session = create_session(db_url)
+    filepath = os.path.join(up_dir, request.form["filename"])
+
+    try:
+        item = VideoStatuses.find_results_path(session, filepath)
+        if item.results_path is not None:
+            if len(item.results_path.split(os.sep)) == 1:
+                return send_from_directory(up_dir, item.results_path)
+            else:
+                return send_file(item.results_path)
+        else:
+            return make_response("File still processing", 202)
+    except:
+        return make_response("There is no file with this name: "+filepath, 404)
 
 
 def create_worker_blueprint(up_dir, db_url, num_workers):
     worker_pool = multiprocessing.Pool(num_workers)
     worker_bp = Blueprint("worker_bp", __name__)
-    func = (wraps(upload_recordings)(partial(upload_recordings, up_dir, db_url, worker_pool)))
-    worker_bp.route("/upload_recordings", methods=['POST'])(func)
+    up_dir_func = (wraps(upload_recordings)(partial(upload_recordings, up_dir, db_url, worker_pool)))
+    worker_bp.route("/upload_recordings", methods=['POST'])(up_dir_func)
+    down_res_func = (wraps(download_results)(partial(download_results, up_dir, db_url)))
+    worker_bp.route("/download_results", methods=['GET'])(down_res_func)
     return worker_bp, worker_pool
 
 
