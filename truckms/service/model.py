@@ -30,7 +30,8 @@ class VideoStatuses(Base):
                                                     VideoStatuses.remote_ip != None,
                                                     VideoStatuses.remore_port != None).all()
 
-
+        #TODO when requesting, make sure to send only the filename, not the whole path,
+        #because the client.py is sending only the filename
 
         result = session.query(VideoStatuses).all()
         return result

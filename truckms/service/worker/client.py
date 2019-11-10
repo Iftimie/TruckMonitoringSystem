@@ -3,6 +3,7 @@ from functools import partial
 from truckms.service.worker.server import analyze_movie, analyze_and_updatedb
 import requests
 from truckms.service.model import create_session, VideoStatuses
+import os
 
 
 def evaluate_workload():
@@ -46,9 +47,16 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip):
             lru_ip, lru_port = select_lru_worker()
             session = create_session(db_url)
             VideoStatuses.add_video_status(session, file_path=video_path, results_path=None, remote_ip=lru_ip, remote_port=lru_port)
-
+            data = {os.path.basename(video_path): open(video_path),
+                    "max_operating_res": max_operating_res, "skip":skip}
+            res = requests.post('http://{}:{}/upload_recordings'.format(lru_ip, lru_port), json=data)
+            #TODO what could go wrong with this request?
+            # connection may be lost
+            # the server may stop
+            # if connection is lost, then after assert, the session should not commit, thus check results section should be empty
+            # if server will stop while processing, then, if no results are returned X hours, then, a new request should be made
+            assert res.content == "Files uploaded and started runniing the detector. Check later for the results"
             session.close()
-            pass
             # do work remotely
 
     return dispatch_work, worker_pool, list_futures
