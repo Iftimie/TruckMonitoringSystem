@@ -14,3 +14,5 @@ tests/truckms/service/dummy_filename.csv
 tests/truckms/service/worker/dummy.csv
 
 tests/truckms/service/worker/dummy.avi
+tests/truckms/service/dummy.avi
+tests/truckms/service/dummy.csv

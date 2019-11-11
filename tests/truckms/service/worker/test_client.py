@@ -9,6 +9,7 @@ from mock import Mock
 import os.path as osp
 from truckms.service.model import create_session, VideoStatuses
 from truckms.service import worker
+import time
 from flask import Flask
 import os
 
@@ -67,7 +68,7 @@ def create_bookkeeper_worker_ms(tmpdir, number):
 
 def create_bookkeeper_worker_servers(tmpdir):
     r"""Look in tests\service\bookkeeper\test_servic.py for details about the communication"""
-    bookkeeper.find_workload = Mock(return_value=50)
+    bookkeeper.find_workload = Mock(return_value=0)
     server1 = ServerThread(create_bookkeeper_worker_ms(tmpdir, 0), port=5000)
     server1.start()  # at ths step there is only one node state, and only server1 knows about it (about itself)
 
@@ -75,7 +76,7 @@ def create_bookkeeper_worker_servers(tmpdir):
     server2 = ServerThread(create_bookkeeper_worker_ms(tmpdir, 1), port=5001, central_host='127.0.0.1', central_port=5000)
     server2.start()  # at this step server 1 knows about itself and server 2
     # server 2 knows about itself and server 1
-    bookkeeper.find_workload = Mock(return_value=0)
+    bookkeeper.find_workload = Mock(return_value=50)
     server3 = ServerThread(create_bookkeeper_worker_ms(tmpdir, 2), port=5002, central_host='127.0.0.1', central_port=5000)
     server3.start()  # at this step server 1 knows about itself, server 2 and server 3
     # server 2 knows about itself and server 1
@@ -95,6 +96,7 @@ def shutdown_servers(servers):
     for i in servers:
         i.shutdown()
 
+
 def test_client_delegate_workload(tmpdir):
     db_url = 'sqlite:///' + osp.join(tmpdir.strpath, "database.sqlite")
     client.evaluate_workload = Mock(return_value=0.0)
@@ -113,9 +115,28 @@ def test_client_delegate_workload(tmpdir):
     dispatch_func("dummy.avi")
     assert len(list_futures) == 0
 
+    shutdown_servers(servers)
+
+
+def test_check_and_download(tmpdir):
+    db_url = 'sqlite:///' + osp.join(tmpdir.strpath, "database.sqlite")
+    client.evaluate_workload = Mock(return_value=1.0)
+    dispatch_func, worker_pool, list_futures = client.get_job_dispathcher(db_url, 1, 320, 0,
+                                                                          analysis_func=dummy_analysis_func)
+    servers = create_bookkeeper_worker_servers(tmpdir)
+
+
+    with open("dummy.avi", "w") as f: f.write("nothing")
+    dispatch_func("dummy.avi")
+    assert len(list_futures) == 0
+
     session = create_session(db_url)
-    query = session.query(VideoStatuses).filter(VideoStatuses.results_path == None,
-                                                VideoStatuses.remote_ip != None,
-                                                VideoStatuses.remore_port != None).all()
+    query = VideoStatuses.get_video_statuses(session)
+    time.sleep(5) # this should be enough in order to syncronize
+    assert len(query) == 1
+    VideoStatuses.remove_dead_requests(session)
+    query = VideoStatuses.get_video_statuses(session)
+    assert len(query) == 1
+
     shutdown_servers(servers)
 

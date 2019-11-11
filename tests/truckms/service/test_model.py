@@ -1,7 +1,9 @@
 from truckms.service.model import create_session
 from truckms.service.model import VideoStatuses
+from truckms.service import worker
 import os
 import requests
+from mock import Mock
 
 
 def test_session(tmpdir):
@@ -96,5 +98,48 @@ def test_query_remote(tmpdir):
         assert res.content == b'File still processing'
         assert res.status_code == 202
 
-
     server1.shutdown()
+
+
+def test_remove_dead_requests(tmpdir):
+    url = 'sqlite:///' + os.path.join(tmpdir.strpath, "video_statuses.db")
+    session = create_session(url)
+    VideoStatuses.add_video_status(session, file_path="blabla.avi", results_path=None, remote_ip="127.0.0.1",
+                                   remote_port=5000)
+    results = VideoStatuses.get_video_statuses(session)
+    assert len(results) == 1
+    VideoStatuses.remove_dead_requests(session)
+    results = VideoStatuses.get_video_statuses(session)
+    assert len(results) == 0
+
+    VideoStatuses.add_video_status(session, file_path="blabla.avi", results_path=None, remote_ip="127.0.0.1",
+                                   remote_port=5000)
+    up_dir = os.path.join(tmpdir.strpath, "updir")
+    os.mkdir(up_dir)
+    worker_db_url = 'sqlite:///' + os.path.join(tmpdir.strpath, "workerdb.db")
+    app, _ = create_worker_microservice(up_dir, db_url=worker_db_url, num_workers=1)
+    server1 = ServerThread(app, port=5000)
+    server1.start()
+    query = VideoStatuses.get_video_statuses(session)
+    assert len(query) == 1
+    VideoStatuses.remove_dead_requests(session)
+    results = VideoStatuses.get_video_statuses(session)
+    assert len(results) == 0
+
+    VideoStatuses.add_video_status(session, file_path="blabla.avi", results_path=None, remote_ip="127.0.0.1",
+                                   remote_port=5000)
+    # simulate an upload
+    worker_session = create_session(worker_db_url)
+    VideoStatuses.add_video_status(worker_session, file_path=os.path.join(up_dir, "blabla.avi"), results_path=None)
+    for q in query:
+        request_data = {"filename": q.file_path}
+        res = requests.get('http://{}:{}/download_results'.format(q.remote_ip, q.remote_port), data=request_data)
+        assert res.content == b'File still processing'
+        assert res.status_code == 202
+    query = VideoStatuses.get_video_statuses(session)
+    assert len(query) == 1
+    VideoStatuses.remove_dead_requests(session)
+    results = VideoStatuses.get_video_statuses(session)
+    assert len(results) == 1
+    server1.shutdown()
+

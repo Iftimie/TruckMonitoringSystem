@@ -3,6 +3,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
 import datetime
+import requests
+import os
 Base = declarative_base()
 
 
@@ -35,6 +37,49 @@ class VideoStatuses(Base):
 
         result = session.query(VideoStatuses).all()
         return result
+
+    # get video files that are remote and aren't finished in order to download the results
+    @staticmethod
+    def check_and_download(session):
+        """
+        This should be called after call to remove_dead_requests. Although this is not entirely necessary
+        """
+        query = session.query(VideoStatuses).filter(VideoStatuses.results_path == None,
+                                                    VideoStatuses.remote_ip != None,
+                                                    VideoStatuses.remote_port != None).all()
+        for q in query:
+            try:
+                request_data = {"filename": q.file_path}
+                res = requests.get('http://{}:{}/download_results'.format(q.remote_ip, q.remote_port),
+                                   data=request_data)
+                if res.status_code == 200 and res.content == b'There is no file with this name: ' + bytes(q.file_path,
+                                                                                  encoding='utf8'):
+                    filepath, _ = os.path.splitext(q.file_path)
+                    q.results_path = filepath + ".csv"
+                    with open(q.results_path, 'wb') as f:
+                        f.write(res.content)
+                    session.commit()
+            except: # timeout error
+                pass
+
+    @staticmethod
+    def remove_dead_requests(session):
+        query = session.query(VideoStatuses).filter(VideoStatuses.results_path == None,
+                                                    VideoStatuses.remote_ip != None,
+                                                    VideoStatuses.remote_port != None).all()
+        items_to_remove = []
+        for q in query:
+            try:
+                request_data = {"filename": q.file_path}
+                res = requests.get('http://{}:{}/download_results'.format(q.remote_ip, q.remote_port), data=request_data)
+                if res.status_code == 404 and res.content == b'There is no file with this name: ' + bytes(q.file_path,
+                                                                                                          encoding='utf8'):
+                    items_to_remove.append(q)
+            except: # except timeout error
+                items_to_remove.append(q)
+        for item in items_to_remove:
+            session.delete(item)
+        session.commit()
 
     @staticmethod
     def add_video_status(session, **kwargs):
