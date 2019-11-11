@@ -82,9 +82,19 @@ def test_query_remote(tmpdir):
     server1 = ServerThread(app, port=5000)
     server1.start()
     for q in query:
-        request_data = {"filename":q.file_path}
+        request_data = {"filename": q.file_path}
         res = requests.get('http://{}:{}/download_results'.format(q.remote_ip, q.remote_port), data=request_data)
         assert res.content == b'There is no file with this name: ' + bytes(q.file_path, encoding='utf8')
         assert res.status_code == 404
+
+    # simulate an upload
+    worker_session = create_session(worker_db_url)
+    VideoStatuses.add_video_status(worker_session, file_path=os.path.join(up_dir, "blabla.avi"), results_path=None)
+    for q in query:
+        request_data = {"filename": q.file_path}
+        res = requests.get('http://{}:{}/download_results'.format(q.remote_ip, q.remote_port), data=request_data)
+        assert res.content == b'File still processing'
+        assert res.status_code == 202
+
 
     server1.shutdown()
