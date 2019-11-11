@@ -42,7 +42,7 @@ def analyze_and_updatedb(db_url, video_path, analysis_func):
     return destination
 
 
-def upload_recordings(up_dir, db_url, worker_pool):
+def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
     """
     request must contain the file data and the options for running the detector
     max_operating_res, skip
@@ -57,7 +57,9 @@ def upload_recordings(up_dir, db_url, worker_pool):
         max_operating_res = detector_options['max_operating_res']
         skip = detector_options['skip']
 
-        analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
+        if analysis_func is None:
+            analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
+
         res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
         pass
     return make_response("Files uploaded and started runniing the detector. Check later for the results", 200)
@@ -82,18 +84,21 @@ def download_results(up_dir, db_url):
         return make_response("There is no file with this name: "+filepath, 404)
 
 
-def create_worker_blueprint(up_dir, db_url, num_workers):
+def create_worker_blueprint(up_dir, db_url, num_workers, analysis_func=None):
     worker_pool = multiprocessing.Pool(num_workers)
     worker_bp = Blueprint("worker_bp", __name__)
-    up_dir_func = (wraps(upload_recordings)(partial(upload_recordings, up_dir, db_url, worker_pool)))
+    up_dir_func = (wraps(upload_recordings)(partial(upload_recordings, up_dir, db_url, worker_pool, analysis_func)))
     worker_bp.route("/upload_recordings", methods=['POST'])(up_dir_func)
     down_res_func = (wraps(download_results)(partial(download_results, up_dir, db_url)))
     worker_bp.route("/download_results", methods=['GET'])(down_res_func)
+    worker_bp.role = "worker"
     return worker_bp, worker_pool
 
 
 def create_worker_microservice(up_dir, db_url, num_workers):
     app = Flask(__name__)
+    app.roles = []
     worker_bp, worker_pool = create_worker_blueprint(up_dir, db_url, num_workers)
     app.register_blueprint(worker_bp)
+    app.roles.append(worker_bp.role)
     return app, worker_pool

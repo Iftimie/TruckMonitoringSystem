@@ -23,7 +23,7 @@ def select_lru_worker():
     return res1[0]['ip'], res1[0]['port']
 
 
-def get_job_dispathcher(db_url, num_workers, max_operating_res, skip):
+def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, analysis_func=None):
     """
     Creates a function that is able to dispatch work. Work can be done locally or remote.
 
@@ -32,30 +32,33 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip):
         num_workers: how many concurrent jobs should be done locally before dispatching to a remote worker
         max_operating_res: operating resolution. bigger resolution will yield better detections
         skip: how many frames should be skipped when processing, recommended 0
+        analysis_func: OPTIONAL.
     Return:
         function that can be called with a video_path
     """
     worker_pool = multiprocessing.Pool(num_workers)
-    list_futures = []
+    list_futures = []  # todo this list_futures should be removed. future responses should stay in database if are needed
+
+    if analysis_func is None:
+        analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
 
     def dispatch_work(video_path):
         if evaluate_workload() < 0.5:
-            analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
             res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
             list_futures.append(res)
         else:
             lru_ip, lru_port = select_lru_worker()
             session = create_session(db_url)
             VideoStatuses.add_video_status(session, file_path=video_path, results_path=None, remote_ip=lru_ip, remote_port=lru_port)
-            data = {os.path.basename(video_path): open(video_path),
-                    "max_operating_res": max_operating_res, "skip":skip}
-            res = requests.post('http://{}:{}/upload_recordings'.format(lru_ip, lru_port), json=data)
+            data = {"max_operating_res": max_operating_res, "skip": skip}
+            files = {os.path.basename(video_path): open(video_path, 'rb')}
+            res = requests.post('http://{}:{}/upload_recordings'.format(lru_ip, lru_port), data=data, files=files)
             #TODO what could go wrong with this request?
             # connection may be lost
             # the server may stop
             # if connection is lost, then after assert, the session should not commit, thus check results section should be empty
-            # if server will stop while processing, then, if no results are returned X hours, then, a new request should be made
-            assert res.content == "Files uploaded and started runniing the detector. Check later for the results"
+            # if server will stop or change IP while processing, then, if no results are returned X hours, then, a new request should be made
+            assert res.content == b"Files uploaded and started runniing the detector. Check later for the results"
             session.close()
             # do work remotely
 

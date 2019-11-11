@@ -1,7 +1,8 @@
-from sqlalchemy import Column, Integer, String
+from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+import datetime
 Base = declarative_base()
 
 
@@ -18,7 +19,8 @@ class VideoStatuses(Base):
     file_path = Column(String, index=True)
     results_path = Column(String, nullable=True)
     remote_ip = Column(String, nullable=True)
-    remore_port = Column(Integer, nullable=True)
+    remote_port = Column(Integer, nullable=True)
+    time_of_request = Column(DateTime, default=datetime.datetime.utcnow, nullable=True)
 
     @staticmethod
     def get_video_statuses(session):
@@ -26,12 +28,10 @@ class VideoStatuses(Base):
         Returns an iterable of items containing statuses of video files.
         Each item is an instance of VideoStatus and can access id, file_path and results_path
         """
-        query = session.query(VideoStatuses).filter(VideoStatuses.results_path == None,
-                                                    VideoStatuses.remote_ip != None,
-                                                    VideoStatuses.remore_port != None).all()
-
         #TODO when requesting, make sure to send only the filename, not the whole path,
         #because the client.py is sending only the filename
+        # if server will stop or change IP while processing, then, if no results are returned X hours, then, a new request should be made
+        # the request to the sever can be done in a background process or here. actually not here. here would just be overhead of code
 
         result = session.query(VideoStatuses).all()
         return result

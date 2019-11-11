@@ -65,9 +65,14 @@ def create_microservice(db_url, dispatch_work_func):
         query = VideoStatuses.get_video_statuses(session)
         session.close()
         video_items = []
+
+        #TODO also render on HTML the time of execution if it exists
+
         for item in query:
             video_items.append({'filename': item.file_path,
-                                'status': 'ready' if item.results_path is not None else 'processing'})
+                                'status': 'ready' if item.results_path is not None else 'processing',
+                                'time_of_request': item.time_of_request.strftime(
+                                    "%m/%d/%Y, %H:%M:%S") if item.time_of_request is not None else 'none'})
         partial_destination_url = '/show_video?filename='
         resp = make_response(render_template("check_status.html", partial_destination_url=partial_destination_url,
                                              video_items=video_items))

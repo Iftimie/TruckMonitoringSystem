@@ -20,17 +20,21 @@ def node_states(set_states):
         return jsonify(list(set_states))
 
 
-def create_blueprint():
+def create_bookkeeper_blueprint():
     bookkeeper_bp = Blueprint("bookkeeper_bp", __name__)
     set_states = set()  # TODO replace with a local syncronized database
     func = (wraps(node_states)(partial(node_states, set_states)))
     bookkeeper_bp.route("/node_states", methods=['POST', 'GET'])(func)
+    bookkeeper_bp.role = "bookkeeper"
     return bookkeeper_bp
 
 
 def create_microservice():
     app = Flask(__name__)
-    app.register_blueprint(create_blueprint())
+    app.roles = []
+    bookkeeper_bp = create_bookkeeper_blueprint()
+    app.register_blueprint(bookkeeper_bp)
+    app.roles.append(bookkeeper_bp.role)
 
     return app
 
@@ -50,7 +54,7 @@ class ServerThread(threading.Thread):
         self.client = app.test_client()
         data = [{'ip': self.host, 'port': self.port, 'workload': find_workload(), 'hardware': "Nvidia GTX 960M Intel i7",
                  'nickname': "rmstn",
-                 'node_type': "bookkeeper", 'email': 'iftimie.alexandru.florentin@gmail.com'}]
+                 'node_type': ",".join(app.roles), 'email': 'iftimie.alexandru.florentin@gmail.com'}]
         # register self state to local service
         res = self.client.post("/node_states", json=data)
         if central_host is not None and central_port is not None:
