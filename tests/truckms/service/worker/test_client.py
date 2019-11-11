@@ -7,6 +7,7 @@ from truckms.service.worker.client import select_lru_worker
 from truckms.service.worker import client
 from mock import Mock
 import os.path as osp
+from truckms.service.model import create_session, VideoStatuses
 from truckms.service import worker
 from flask import Flask
 import os
@@ -111,5 +112,10 @@ def test_client_delegate_workload(tmpdir):
     with open("dummy.avi", "w") as f: f.write("nothing")
     dispatch_func("dummy.avi")
     assert len(list_futures) == 0
+
+    session = create_session(db_url)
+    query = session.query(VideoStatuses).filter(VideoStatuses.results_path == None,
+                                                VideoStatuses.remote_ip != None,
+                                                VideoStatuses.remore_port != None).all()
     shutdown_servers(servers)
 

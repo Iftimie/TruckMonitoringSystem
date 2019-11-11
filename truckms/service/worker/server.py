@@ -81,7 +81,7 @@ def download_results(up_dir, db_url):
         else:
             return make_response("File still processing", 202)
     except:
-        return make_response("There is no file with this name: "+filepath, 404)
+        return make_response("There is no file with this name: "+request.form["filename"], 404)
 
 
 def create_worker_blueprint(up_dir, db_url, num_workers, analysis_func=None):
