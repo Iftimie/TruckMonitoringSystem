@@ -52,6 +52,11 @@ class ServerThread(threading.Thread):
         self.srv = make_server(host, port, app)
         self.ctx = app.app_context()
         self.client = app.test_client()
+        assert self.host != 'localhost' and self.host != '0.0.0.0'
+        # just to avoid confusion. localhost will be 127.0.0.1
+        # I am not sure altough what 0.0.0.0 means
+        # https://superuser.com/questions/949428/whats-the-difference-between-127-0-0-1-and-0-0-0-0
+        # Typically you use bind-address 0.0.0.0 to allow connections from outside networks and sources. Many servers like MySQL typically bind to 127.0.0.1 allowing only loopback connections, requiring the admin to change it to 0.0.0.0 to enable outside connectivity.
         data = [{'ip': self.host, 'port': self.port, 'workload': find_workload(), 'hardware': "Nvidia GTX 960M Intel i7",
                  'nickname': "rmstn",
                  'node_type': ",".join(app.roles), 'email': 'iftimie.alexandru.florentin@gmail.com'}]

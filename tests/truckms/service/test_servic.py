@@ -1,5 +1,5 @@
 from truckms.service.service import create_microservice
-from truckms.service.worker.client import get_job_dispathcher
+from truckms.service.worker.user_client import get_job_dispathcher
 import os.path as osp
 from mock import Mock
 from truckms.service import service
@@ -19,7 +19,7 @@ class PickableMock(Mock):
 
 def test_new_microservice(tmpdir):
     service.gui_select_file = Mock(return_value="dummy_filename")
-    worker.client.analyze_movie = PickableMock()
+    worker.user_client.analyze_movie = PickableMock()
 
     db_url = 'sqlite:///' + osp.join(tmpdir.strpath, 'database.sqlite')
     work_func, worker_pool, list_futures = get_job_dispathcher(db_url=db_url, num_workers=1, max_operating_res=320, skip=0)

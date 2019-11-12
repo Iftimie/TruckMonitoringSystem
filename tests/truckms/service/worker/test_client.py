@@ -3,8 +3,8 @@ from truckms.service.bookkeeper import create_microservice, create_bookkeeper_bl
 from truckms.service.worker.server import create_worker_blueprint
 from truckms.service import bookkeeper
 import requests
-from truckms.service.worker.client import select_lru_worker
-from truckms.service.worker import client
+from truckms.service.worker.user_client import select_lru_worker
+from truckms.service.worker import user_client
 from mock import Mock
 import os.path as osp
 from truckms.service.model import create_session, VideoStatuses
@@ -99,9 +99,9 @@ def shutdown_servers(servers):
 
 def test_client_delegate_workload(tmpdir):
     db_url = 'sqlite:///' + osp.join(tmpdir.strpath, "database.sqlite")
-    client.evaluate_workload = Mock(return_value=0.0)
-    dispatch_func, worker_pool, list_futures = client.get_job_dispathcher(db_url, 1, 320, 0,
-                                                                          analysis_func=dummy_analysis_func)
+    user_client.evaluate_workload = Mock(return_value=0.0)
+    dispatch_func, worker_pool, list_futures = user_client.get_job_dispathcher(db_url, 1, 320, 0,
+                                                                               analysis_func=dummy_analysis_func)
     dispatch_func("dummy.avi")
     worker_pool.close()
     worker_pool.join()
@@ -109,8 +109,8 @@ def test_client_delegate_workload(tmpdir):
     assert list_futures[0].get() == "dummy.csv"
 
     servers = create_bookkeeper_worker_servers(tmpdir)
-    client.evaluate_workload = Mock(return_value=1.0)
-    dispatch_func, worker_pool, list_futures = client.get_job_dispathcher(db_url, 1, 320, 0)
+    user_client.evaluate_workload = Mock(return_value=1.0)
+    dispatch_func, worker_pool, list_futures = user_client.get_job_dispathcher(db_url, 1, 320, 0)
     with open("dummy.avi", "w") as f: f.write("nothing")
     dispatch_func("dummy.avi")
     assert len(list_futures) == 0
@@ -120,9 +120,9 @@ def test_client_delegate_workload(tmpdir):
 
 def test_check_and_download(tmpdir):
     db_url = 'sqlite:///' + osp.join(tmpdir.strpath, "database.sqlite")
-    client.evaluate_workload = Mock(return_value=1.0)
-    dispatch_func, worker_pool, list_futures = client.get_job_dispathcher(db_url, 1, 320, 0,
-                                                                          analysis_func=dummy_analysis_func)
+    user_client.evaluate_workload = Mock(return_value=1.0)
+    dispatch_func, worker_pool, list_futures = user_client.get_job_dispathcher(db_url, 1, 320, 0,
+                                                                               analysis_func=dummy_analysis_func)
     servers = create_bookkeeper_worker_servers(tmpdir)
 
 
@@ -132,7 +132,7 @@ def test_check_and_download(tmpdir):
 
     session = create_session(db_url)
     query = VideoStatuses.get_video_statuses(session)
-    time.sleep(5) # this should be enough in order to syncronize
+    time.sleep(5)  # this should be enough in order to syncronize
     assert len(query) == 1
     VideoStatuses.remove_dead_requests(session)
     query = VideoStatuses.get_video_statuses(session)

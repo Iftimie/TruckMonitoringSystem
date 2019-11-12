@@ -1,6 +1,6 @@
 from truckms.service.service import create_microservice
 from flaskwebgui import FlaskUI  # get the FlaskUI class
-from truckms.service.worker.client import get_job_dispathcher
+from truckms.service.worker.user_client import get_job_dispathcher
 
 
 def flaskuimain():

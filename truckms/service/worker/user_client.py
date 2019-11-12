@@ -4,6 +4,7 @@ from truckms.service.worker.server import analyze_movie, analyze_and_updatedb
 import requests
 from truckms.service.model import create_session, VideoStatuses
 import os
+import GPUtil
 
 
 def evaluate_workload():
@@ -11,7 +12,12 @@ def evaluate_workload():
     Returns a number between 0 and 1 that signifies the workload on the current PC. 0 represents no workload,
     1 means no more work can be done efficiently.
     """
-    return 0
+    deviceID = GPUtil.getFirstAvailable(order='first', maxLoad=0.5, maxMemory=0.5, attempts=1, interval=900,
+                                        verbose=False)
+    if len(deviceID) != 0:
+        return True
+    else:
+        return False
 
 
 def select_lru_worker():
@@ -19,6 +25,10 @@ def select_lru_worker():
     Selects the least recently used worker from the known states and returns its IP and PORT
     """
     res1 = requests.get('http://localhost:5000/node_states').json()  # will get the data defined above
+    res1 = [item for item in res1 if 'worker' in item['node_type'] or 'broker' in item['node_type']]
+    if len(res1) == 0:
+        print ("No worker or broker available")
+        assert False
     res1 = sorted(res1, key=lambda x: x['workload'])
     return res1[0]['ip'], res1[0]['port']
 
@@ -43,7 +53,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, analysis_f
         analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
 
     def dispatch_work(video_path):
-        if evaluate_workload() < 0.5:
+        if evaluate_workload():
             res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
             list_futures.append(res)
         else:
@@ -53,11 +63,6 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, analysis_f
             data = {"max_operating_res": max_operating_res, "skip": skip}
             files = {os.path.basename(video_path): open(video_path, 'rb')}
             res = requests.post('http://{}:{}/upload_recordings'.format(lru_ip, lru_port), data=data, files=files)
-            #TODO what could go wrong with this request?
-            # connection may be lost
-            # the server may stop
-            # if connection is lost, then after assert, the session should not commit, thus check results section should be empty
-            # if server will stop or change IP while processing, then, if no results are returned X hours, then, a new request should be made
             assert res.content == b"Files uploaded and started runniing the detector. Check later for the results"
             session.close()
             # do work remotely

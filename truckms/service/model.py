@@ -22,6 +22,8 @@ class VideoStatuses(Base):
     results_path = Column(String, nullable=True)
     remote_ip = Column(String, nullable=True)
     remote_port = Column(Integer, nullable=True)
+    max_operating_res = Column(Integer, nullable=True)
+    skip = Column(Integer, nullable=True)
     time_of_request = Column(DateTime, default=datetime.datetime.utcnow, nullable=True)
 
     @staticmethod
@@ -30,10 +32,6 @@ class VideoStatuses(Base):
         Returns an iterable of items containing statuses of video files.
         Each item is an instance of VideoStatus and can access id, file_path and results_path
         """
-        #TODO when requesting, make sure to send only the filename, not the whole path,
-        #because the client.py is sending only the filename
-        # if server will stop or change IP while processing, then, if no results are returned X hours, then, a new request should be made
-        # the request to the sever can be done in a background process or here. actually not here. here would just be overhead of code
 
         result = session.query(VideoStatuses).all()
         return result
@@ -49,10 +47,11 @@ class VideoStatuses(Base):
                                                     VideoStatuses.remote_port != None).all()
         for q in query:
             try:
-                request_data = {"filename": q.file_path}
+                filename = os.path.basename(q.file_path)
+                request_data = {"filename": filename}
                 res = requests.get('http://{}:{}/download_results'.format(q.remote_ip, q.remote_port),
                                    data=request_data)
-                if res.status_code == 200 and res.content == b'There is no file with this name: ' + bytes(q.file_path,
+                if res.status_code == 200 and res.content == b'There is no file with this name: ' + bytes(filename,
                                                                                   encoding='utf8'):
                     filepath, _ = os.path.splitext(q.file_path)
                     q.results_path = filepath + ".csv"
@@ -68,11 +67,15 @@ class VideoStatuses(Base):
                                                     VideoStatuses.remote_ip != None,
                                                     VideoStatuses.remote_port != None).all()
         items_to_remove = []
+
+        # TODO if server will stop or change IP while processing, then, if no results are returned X hours, then, a
+        #  new request should be made
         for q in query:
             try:
-                request_data = {"filename": q.file_path}
+                filename = os.path.basename(q.file_path)
+                request_data = {"filename": filename}
                 res = requests.get('http://{}:{}/download_results'.format(q.remote_ip, q.remote_port), data=request_data)
-                if res.status_code == 404 and res.content == b'There is no file with this name: ' + bytes(q.file_path,
+                if res.status_code == 404 and res.content == b'There is no file with this name: ' + bytes(filename,
                                                                                                           encoding='utf8'):
                     items_to_remove.append(q)
             except: # except timeout error
