@@ -40,6 +40,16 @@ def download_recordings(up_dir, db_url):
         session.close()
         return make_response("Sorry, got no work to do", 404)
 
+def upload_results(up_dir, db_url):
+    for filename in request.files:
+        f = request.files[filename]
+        filename = secure_filename(filename)
+
+        
+
+        filepath = os.path.join(up_dir, filename)
+        f.save(filepath)
+
 def create_broker_blueprint(up_dir, db_url):
     broker_bp = Blueprint("broker_bp", __name__)
     heartbeat_func = (wraps(heartbeat)(partial(heartbeat, db_url)))
