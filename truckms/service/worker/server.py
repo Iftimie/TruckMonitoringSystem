@@ -83,8 +83,11 @@ def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
         if not pool_can_do_more_work(worker_pool) and worker_heartbeats(db_url):
             #store the files as broker
             session = create_session(db_url)
-            VideoStatuses.add_video_status(session, file_path=filepath, max_operating_res=max_operating_res, skip=skip,
-                                           time_of_request=None)  # time of request will be set only when a worker asks for this file
+            VideoStatuses.add_video_status(session, file_path=filepath, max_operating_res=max_operating_res, skip=skip)
+            # this ? time of request will be updated both at uploading and at dispatching to worker. we want to serve the oldest request that does not have a results path
+            # and we need to know which one is the most ignored
+            # or
+            # this ?time of request will be set only when a worker asks for this file
             session.close()
         else:
             if analysis_func is None:
@@ -127,6 +130,8 @@ def create_worker_blueprint(up_dir, db_url, num_workers, analysis_func=None):
 
 
 def create_worker_microservice(up_dir, db_url, num_workers):
+    # TODO should I create different databases for workers, brokers, etc???
+    #  in order to avoid conflict between workers and brokers?
     app = Flask(__name__)
     app.roles = []
     worker_bp, worker_pool = create_worker_blueprint(up_dir, db_url, num_workers)

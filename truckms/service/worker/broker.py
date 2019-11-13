@@ -1,6 +1,7 @@
 from flask import Blueprint, request, make_response, Flask
 from functools import wraps, partial
 from werkzeug import secure_filename
+from flask import Blueprint, Flask, send_file, send_from_directory
 from truckms.service.model import create_session, VideoStatuses, HeartBeats
 import requests
 import os
@@ -15,6 +16,29 @@ def heartbeat(db_url):
     session.close()
     return make_response("Thank god you are alive", 200)
 
+
+def download_recordings(up_dir, db_url):
+    session = create_session(db_url)
+    # TODO there are some edge cases that I havent treated. an allready downloaded recording might not get a results because of a dead worker
+    #  on the line below that case won't get selected for reprocessing because it has been asigned a remote_ip
+    #  or maybe I should not assign remote_ip and remote_port and allow for race conditions?
+    # res = VideoStatuses.get_video_statuses(session).filter(VideoStatuses.results_path == None,
+    #                                                        VideoStatuses.remote_ip != None,
+    #                                                        VideoStatuses.remote_port != None).all()
+    res = VideoStatuses.get_video_statuses(session).filter(VideoStatuses.results_path == None).all()
+
+    if len(res) > 0:
+        res.sort(key=lambda item: item.time_of_request)
+        item = res[0]
+        path = item.results_path
+        session.close()
+        if len(path.split(os.sep)) == 1:
+            return send_from_directory(up_dir, path)
+        else:
+            return send_file(item.results_path)
+    else:
+        session.close()
+        return make_response("Sorry, got no work to do", 404)
 
 def create_broker_blueprint(up_dir, db_url):
     broker_bp = Blueprint("broker_bp", __name__)
