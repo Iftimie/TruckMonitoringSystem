@@ -54,6 +54,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, analysis_f
 
     def dispatch_work(video_path):
         if evaluate_workload():
+            # do not remove this. this is useful. we don't want to upload in broker (waste time and storage when we want to process locally
             res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
             list_futures.append(res)
         else:

@@ -2,10 +2,41 @@ from sqlalchemy import Column, Integer, String, DateTime
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-import datetime
+from datetime import datetime, timedelta
 import requests
 import os
 Base = declarative_base()
+
+
+class HeartBeats(Base):
+    """
+    ORM for keeping account of heartbeats received by a broker
+    """
+    __tablename__ = 'heartbeats'
+    id = Column(Integer, primary_key=True)
+    time_of_heartbeat = Column(DateTime, default=datetime.utcnow)
+
+    @staticmethod
+    def has_recent_heartbeat(session, minutes):
+        """
+        Returns true if there is a heartbeat less than x seconds ago
+        """
+        past = datetime.now() - timedelta(minutes=minutes)
+        result = session.query(HeartBeats).all()
+        for r in result:
+            if r > past:
+                return True
+        return False
+
+    @staticmethod
+    def add_heartbeat(session, **kwargs):
+        """
+        Args:
+            session: sql session
+            kwargs: keyword arguments used to assign values to the columns
+        """
+        session.add(HeartBeats(**kwargs))
+        session.commit()
 
 
 class VideoStatuses(Base):
@@ -24,7 +55,7 @@ class VideoStatuses(Base):
     remote_port = Column(Integer, nullable=True)
     max_operating_res = Column(Integer, nullable=True)
     skip = Column(Integer, nullable=True)
-    time_of_request = Column(DateTime, default=datetime.datetime.utcnow, nullable=True)
+    time_of_request = Column(DateTime, default=datetime.utcnow, nullable=True)
 
     @staticmethod
     def get_video_statuses(session):

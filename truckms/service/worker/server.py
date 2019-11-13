@@ -4,12 +4,13 @@ from truckms.inference.utils import framedatapoint_generator
 from truckms.inference.analytics import filter_pred_detections
 from functools import partial
 import os
-from truckms.service.model import create_session, VideoStatuses
+from truckms.service.model import create_session, VideoStatuses, HeartBeats
 from flask import Blueprint, Flask, send_file, send_from_directory
 from flask import request, make_response
 from werkzeug import secure_filename
 from functools import partial, wraps
 import multiprocessing
+import requests
 
 
 def analyze_movie(video_path, max_operating_res, skip=0):
@@ -42,6 +43,28 @@ def analyze_and_updatedb(db_url, video_path, analysis_func):
     return destination
 
 
+def pool_can_do_more_work(worker_pool):
+    count_opened = 0
+    for apply_result in worker_pool.futures_list[:]:
+        try:
+            apply_result.get(1)
+            # if not timeout exception, then we can safely remove the object
+            worker_pool.futures_list.remove(apply_result)
+        except:
+            count_opened+=1
+    if count_opened < worker_pool._processes:
+        return True
+    else:
+        return False
+
+
+def worker_heartbeats(db_url):
+    session = create_session(db_url)
+    boolean = HeartBeats.has_recent_heartbeat(session, minutes=20)
+    session.close()
+    return boolean
+
+
 def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
     """
     request must contain the file data and the options for running the detector
@@ -57,11 +80,18 @@ def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
         max_operating_res = detector_options['max_operating_res']
         skip = detector_options['skip']
 
-        if analysis_func is None:
-            analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
+        if not pool_can_do_more_work(worker_pool) and worker_heartbeats(db_url):
+            #store the files as broker
+            session = create_session(db_url)
+            VideoStatuses.add_video_status(session, file_path=filepath, max_operating_res=max_operating_res, skip=skip,
+                                           time_of_request=None)  # time of request will be set only when a worker asks for this file
+            session.close()
+        else:
+            if analysis_func is None:
+                analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
 
-        res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
-        pass
+            res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
+            worker_pool.futures_list.append(res)
     return make_response("Files uploaded and started runniing the detector. Check later for the results", 200)
 
 
@@ -86,6 +116,7 @@ def download_results(up_dir, db_url):
 
 def create_worker_blueprint(up_dir, db_url, num_workers, analysis_func=None):
     worker_pool = multiprocessing.Pool(num_workers)
+    worker_pool.futures_list = []
     worker_bp = Blueprint("worker_bp", __name__)
     up_dir_func = (wraps(upload_recordings)(partial(upload_recordings, up_dir, db_url, worker_pool, analysis_func)))
     worker_bp.route("/upload_recordings", methods=['POST'])(up_dir_func)
