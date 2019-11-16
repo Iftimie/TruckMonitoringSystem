@@ -47,6 +47,15 @@ def gui_select_file():
     return fname
 
 
+from functools import wraps
+def ignore_remote_addresses(f):
+    @wraps(f)
+    def new_f(*args, **kwargs):
+        if request.remote_addr != '127.0.0.1':
+            make_response("Just what do you think you're doing, Dave?", 403)
+        return f(*args, **kwargs)
+    return new_f
+
 def create_microservice(db_url, dispatch_work_func):
     """
     Args:
@@ -60,6 +69,7 @@ def create_microservice(db_url, dispatch_work_func):
     Bootstrap(app)
 
     @app.route('/check_status')
+    @ignore_remote_addresses
     def check_status():
         session = create_session(db_url)
         VideoStatuses.check_and_download(session)
@@ -82,10 +92,8 @@ def create_microservice(db_url, dispatch_work_func):
         return resp
 
     @app.route('/file_select')
+    @ignore_remote_addresses
     def file_select():
-        if request.remote_addr != '127.0.0.1':
-            make_response("Just what do you think you're doing, Dave?", 403)
-
         fname = gui_select_file()
         if fname != '':
             dispatch_work_func(fname)
@@ -94,6 +102,7 @@ def create_microservice(db_url, dispatch_work_func):
             return redirect(url_for("index"))
 
     @app.route('/show_video')
+    @ignore_remote_addresses
     def show_video():
         session = create_session(db_url)
         item = VideoStatuses.find_results_path(session, request.args.get('filename'))
@@ -109,10 +118,12 @@ def create_microservice(db_url, dispatch_work_func):
         return resp
 
     @app.route('/')
+    @ignore_remote_addresses
     def root():
         return redirect(url_for("index"))
 
     @app.route('/index')
+    @ignore_remote_addresses
     def index():
         resp = make_response(render_template("index.html"))
         return resp
