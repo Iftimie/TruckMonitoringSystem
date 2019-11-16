@@ -4,6 +4,9 @@ from truckms.service.worker.user_client import get_job_dispathcher
 
 
 def flaskuimain():
+    # to package app
+    # https://www.reddit.com/r/Python/comments/bzql1t/create_htmlcssjavascript_gui_using_pythonflask/
+    # https://github.com/ClimenteA/flaskwebgui
     db_url = 'sqlite:///' + 'database.sqlite'
     work_func, work_pool, list_futures = get_job_dispathcher(db_url=db_url, num_workers=1, max_operating_res=320, skip=0)
     app = create_microservice(db_url, work_func)

@@ -130,7 +130,12 @@ class VideoStatuses(Base):
         """
         Updates the results_path column in VideoStatuses. This is when the detector has finished analyzing the video
         """
-        query = session.query(VideoStatuses).filter_by(file_path=file_path, results_path=None).all()
+        assert file_path is not None or new_results_path is not None
+        if file_path is not None:
+            query = session.query(VideoStatuses).filter_by(file_path=file_path, results_path=None).all()
+        else:
+            basename = os.path.splitext(new_results_path)[0]
+            query = session.query(VideoStatuses).filter(VideoStatuses.file_path.contains(basename)).all()
         assert len(query) == 1
         item = query[0]
         item.results_path = new_results_path

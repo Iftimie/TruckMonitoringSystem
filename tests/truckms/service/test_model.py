@@ -37,6 +37,29 @@ def test_session(tmpdir):
     assert results[1].results_path == 'new_blabla.csv'
 
 
+def test_update_results_path(tmpdir):
+    url = 'sqlite:///' + os.path.join(tmpdir.strpath, "video_statuses.db")
+    session = create_session(url)
+
+    VideoStatuses.add_video_status(session, file_path="blabla.avi", results_path=None)
+    results = VideoStatuses.get_video_statuses(session)
+    assert len(results) == 1
+    assert results[0].file_path == 'blabla.avi'
+    assert results[0].results_path is None
+
+    VideoStatuses.update_results_path(session, file_path="blabla.avi", new_results_path="blabla.csv")
+    results = VideoStatuses.get_video_statuses(session)
+    assert len(results) == 1
+    assert results[0].file_path == 'blabla.avi'
+    assert results[0].results_path == 'blabla.csv'
+
+    VideoStatuses.update_results_path(session, file_path=None, new_results_path="blabla.extension")
+    results = VideoStatuses.get_video_statuses(session)
+    assert len(results) == 1
+    assert results[0].file_path == 'blabla.avi'
+    assert results[0].results_path == 'blabla.extension'
+
+
 def test_high_level_api(tmpdir):
     url = 'sqlite:///' + os.path.join(tmpdir.strpath, "video_statuses.db")
     session = create_session(url)

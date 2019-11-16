@@ -40,20 +40,27 @@ def download_recordings(up_dir, db_url):
         session.close()
         return make_response("Sorry, got no work to do", 404)
 
+
 def upload_results(up_dir, db_url):
     for filename in request.files:
         f = request.files[filename]
         filename = secure_filename(filename)
-
-        
-
         filepath = os.path.join(up_dir, filename)
         f.save(filepath)
+        session = create_session(db_url)
+        VideoStatuses.update_results_path(session, file_path=None, new_results_path=filepath)
+        session.close()
+    return make_response("Thanks for your precious work", 200)
+
 
 def create_broker_blueprint(up_dir, db_url):
     broker_bp = Blueprint("broker_bp", __name__)
     heartbeat_func = (wraps(heartbeat)(partial(heartbeat, db_url)))
     broker_bp.route("/heartbeat", methods=['POST'])(heartbeat_func)
+
+    up_res_func = (wraps(upload_results)(partial(upload_results, up_dir, db_url)))
+    broker_bp.route("/upload_results", methods=['POST'])(up_res_func)
+
     broker_bp.role = "broker"
     return broker_bp
 
