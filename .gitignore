@@ -18,3 +18,4 @@ tests/truckms/service/dummy.avi
 tests/truckms/service/dummy.csv
 
 tmsvenv/
+examples/log.txt

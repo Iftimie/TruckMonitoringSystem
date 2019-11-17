@@ -2,7 +2,6 @@ from truckms.inference.neural import create_model, pred_iter_to_pandas, compute
 from truckms.inference.neural import create_model_efficient
 from truckms.inference.utils import framedatapoint_generator
 from truckms.inference.analytics import filter_pred_detections
-from functools import partial
 import os
 from truckms.service.model import create_session, VideoStatuses, HeartBeats
 from flask import Blueprint, Flask, send_file, send_from_directory
@@ -10,7 +9,9 @@ from flask import request, make_response
 from werkzeug import secure_filename
 from functools import partial, wraps
 import multiprocessing
-import requests
+import logging
+import traceback
+logger = logging.getLogger(__name__)
 
 
 def analyze_movie(video_path, max_operating_res, skip=0):
@@ -35,11 +36,15 @@ def analyze_and_updatedb(db_url, video_path, analysis_func):
         video_path: path to a file on the local disk
         analysis_func: a function that receives an argument with the video path and returns the path to results.csv
     """
-    session = create_session(db_url)
-    VideoStatuses.add_video_status(session, file_path=video_path, results_path=None)
-    destination = analysis_func(video_path)
-    VideoStatuses.update_results_path(session, file_path=video_path, new_results_path=destination)
-    session.close()
+    destination = None
+    try:
+        session = create_session(db_url)
+        VideoStatuses.add_video_status(session, file_path=video_path, results_path=None)
+        destination = analysis_func(video_path)
+        VideoStatuses.update_results_path(session, file_path=video_path, new_results_path=destination)
+        session.close()
+    except:
+        logger.info(traceback.format_exc())
     return destination
 
 
