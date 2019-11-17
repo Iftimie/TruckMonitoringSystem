@@ -5,13 +5,19 @@ from functools import partial, wraps
 import threading
 from werkzeug.serving import make_server
 import requests
-
+import logging
+import traceback
+logger = logging.getLogger(__name__)
+import socket
 
 NodeState = namedtuple('NodeState', ['ip', 'port', 'workload', 'hardware', 'nickname', 'node_type', 'email'])
-
+#TODO move this to a database. its too anoying to conver from dict to tuple, to namedtuple just to store them in a set...
+# especially in def update_function(local_port, app_roles, discovery_ips_file)
 
 def node_states(set_states):
     if request.method == 'POST':
+        if request.remote_addr != '127.0.0.1':
+            return make_response("Just what do you think you're doing, Dave?", 403)
         received_states = request.json
         received_states = set(NodeState(**content) for content in received_states)
         set_states.update(received_states)
@@ -27,6 +33,62 @@ def create_bookkeeper_blueprint():
     bookkeeper_bp.route("/node_states", methods=['POST', 'GET'])(func)
     bookkeeper_bp.role = "bookkeeper"
     return bookkeeper_bp
+
+
+def update_function(local_port, app_roles, discovery_ips_file):
+    """
+    Function for bookkeeper to make network discovery
+    """
+    try:
+        res = requests.get('http://localhost:{}/node_states'.format(local_port)).json()  # will get the data defined above
+        res = set(NodeState(*content) for content in res)
+        res = [item._asdict() for item in res]
+
+        # own state
+        discovered_states = [{'ip': socket.gethostbyname(socket.gethostname()),
+                              'port': local_port,
+                              'workload': find_workload(),
+                              'hardware': "Nvidia GTX 960M Intel i7",
+                              'nickname': "rmstn",
+                              'node_type': ",".join(app_roles + ['bookkeeper']),
+                              'email': 'iftimie.alexandru.florentin@gmail.com'}]
+
+        # other states
+        with open(discovery_ips_file, 'r') as f:
+            ip, port, workload, hardware, nickname, nodetype,email = f.readline().split(";")
+            discovered_states.append({'ip': ip, 'port': port, 'workload': workload, 'hardware': hardware,
+                                      'nickname': nickname,
+                                      'node_type': nodetype.replace('"', ''), 'email': email})
+
+        for state in res:
+            try:
+                discovered_ = requests.get('http://{}:{}/node_states'.format(state['ip'], state[
+                    'port'])).json()  # TODO should rename everything from host to ip
+                discovered_ = set(NodeState(*content) for content in discovered_)
+                discovered_states += [item._asdict() for item in discovered_]
+            except:
+                #some adresses may be dead
+                pass
+
+        # also store them
+        with open(discovery_ips_file, 'w') as f:
+            for state in discovered_states:
+                f.write("{ip};{port};{workload};{hardware};{nickname};{node_type};{email}\n".format(
+                    ip=state['ip'], port=state['port'], workload=state['workload'], hardware=state['hardware'],
+                    nickname=state['nickname'], node_type=state['node_type'], email=state['email']
+                ))
+
+
+
+        requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states)
+    except:
+        logger.info(traceback.format_exc())
+
+
+def create_bookkeeper_app(local_port, app_roles, discovery_ips_file):
+    bookkeeper_bp = create_bookkeeper_blueprint()
+    time_regular_func = partial(update_function, local_port, app_roles, discovery_ips_file)
+    return bookkeeper_bp, time_regular_func
 
 
 def create_microservice():

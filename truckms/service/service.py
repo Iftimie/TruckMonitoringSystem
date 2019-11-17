@@ -9,7 +9,9 @@ import io
 import pandas as pd
 from truckms.inference.analytics import filter_pred_detections, get_important_frames
 from truckms.service.model import create_session, VideoStatuses
-from truckms.service.bookkeeper import create_bookkeeper_blueprint
+from flask import make_response, request
+from functools import wraps
+import sys, subprocess as sps
 
 
 def image2htmlstr(image):
@@ -34,6 +36,15 @@ def html_imgs_generator(video_path, csv_path):
         yield image2htmlstr(fdp.image)
 
 
+def ignore_remote_addresses(f):
+    @wraps(f)
+    def new_f(*args, **kwargs):
+        if request.remote_addr != '127.0.0.1':
+            make_response("Just what do you think you're doing, Dave?", 403)
+        return f(*args, **kwargs)
+    return new_f
+
+
 def gui_select_file():
     """
     Opens a file selection dialog. Returns a string with the filepath
@@ -48,17 +59,7 @@ def gui_select_file():
     return fname
 
 
-from functools import wraps
-def ignore_remote_addresses(f):
-    @wraps(f)
-    def new_f(*args, **kwargs):
-        if request.remote_addr != '127.0.0.1':
-            make_response("Just what do you think you're doing, Dave?", 403)
-        return f(*args, **kwargs)
-    return new_f
-
-
-def create_microservice(db_url, dispatch_work_func):
+def create_guiservice(db_url, dispatch_work_func):
     """
     Args:
         db_url: url to a database
@@ -130,9 +131,33 @@ def create_microservice(db_url, dispatch_work_func):
         resp = make_response(render_template("index.html"))
         return resp
 
-    bookkeeper_bp = create_bookkeeper_blueprint()
-    app.roles = []
-    app.register_blueprint(bookkeeper_bp)
-    app.roles.append(bookkeeper_bp.role)
-
     return app
+
+
+def open_browser_func(self, localhost):
+    """
+        Adapted from https://github.com/ClimenteA/flaskwebgui/blob/master/src/flaskwebgui.py
+    """
+
+    browser_path = self.find_browser()
+
+    if browser_path:
+        try:
+            if self.app_mode:
+                if self.fullscreen:
+                    sps.Popen([browser_path, "--start-fullscreen", '--app={}'.format(localhost)],
+                              stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
+                else:
+                    sps.Popen([browser_path, "--window-size={},{}".format(self.width, self.height),
+                               '--app={}'.format(localhost)],
+                              stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
+            else:
+                sps.Popen([browser_path, localhost],
+                          stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
+
+        except:
+            sps.Popen([browser_path, localhost],
+                      stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
+    else:
+        import webbrowser
+        webbrowser.open_new(localhost)
