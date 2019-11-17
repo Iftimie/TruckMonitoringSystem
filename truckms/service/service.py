@@ -9,6 +9,7 @@ import io
 import pandas as pd
 from truckms.inference.analytics import filter_pred_detections, get_important_frames
 from truckms.service.model import create_session, VideoStatuses
+from truckms.service.bookkeeper import create_bookkeeper_blueprint
 
 
 def image2htmlstr(image):
@@ -55,6 +56,7 @@ def ignore_remote_addresses(f):
             make_response("Just what do you think you're doing, Dave?", 403)
         return f(*args, **kwargs)
     return new_f
+
 
 def create_microservice(db_url, dispatch_work_func):
     """
@@ -127,5 +129,10 @@ def create_microservice(db_url, dispatch_work_func):
     def index():
         resp = make_response(render_template("index.html"))
         return resp
+
+    bookkeeper_bp = create_bookkeeper_blueprint()
+    app.roles = []
+    app.register_blueprint(bookkeeper_bp)
+    app.roles.append(bookkeeper_bp.role)
 
     return app

@@ -12,11 +12,14 @@ def evaluate_workload():
     Returns a number between 0 and 1 that signifies the workload on the current PC. 0 represents no workload,
     1 means no more work can be done efficiently.
     """
-    deviceID = GPUtil.getFirstAvailable(order='first', maxLoad=0.5, maxMemory=0.5, attempts=1, interval=900,
-                                        verbose=False)
-    if len(deviceID) != 0:
-        return True
-    else:
+    try:
+        deviceID = GPUtil.getFirstAvailable(order='first', maxLoad=0.5, maxMemory=0.5, attempts=1, interval=900,
+                                            verbose=False)
+        if len(deviceID) != 0:
+            return True
+        else:
+            return False
+    except RuntimeError:
         return False
 
 
@@ -28,7 +31,7 @@ def select_lru_worker():
     res1 = [item for item in res1 if 'worker' in item['node_type'] or 'broker' in item['node_type']]
     if len(res1) == 0:
         print ("No worker or broker available")
-        assert False
+        return None, None
     res1 = sorted(res1, key=lambda x: x['workload'])
     return res1[0]['ip'], res1[0]['port']
 
@@ -53,12 +56,12 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, analysis_f
         analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
 
     def dispatch_work(video_path):
-        if evaluate_workload():
+        lru_ip, lru_port = select_lru_worker()
+        if evaluate_workload() or lru_ip is None:
             # do not remove this. this is useful. we don't want to upload in broker (waste time and storage when we want to process locally
             res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
             list_futures.append(res)
         else:
-            lru_ip, lru_port = select_lru_worker()
             session = create_session(db_url)
             VideoStatuses.add_video_status(session, file_path=video_path, results_path=None, remote_ip=lru_ip, remote_port=lru_port)
             data = {"max_operating_res": max_operating_res, "skip": skip}

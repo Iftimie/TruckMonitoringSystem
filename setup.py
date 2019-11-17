@@ -34,7 +34,6 @@ setuptools.setup(
         'mock',
         'gputil',
         'sqlalchemy',
-        'tkinter',
       ],
 
     keywords=['object', 'detection', 'truck']
