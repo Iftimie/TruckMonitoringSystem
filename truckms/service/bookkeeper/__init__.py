@@ -55,10 +55,13 @@ def update_function(local_port, app_roles, discovery_ips_file):
 
         # other states
         with open(discovery_ips_file, 'r') as f:
-            ip, port, workload, hardware, nickname, nodetype,email = f.readline().split(";")
-            discovered_states.append({'ip': ip, 'port': port, 'workload': workload, 'hardware': hardware,
-                                      'nickname': nickname,
-                                      'node_type': nodetype.replace('"', ''), 'email': email})
+            for line in f.readlines():
+                ip, port, workload, hardware, nickname, nodetype,email = line.replace("\n", "").split(";")
+                port, workload = int(port), int(workload)
+
+                discovered_states.append({'ip': ip, 'port': port, 'workload': workload, 'hardware': hardware,
+                                          'nickname': nickname,
+                                          'node_type': nodetype.replace('"', ''), 'email': email})
 
         for state in res:
             try:
@@ -68,7 +71,11 @@ def update_function(local_port, app_roles, discovery_ips_file):
                 discovered_states += [item._asdict() for item in discovered_]
             except:
                 #some adresses may be dead
+                #TODO maybe remove them?
                 pass
+
+        discovered_states = set(NodeState(**content) for content in discovered_states)
+        discovered_states = [item._asdict() for item in discovered_states]
 
         # also store them
         with open(discovery_ips_file, 'w') as f:
@@ -77,8 +84,6 @@ def update_function(local_port, app_roles, discovery_ips_file):
                     ip=state['ip'], port=state['port'], workload=state['workload'], hardware=state['hardware'],
                     nickname=state['nickname'], node_type=state['node_type'], email=state['email']
                 ))
-
-
 
         requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states)
     except:
