@@ -139,6 +139,7 @@ def create_worker_microservice(up_dir, db_url, num_workers):
     #  in order to avoid conflict between workers and brokers?
     app = Flask(__name__)
     app.roles = []
+    app.time_regular_funcs = []
     worker_bp, worker_pool = create_worker_blueprint(up_dir, db_url, num_workers)
     app.register_blueprint(worker_bp)
     app.roles.append(worker_bp.role)

@@ -1,8 +1,8 @@
-from truckms.service.service import create_guiservice
+from truckms.service.gui_interface import create_guiservice
 from truckms.service.worker.user_client import get_job_dispathcher
 import os.path as osp
 from mock import Mock
-from truckms.service import service
+from truckms.service import gui_interface
 from truckms.service.model import create_session, VideoStatuses
 from truckms.service import worker
 
@@ -18,7 +18,7 @@ class PickableMock(Mock):
         return (PickableMock, ())
 
 def test_new_microservice(tmpdir):
-    service.gui_select_file = Mock(return_value="dummy_filename")
+    gui_interface.gui_select_file = Mock(return_value="dummy_filename")
     worker.user_client.analyze_movie = PickableMock()
 
     db_url = 'sqlite:///' + osp.join(tmpdir.strpath, 'database.sqlite')
@@ -39,7 +39,7 @@ def test_new_microservice(tmpdir):
 
 def test_execution(tmpdir):
     input_file = osp.join(osp.dirname(__file__), 'data', 'cut.mkv')
-    service.gui_select_file = Mock(return_value=input_file)
+    gui_interface.gui_select_file = Mock(return_value=input_file)
 
     db_url = 'sqlite:///' + osp.join(tmpdir.strpath, 'database.sqlite')
     work_func, worker_pool, list_futures = get_job_dispathcher(db_url=db_url, num_workers=1, max_operating_res=320, skip=0)

@@ -45,7 +45,11 @@ def update_function(local_port, app_roles, discovery_ips_file):
         res = [item._asdict() for item in res]
 
         # own state
-        discovered_states = [{'ip': socket.gethostbyname(socket.gethostname()),
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip_ = s.getsockname()[0]
+        s.close()
+        discovered_states = [{'ip': ip_,
                               'port': local_port,
                               'workload': find_workload(),
                               'hardware': "Nvidia GTX 960M Intel i7",

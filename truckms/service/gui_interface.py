@@ -12,6 +12,38 @@ from truckms.service.model import create_session, VideoStatuses
 from flask import make_response, request
 from functools import wraps
 import sys, subprocess as sps
+from flaskwebgui import FlaskUI  # get the FlaskUI class
+from threading import Thread
+from functools import partial
+
+
+def open_browser_func(self, localhost):
+    """
+        Adapted from https://github.com/ClimenteA/flaskwebgui/blob/master/src/flaskwebgui.py
+    """
+
+    browser_path = self.find_browser()
+
+    if browser_path:
+        try:
+            if self.app_mode:
+                if self.fullscreen:
+                    sps.Popen([browser_path, "--start-fullscreen", '--app={}'.format(localhost)],
+                              stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
+                else:
+                    sps.Popen([browser_path, "--window-size={},{}".format(self.width, self.height),
+                               '--app={}'.format(localhost)],
+                              stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
+            else:
+                sps.Popen([browser_path, localhost],
+                          stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
+
+        except:
+            sps.Popen([browser_path, localhost],
+                      stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
+    else:
+        import webbrowser
+        webbrowser.open_new(localhost)
 
 
 def image2htmlstr(image):
@@ -59,7 +91,7 @@ def gui_select_file():
     return fname
 
 
-def create_guiservice(db_url, dispatch_work_func):
+def create_guiservice(db_url, dispatch_work_func, port):
     """
     Args:
         db_url: url to a database
@@ -131,33 +163,7 @@ def create_guiservice(db_url, dispatch_work_func):
         resp = make_response(render_template("index.html"))
         return resp
 
-    return app
+    uiapp = FlaskUI(app, host="0.0.0.0", port=port)
+    uiapp.browser_thread = Thread(target=partial(open_browser_func, uiapp, localhost='http://127.0.0.1:{}/'.format(port)))
 
-
-def open_browser_func(self, localhost):
-    """
-        Adapted from https://github.com/ClimenteA/flaskwebgui/blob/master/src/flaskwebgui.py
-    """
-
-    browser_path = self.find_browser()
-
-    if browser_path:
-        try:
-            if self.app_mode:
-                if self.fullscreen:
-                    sps.Popen([browser_path, "--start-fullscreen", '--app={}'.format(localhost)],
-                              stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
-                else:
-                    sps.Popen([browser_path, "--window-size={},{}".format(self.width, self.height),
-                               '--app={}'.format(localhost)],
-                              stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
-            else:
-                sps.Popen([browser_path, localhost],
-                          stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
-
-        except:
-            sps.Popen([browser_path, localhost],
-                      stdout=sps.PIPE, stderr=sps.PIPE, stdin=sps.PIPE)
-    else:
-        import webbrowser
-        webbrowser.open_new(localhost)
+    return uiapp, app

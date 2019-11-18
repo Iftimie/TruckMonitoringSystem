@@ -24,4 +24,5 @@ eel
 flaskwebgui
 sqlalchemy
 requests
+netifaces
 
