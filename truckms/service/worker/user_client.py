@@ -5,6 +5,7 @@ import requests
 from truckms.service.model import create_session, VideoStatuses
 import os
 import GPUtil
+from truckms.service.bookkeeper import NodeState
 
 
 def evaluate_workload():
@@ -23,12 +24,15 @@ def evaluate_workload():
         return False
 
 
-def select_lru_worker():
+def select_lru_worker(local_port):
     """
     Selects the least recently used worker from the known states and returns its IP and PORT
     """
-    res1 = requests.get('http://localhost:5000/node_states').json()  # will get the data defined above
-    res1 = [item for item in res1 if 'worker' in item['node_type'] or 'broker' in item['node_type']]
+    res = requests.get('http://localhost:{}/node_states'.format(local_port)).json()  # will get the data defined above
+    res = set(NodeState(*content) for content in res)
+    res = [item._asdict() for item in res]
+
+    res1 = [item for item in res if 'worker' in item['node_type'] or 'broker' in item['node_type']]
     if len(res1) == 0:
         print ("No worker or broker available")
         return None, None
@@ -36,7 +40,7 @@ def select_lru_worker():
     return res1[0]['ip'], res1[0]['port']
 
 
-def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, analysis_func=None):
+def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port, analysis_func=None):
     """
     Creates a function that is able to dispatch work. Work can be done locally or remote.
 
@@ -45,6 +49,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, analysis_f
         num_workers: how many concurrent jobs should be done locally before dispatching to a remote worker
         max_operating_res: operating resolution. bigger resolution will yield better detections
         skip: how many frames should be skipped when processing, recommended 0
+        local_port: port for making requests to the bookeeper service in order to find the available workers
         analysis_func: OPTIONAL.
     Return:
         function that can be called with a video_path
@@ -56,7 +61,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, analysis_f
         analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
 
     def dispatch_work(video_path):
-        lru_ip, lru_port = select_lru_worker()
+        lru_ip, lru_port = select_lru_worker(local_port)
         if evaluate_workload() or lru_ip is None:
             # do not remove this. this is useful. we don't want to upload in broker (waste time and storage when we want to process locally
             res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))

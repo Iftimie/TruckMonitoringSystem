@@ -15,7 +15,7 @@ def flaskuimain():
     port = 5000
     time_interval = 10
 
-    work_func, work_pool, list_futures = get_job_dispathcher(db_url=db_url, num_workers=1, max_operating_res=320, skip=0)
+    work_func, work_pool, list_futures = get_job_dispathcher(db_url=db_url, num_workers=1, max_operating_res=320, skip=0, local_port=port)
     uiapp, app = create_guiservice(db_url, work_func, port)
 
     # TODO refactor app.roles, time_regular_funcs into a class
