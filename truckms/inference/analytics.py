@@ -327,7 +327,7 @@ def get_important_frames(df, labels_to_consider=None):
 
     important_frames = sorted(list(set(important_frames)))
 
-    df = df.ix[important_frames]
+    df = df.loc[important_frames]
     # df['img_id'] = df.index
     df = df.reset_index()
 

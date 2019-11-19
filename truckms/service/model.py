@@ -82,7 +82,7 @@ class VideoStatuses(Base):
                 request_data = {"filename": filename}
                 res = requests.get('http://{}:{}/download_results'.format(q.remote_ip, q.remote_port),
                                    data=request_data)
-                if res.status_code == 200 and res.content == b'There is no file with this name: ' + bytes(filename,
+                if res.status_code == 200 and res.content != b'There is no file with this name: ' + bytes(filename,
                                                                                   encoding='utf8'):
                     filepath, _ = os.path.splitext(q.file_path)
                     q.results_path = filepath + ".csv"
@@ -147,7 +147,8 @@ class VideoStatuses(Base):
         Finds the results path given a file_path
         """
         query = session.query(VideoStatuses).filter_by(file_path=file_path).all()
-        assert len(query) == 1
+        #TODO in debug mode, because of multiple runs, more duplicates may appear
+        assert len(query) >= 1
         return query[0]
 
 

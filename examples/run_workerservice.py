@@ -1,9 +1,7 @@
-from truckms.service.common import start_update_thread
-
-
 def flaskuimain():
     from truckms.service.worker.server import create_worker_microservice
     from truckms.service.bookkeeper import create_bookkeeper_app
+    from truckms.service.common import start_update_thread
     from functools import partial
 
     # to package app
@@ -34,6 +32,9 @@ def flaskuimain():
 if __name__ == '__main__':
     import logging.config
     import sys
+    import torch
+
+    torch.multiprocessing.set_start_method('spawn')
     logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S',
                         handlers=[
                             logging.FileHandler('log.txt'),

@@ -92,7 +92,6 @@ def update_function(local_port, app_roles, discovery_ips_file):
 
         # publish the results to the current node and also to the rest of the nodes
         requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states)
-        print ("wtf man")
         for state in res:
             try:
                 requests.post('http://{}:{}/node_states'.format(state['ip'], state['port']), json=discovered_states)

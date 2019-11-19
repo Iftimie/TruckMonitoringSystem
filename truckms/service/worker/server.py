@@ -82,8 +82,8 @@ def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
         f.save(filepath)
 
         detector_options = request.form
-        max_operating_res = detector_options['max_operating_res']
-        skip = detector_options['skip']
+        max_operating_res = int(detector_options['max_operating_res'])
+        skip = int(detector_options['skip'])
 
         if not pool_can_do_more_work(worker_pool) and worker_heartbeats(db_url):
             #store the files as broker

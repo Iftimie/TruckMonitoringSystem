@@ -132,6 +132,8 @@ def create_guiservice(db_url, dispatch_work_func, port):
         fname = gui_select_file()
         if fname != '':
             dispatch_work_func(fname)
+            #TODO probably because the redirect is faster than the upload, the check_status will delete the request from db
+            # as it will consider it a dead request, thus I need to syncronize somewhere, or wait
             return redirect(url_for("check_status"))
         else:
             return redirect(url_for("index"))

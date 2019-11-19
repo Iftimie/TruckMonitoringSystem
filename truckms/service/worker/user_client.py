@@ -6,6 +6,7 @@ from truckms.service.model import create_session, VideoStatuses
 import os
 import GPUtil
 from truckms.service.bookkeeper import NodeState
+import time
 
 
 def evaluate_workload():
@@ -29,8 +30,6 @@ def select_lru_worker(local_port):
     Selects the least recently used worker from the known states and returns its IP and PORT
     """
     res = requests.get('http://localhost:{}/node_states'.format(local_port)).json()  # will get the data defined above
-    res = set(NodeState(*content) for content in res)
-    res = [item._asdict() for item in res]
 
     res1 = [item for item in res if 'worker' in item['node_type'] or 'broker' in item['node_type']]
     if len(res1) == 0:
@@ -74,6 +73,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port
             res = requests.post('http://{}:{}/upload_recordings'.format(lru_ip, lru_port), data=data, files=files)
             assert res.content == b"Files uploaded and started runniing the detector. Check later for the results"
             session.close()
+            time.sleep(1)
             # do work remotely
 
     return dispatch_work, worker_pool, list_futures
