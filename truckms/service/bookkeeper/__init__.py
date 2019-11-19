@@ -109,12 +109,13 @@ def create_bookkeeper_app(local_port, app_roles, discovery_ips_file):
     return bookkeeper_bp, time_regular_func
 
 
-def create_microservice():
+def create_bookkeeper_service(local_port, discovery_ips_file):
     app = Flask(__name__)
     app.roles = []
-    bookkeeper_bp = create_bookkeeper_blueprint()
+    app.time_regular_funcs = []
+    bookkeeper_bp, time_regular_func = create_bookkeeper_app(local_port, app.roles, discovery_ips_file)
     app.register_blueprint(bookkeeper_bp)
-    app.roles.append(bookkeeper_bp.role)
+    app.time_regular_funcs.append(time_regular_func)
 
     return app
 

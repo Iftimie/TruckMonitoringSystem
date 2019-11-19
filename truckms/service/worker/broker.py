@@ -3,7 +3,7 @@ from functools import wraps, partial
 from werkzeug import secure_filename
 from flask import Blueprint, Flask, send_file, send_from_directory
 from truckms.service.model import create_session, VideoStatuses, HeartBeats
-import requests
+from truckms.service.worker.server import create_worker_microservice
 import os
 
 
@@ -66,9 +66,9 @@ def create_broker_blueprint(up_dir, db_url):
 
 
 def create_broker_microservice(up_dir, db_url):
-    app = Flask(__name__)
-    app.roles = []
+    # num_workers is 0 because this service is only a broker, however, a worker can also be a broker
+    app, worker_pool = create_worker_microservice(up_dir, db_url, num_workers=0)
     broker_bp = create_broker_blueprint(up_dir, db_url)
     app.register_blueprint(broker_bp)
     app.roles.append(broker_bp.role)
-    return app
+    return app, worker_pool

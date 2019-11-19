@@ -3,16 +3,23 @@ from truckms.service.worker.server import analyze_and_updatedb, analyze_movie
 from functools import partial
 import requests
 import time
-import re
+import logging
+import traceback
+logger = logging.getLogger(__name__)
 import os
 
-def get_available_brokers():
-    res1 = requests.get('http://localhost:5000/node_states').json()  # will get the data defined above
-    res1 = [item for item in res1 if 'broker' in item['node_type']]
-    if len(res1) == 0:
-        print("No broker available")
-        assert False
-    res1 = sorted(res1, key=lambda x: x['workload'])
+def get_available_brokers(local_port):
+    res1 = []
+    try:
+        res1 = requests.get('http://localhost:{}/node_states'.format(local_port)).json()  # will get the data defined above
+        res1 = [item for item in res1 if 'broker' in item['node_type']]
+        if len(res1) == 0:
+            logger.info("No broker available")
+            return res1
+        res1 = sorted(res1, key=lambda x: x['workload'])
+    except:
+        logger.info(traceback.format_exc())
+
     # workload for client
     #   client will send file to brokers with workers waiting
     # workload for worker
@@ -21,14 +28,14 @@ def get_available_brokers():
     return res1
 
 
-def find_response_with_work():
+def find_response_with_work(local_port):
 
     work_found = False
     res = None
     res_broker_ip = None
     res_broker_port = None
     while work_found is False:
-        brokers = get_available_brokers()
+        brokers = get_available_brokers(local_port=local_port)
         for broker in brokers:
             broker_ip, broker_port = broker['ip'], broker['port']
             try:
@@ -75,8 +82,8 @@ def save_response(up_dir, res):
     return filepath, max_operating_res, skip
 
 
-def do_work(up_dir, db_url):
-    res, broker_ip, broker_port = find_response_with_work()
+def do_work(up_dir, db_url, local_port):
+    res, broker_ip, broker_port = find_response_with_work(local_port=local_port)
     filepath, max_operating_res, skip = save_response(up_dir, res)
     # TODO I should get from somewhere from the response the max_operating_res and skip
     analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)

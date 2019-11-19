@@ -1,6 +1,6 @@
-def workermain():
-    from truckms.service.worker.server import create_worker_microservice
-    from truckms.service.bookkeeper import create_bookkeeper_app
+def workerclientmain():
+    from truckms.service.bookkeeper import create_bookkeeper_service
+    from truckms.service.worker.worker_client import do_work
     from truckms.service.common import start_update_thread
     from functools import partial
 
@@ -11,13 +11,8 @@ def workermain():
     host = "0.0.0.0"
     time_interval = 10
 
-    app, worker_pool = create_worker_microservice(up_dir, db_url, 1)
-    # app allready has roles after calling create_worker_microservice
-    # also time_regular_funcs
-
-    bookkeeper_bp, bookkeeper_time_regular_func = create_bookkeeper_app(local_port=port, app_roles=app.roles, discovery_ips_file="discovery_ips")
-    app.register_blueprint(bookkeeper_bp)
-    app.time_regular_funcs.append(bookkeeper_time_regular_func)
+    app = create_bookkeeper_service(local_port=port, discovery_ips_file="discovery_ips")
+    app.time_regular_funcs.append(partial(do_work, up_dir, db_url, port))
 
     start_update_thread(app.time_regular_funcs, time_interval)
 
@@ -35,4 +30,4 @@ if __name__ == '__main__':
                             logging.FileHandler('log.txt'),
                             logging.StreamHandler(sys.stdout)
                         ])
-    workermain()
+    workerclientmain()
