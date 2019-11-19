@@ -166,3 +166,12 @@ def test_remove_dead_requests(tmpdir):
     assert len(results) == 1
     server1.shutdown()
 
+from truckms.service.model import HeartBeats
+import time
+def test_has_recent_heartbeat(tmpdir):
+    url = 'sqlite:///' + os.path.join(tmpdir.strpath, "video_statuses.db")
+    session = create_session(url)
+    HeartBeats.add_heartbeat(session)
+    time.sleep(1)
+    assert True == HeartBeats.has_recent_heartbeat(session, 1)
+    session.close()

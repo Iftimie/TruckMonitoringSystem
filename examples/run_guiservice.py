@@ -5,12 +5,15 @@ def flaskuimain():
     from truckms.service.gui_interface import create_guiservice, open_browser_func
     from truckms.service.worker.user_client import get_job_dispathcher
     from truckms.service.bookkeeper import create_bookkeeper_app
-
+    import os
     # to package app
     # https://www.reddit.com/r/Python/comments/bzql1t/create_htmlcssjavascript_gui_using_pythonflask/
     # https://github.com/ClimenteA/flaskwebgui
 
     db_url = 'sqlite:///' + 'database.sqlite'
+    remove_db = True
+    if remove_db and os.path.exists(db_url.replace('sqlite:///', '')):
+        os.remove(db_url.replace('sqlite:///', ''))
 
     port = 5000
     time_interval = 10

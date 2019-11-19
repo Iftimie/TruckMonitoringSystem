@@ -3,11 +3,15 @@ def brokermain():
     from truckms.service.bookkeeper import create_bookkeeper_app
     from truckms.service.common import start_update_thread
     from functools import partial
+    import os
 
-    db_url = 'sqlite:///' + 'database.sqlite'
     up_dir = "/data1/workspaces/aiftimie/tms/worker_updir"
+    db_url = 'sqlite:///' + os.path.join(up_dir, 'database.sqlite')
+    remove_db = True
+    if remove_db and os.path.exists(db_url.replace('sqlite:///', '')):
+        os.remove(db_url.replace('sqlite:///', ''))
 
-    port = 5000
+    port = 5001
     host = "0.0.0.0"
     time_interval = 10
 
@@ -33,4 +37,4 @@ if __name__ == '__main__':
                             logging.FileHandler('log.txt'),
                             logging.StreamHandler(sys.stdout)
                         ])
-    workermain()
+    brokermain()

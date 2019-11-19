@@ -39,8 +39,8 @@ def find_response_with_work(local_port):
         for broker in brokers:
             broker_ip, broker_port = broker['ip'], broker['port']
             try:
-                res = requests.get('http://{}:{}/download_recordings'.format(broker_ip, broker_port)).json()
-                if res.content != b"Got no work to do":
+                res = requests.get('http://{}:{}/download_recordings'.format(broker_ip, broker_port))
+                if res.content != b'Sorry, got no work to do':
                     work_found = True
                     res_broker_ip = broker_ip
                     res_broker_port = broker_port
@@ -59,23 +59,25 @@ def upload_results(results_path, broker_ip, broker_port):
     files = {os.path.basename(results_path): open(results_path, 'rb')}
     for i in range(10):
         try:
-            res = requests.post('http://{}:{}/upload_recordings'.format(broker_ip, broker_port), files=files, timeout=30)
+            res = requests.post('http://{}:{}/upload_results'.format(broker_ip, broker_port), files=files, timeout=30)
             if res.content == b"Thank you for your work":
                 break
             elif res.content == b"There is no video file for this result":
                 # It should be unlikely to happen
                 # TODO maybe the brokers should implement a list of files that are in processing mode
                 #  just in order to not lose the work done and send back to the corresponding broker
+                logger.info(res.content.decode("utf-8"))
                 break
                 pass
         except:
+            logger.info(traceback.format_exc())
             pass
 
 def save_response(up_dir, res):
 
     filename = res.headers.get('filename')
-    max_operating_res = res.headers.get('max_operating_res')
-    skip = res.headers.get('skip')
+    max_operating_res = int(res.headers.get('max_operating_res'))
+    skip = int(res.headers.get('skip'))
     filepath = os.path.join(up_dir, filename)
     with open(filepath, 'wb') as f:
         f.write(res.content)

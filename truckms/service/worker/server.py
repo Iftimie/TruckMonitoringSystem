@@ -108,7 +108,7 @@ def download_results(up_dir, db_url):
     """
     session = create_session(db_url)
     filepath = os.path.join(up_dir, request.form["filename"])
-
+    session.close()
     try:
         item = VideoStatuses.find_results_path(session, filepath)
         if item.results_path is not None:

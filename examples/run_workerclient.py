@@ -3,11 +3,13 @@ def workerclientmain():
     from truckms.service.worker.worker_client import do_work
     from truckms.service.common import start_update_thread
     from functools import partial
+    import os
 
-    db_url = 'sqlite:///' + 'database.sqlite'
-    up_dir = "/data1/workspaces/aiftimie/tms/worker_updir"
+    stuff_dir = r"D:\tms_data\node_dirs\worker_client"
+    db_url = 'sqlite:///' + os.path.join(stuff_dir, 'database.sqlite')
+    up_dir = r"D:\tms_data\node_dirs\worker_client\up_dir"
 
-    port = 5000
+    port = 5002
     host = "0.0.0.0"
     time_interval = 10
 

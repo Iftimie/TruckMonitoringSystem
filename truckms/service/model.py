@@ -14,7 +14,7 @@ class HeartBeats(Base):
     """
     __tablename__ = 'heartbeats'
     id = Column(Integer, primary_key=True)
-    time_of_heartbeat = Column(DateTime, default=datetime.utcnow)
+    time_of_heartbeat = Column(DateTime, default=datetime.now)
 
     @staticmethod
     def has_recent_heartbeat(session, minutes):
@@ -24,7 +24,7 @@ class HeartBeats(Base):
         past = datetime.now() - timedelta(minutes=minutes)
         result = session.query(HeartBeats).all()
         for r in result:
-            if r > past:
+            if r.time_of_heartbeat > past:
                 return True
         return False
 
@@ -134,7 +134,7 @@ class VideoStatuses(Base):
         if file_path is not None:
             query = session.query(VideoStatuses).filter_by(file_path=file_path, results_path=None).all()
         else:
-            basename = os.path.splitext(new_results_path)[0]
+            basename = os.path.splitext(os.path.basename(new_results_path))[0]
             query = session.query(VideoStatuses).filter(VideoStatuses.file_path.contains(basename)).all()
         assert len(query) == 1
         item = query[0]

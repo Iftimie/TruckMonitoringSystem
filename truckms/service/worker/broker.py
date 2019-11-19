@@ -25,19 +25,27 @@ def download_recordings(up_dir, db_url):
     # res = VideoStatuses.get_video_statuses(session).filter(VideoStatuses.results_path == None,
     #                                                        VideoStatuses.remote_ip != None,
     #                                                        VideoStatuses.remote_port != None).all()
-    res = VideoStatuses.get_video_statuses(session).filter(VideoStatuses.results_path == None).all()
-
+    res = session.query(VideoStatuses).filter(VideoStatuses.results_path == None).all()
+    heartbeat(db_url)
+    session.close()
+    # TODO may remove the route for heartbeat as it is redundant
+    #  if a worker asks for a file, It should automatically add a heat bead.
     if len(res) > 0:
         res.sort(key=lambda item: item.time_of_request)
         item = res[0]
-        path = item.results_path
-        session.close()
+        path = item.file_path
+
         if len(path.split(os.sep)) == 1:
-            return send_from_directory(up_dir, path)
+            result = send_from_directory(up_dir, path, as_attachment=True)
         else:
-            return send_file(item.results_path)
+            result = send_file(path, as_attachment=True)
+
+        result.headers["max_operating_res"] = item.max_operating_res
+        result.headers["skip"] = item.skip
+        result.headers["filename"] = os.path.basename(item.file_path)
+        return result
+
     else:
-        session.close()
         return make_response("Sorry, got no work to do", 404)
 
 
@@ -61,13 +69,17 @@ def create_broker_blueprint(up_dir, db_url):
     up_res_func = (wraps(upload_results)(partial(upload_results, up_dir, db_url)))
     broker_bp.route("/upload_results", methods=['POST'])(up_res_func)
 
+    down_rec_func = (wraps(download_recordings)(partial(download_recordings, up_dir, db_url)))
+    broker_bp.route("/download_recordings", methods=['GET'])(down_rec_func)
+
     broker_bp.role = "broker"
     return broker_bp
 
 
 def create_broker_microservice(up_dir, db_url):
     # num_workers is 0 because this service is only a broker, however, a worker can also be a broker
-    app, worker_pool = create_worker_microservice(up_dir, db_url, num_workers=0)
+    app, worker_pool = create_worker_microservice(up_dir, db_url, num_workers=1)
+    worker_pool._processes = 0
     broker_bp = create_broker_blueprint(up_dir, db_url)
     app.register_blueprint(broker_bp)
     app.roles.append(broker_bp.role)

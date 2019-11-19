@@ -36,6 +36,8 @@ def select_lru_worker(local_port):
         print ("No worker or broker available")
         return None, None
     res1 = sorted(res1, key=lambda x: x['workload'])
+    # TODO if res1 has a list of dead workers or brokers, I should test for their connection and return the first ip and port
+    #  that is alive
     return res1[0]['ip'], res1[0]['port']
 
 
@@ -73,7 +75,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port
             res = requests.post('http://{}:{}/upload_recordings'.format(lru_ip, lru_port), data=data, files=files)
             assert res.content == b"Files uploaded and started runniing the detector. Check later for the results"
             session.close()
-            time.sleep(1)
+            time.sleep(2)
             # do work remotely
 
     return dispatch_work, worker_pool, list_futures
