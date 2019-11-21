@@ -8,3 +8,14 @@ examples/up_dir/
 *.webm
 *.mp4
 out.png
+*.sqlite
+tests/truckms/service/data/cut.csv
+tests/truckms/service/dummy_filename.csv
+tests/truckms/service/worker/dummy.csv
+
+tests/truckms/service/worker/dummy.avi
+tests/truckms/service/dummy.avi
+tests/truckms/service/dummy.csv
+
+tmsvenv/
+examples/log.txt

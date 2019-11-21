@@ -16,6 +16,7 @@
                 <tr>
                   <th scope="col">Filename</th>
                   <th scope="col">Status</th>
+                  <th scope="col">Time of request</th>
                 </tr>
               </thead>
           <tbody>
@@ -30,6 +31,7 @@
                               >
                         {{ row['filename'] }}</button></td>
                   <td>{{ row['status'] }}</td>
+                  <td>{{ row['time_of_request'] }}</td>
               </tr>
             {% endfor %}
           </tbody>

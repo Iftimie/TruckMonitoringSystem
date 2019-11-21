@@ -1,4 +1,4 @@
-from truckms.inference.neural import create_model, compute, plot_detections, pred_iter_to_pandas, pandas_to_pred_iter
+from truckms.inference.neural import create_model, create_model_efficient, compute, plot_detections, pred_iter_to_pandas, pandas_to_pred_iter
 from truckms.inference.neural import iterable2batch
 from truckms.inference.utils import framedatapoint_generator_by_frame_ids2
 from truckms.api import FrameDatapoint, PredictionDatapoint
@@ -27,7 +27,7 @@ def test_truck_detector():
     show_image = False
     test_image_path = osp.join(osp.dirname(__file__), 'data', 'test_image.PNG')
     test_image = cv2.cvtColor(cv2.imread(test_image_path), cv2.COLOR_BGR2RGB)
-    model = create_model()
+    model = create_model_efficient()
 
     input_images = [FrameDatapoint(test_image, 1)]
     predictions = list(compute(input_images, model))

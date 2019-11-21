@@ -1,5 +1,5 @@
 import numpy as np
-from sklearn.utils.linear_assignment_ import linear_assignment
+from scipy.optimize import linear_sum_assignment
 "Credits to https://github.com/kcg2015/Vehicle-Detection-and-Tracking/blob/master/"
 
 # !/usr/bin/env python2
@@ -132,7 +132,9 @@ def assign_detections_to_trackers(trackers, detections, iou_thrd=0.3):
     # Solve the maximizing the sum of IOU assignment problem using the
     # Hungarian algorithm (also known as Munkres algorithm)
 
-    matched_idx = linear_assignment(-IOU_mat)
+    indices = linear_sum_assignment(-IOU_mat)
+    indices = np.asarray(indices)
+    matched_idx = np.transpose(indices)
 
     unmatched_trackers, unmatched_detections = [], []
     for t, trk in enumerate(trackers):
@@ -321,11 +323,11 @@ def get_important_frames(df, labels_to_consider=None):
 
     important_frames = []
     for i in df['obj_id'].unique():
-        important_frames.append(df[df['obj_id'] == i]['area'].argmax())
+        important_frames.append(df[df['obj_id'] == i]['area'].idxmax())
 
     important_frames = sorted(list(set(important_frames)))
 
-    df = df.ix[important_frames]
+    df = df.loc[important_frames]
     # df['img_id'] = df.index
     df = df.reset_index()
 
