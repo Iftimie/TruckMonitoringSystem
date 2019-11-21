@@ -7,7 +7,7 @@ def test_upload_recordings(tmpdir):
     updir = osp.join(tmpdir.strpath, "updir")
     dburl = 'sqlite:///' + os.path.join(tmpdir.strpath, "video_statuses.db")
     os.mkdir(updir)
-    app = create_broker_microservice(updir, dburl)
+    app, worker_pool = create_broker_microservice(updir, dburl)
     client = app.test_client()
     with open(os.path.join(tmpdir.strpath, 'dummy.avi'), "w") as f: f.write("dummy_content")
     file_data = {'dummy.avi': open(os.path.join(tmpdir.strpath, 'dummy.avi'), 'rb')}

@@ -7,6 +7,9 @@ import os
 import GPUtil
 from truckms.service.bookkeeper import NodeState
 import time
+import logging
+import traceback
+logger = logging.getLogger(__name__)
 
 
 def evaluate_workload():
@@ -29,7 +32,11 @@ def select_lru_worker(local_port):
     """
     Selects the least recently used worker from the known states and returns its IP and PORT
     """
-    res = requests.get('http://localhost:{}/node_states'.format(local_port)).json()  # will get the data defined above
+    try:
+        res = requests.get('http://localhost:{}/node_states'.format(local_port)).json()  # will get the data defined above
+    except:
+        logger.info(traceback.format_exc())
+        return None, None
 
     res1 = [item for item in res if 'worker' in item['node_type'] or 'broker' in item['node_type']]
     if len(res1) == 0:
