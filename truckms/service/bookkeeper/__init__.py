@@ -1,4 +1,5 @@
-from flask import Flask, make_response, request, jsonify
+from flask import make_response, request, jsonify
+from truckms.service_v2.api import P2PFlaskApp
 from collections import namedtuple
 from flask import Blueprint
 from functools import partial, wraps
@@ -111,13 +112,25 @@ def create_bookkeeper_app(local_port, app_roles, discovery_ips_file):
     return bookkeeper_bp, time_regular_func
 
 
-def create_bookkeeper_service(local_port, discovery_ips_file):
-    app = Flask(__name__)
-    app.roles = []
-    app.time_regular_funcs = []
+def create_bookkeeper_service(local_port: int, discovery_ips_file: str) -> P2PFlaskApp:
+    """
+    Creates a bookkeeper service. The bookkeeper service has the role of discovering other nodes in the network.
+    It consists of a server that handles GET or POST requests about the node states. It also has a background active
+    function that makes requests to the local bookkeeper server and to remote bookkeeper servers in order to make new
+    discoveries.
+
+    Args:
+        local_port: the local port tells the time_regular_func on which port to make requests to /node_states
+        discovery_ips_file: path to a file containing node states. the network discovery starts from making requests to
+            nodes found in this file
+
+    Returns:
+        P2PFlaskApp
+    """
+    app = P2PFlaskApp(__name__)
     bookkeeper_bp, time_regular_func = create_bookkeeper_app(local_port, app.roles, discovery_ips_file)
     app.register_blueprint(bookkeeper_bp)
-    app.time_regular_funcs.append(time_regular_func)
+    app.register_time_regular_func(time_regular_func)
 
     return app
 

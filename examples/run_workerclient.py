@@ -1,7 +1,6 @@
 def workerclientmain():
     from truckms.service.bookkeeper import create_bookkeeper_service
     from truckms.service.worker.worker_client import do_work
-    from truckms.service.common import start_update_thread
     from functools import partial
     import os
 
@@ -11,12 +10,9 @@ def workerclientmain():
 
     port = 5002
     host = "0.0.0.0"
-    time_interval = 10
 
     app = create_bookkeeper_service(local_port=port, discovery_ips_file="discovery_ips")
-    app.time_regular_funcs.append(partial(do_work, up_dir, db_url, port))
-
-    start_update_thread(app.time_regular_funcs, time_interval)
+    app.register_time_regular_func(partial(do_work, up_dir, db_url, port))
 
     app.run(host=host, port=port)
 

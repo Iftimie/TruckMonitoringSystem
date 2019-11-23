@@ -91,14 +91,22 @@ def gui_select_file():
     return fname
 
 
-def create_guiservice(db_url, dispatch_work_func, port):
+from truckms.service_v2.api import P2PFlaskApp
+
+
+def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> [FlaskUI, P2PFlaskApp]:
     """
     Args:
         db_url: url to a database
         dispatch_work_func: function that receives a string as argument. This argument is a video file path. The function
             should do something with that file
+        port: port for the GUI service
+
+    Returns:
+        FlaskUI object
+        P2PFlaskApp object
     """
-    app = Flask(__name__, template_folder=osp.join(osp.dirname(__file__), 'templates'),
+    app = P2PFlaskApp(__name__, template_folder=osp.join(osp.dirname(__file__), 'templates'),
                 static_folder=osp.join(osp.dirname(__file__), 'templates', 'assets'))
 
     Bootstrap(app)
