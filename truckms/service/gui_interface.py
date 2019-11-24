@@ -15,6 +15,7 @@ import sys, subprocess as sps
 from flaskwebgui import FlaskUI  # get the FlaskUI class
 from threading import Thread
 from functools import partial
+from typing import Tuple
 
 
 def open_browser_func(self, localhost):
@@ -94,8 +95,11 @@ def gui_select_file():
 from truckms.service_v2.api import P2PFlaskApp
 
 
-def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> [FlaskUI, P2PFlaskApp]:
+def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> Tuple[FlaskUI, P2PFlaskApp]:
     """
+    This factory method creates the FlaskUI and P2PFlaskApp. In order to start the application, the method run of
+    FlaskUI object must be called. The P2PFlaskApp object can be used to add additional blueprints.
+
     Args:
         db_url: url to a database
         dispatch_work_func: function that receives a string as argument. This argument is a video file path. The function

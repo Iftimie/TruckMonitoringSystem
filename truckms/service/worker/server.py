@@ -11,6 +11,8 @@ from functools import partial, wraps
 import multiprocessing
 import logging
 import traceback
+from truckms.service_v2.api import P2PFlaskApp, P2PBlueprint
+from typing import Callable
 logger = logging.getLogger(__name__)
 
 
@@ -18,6 +20,15 @@ def analyze_movie(video_path, max_operating_res, skip=0):
     """
     Attention!!! if the movie is short or too fast and skip  is too big, then it may result with no detections
     #TODO think about this
+
+    Args:
+        video_path: path to a file on the local disk
+        max_operating_res: the resolution used for analyzing the video file. The lower the resolution, the earlier it
+            will finish but with less accuracy
+        skip: number of frames to skip. the higher the number, the earlier the function will finish
+
+    Return:
+          path to results file
     """
     model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=max_operating_res))
     image_gen = framedatapoint_generator(video_path, skip=skip)
@@ -29,12 +40,15 @@ def analyze_movie(video_path, max_operating_res, skip=0):
     return destination
 
 
-def analyze_and_updatedb(db_url, video_path, analysis_func):
+def analyze_and_updatedb(db_url: str, video_path: str, analysis_func: Callable[[str], str]):
     """
     Args:
         db_url: url for database
         video_path: path to a file on the local disk
         analysis_func: a function that receives an argument with the video path and returns the path to results.csv
+
+    Return:
+        path to results file
     """
     destination = None
     try:
@@ -49,6 +63,9 @@ def analyze_and_updatedb(db_url, video_path, analysis_func):
 
 
 def pool_can_do_more_work(worker_pool):
+    """
+    Checks if there are available workers in the pool.
+    """
     count_opened = 0
     for apply_result in worker_pool.futures_list[:]:
         try:
@@ -64,6 +81,10 @@ def pool_can_do_more_work(worker_pool):
 
 
 def worker_heartbeats(db_url):
+    """
+    If a client worker (worker that cannot be reachable and asks a broker for work) is available, then it will send a
+    signal to the broker and ask for work.
+    """
     session = create_session(db_url)
     boolean = HeartBeats.has_recent_heartbeat(session, minutes=20)
     session.close()
@@ -74,6 +95,8 @@ def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
     """
     request must contain the file data and the options for running the detector
     max_operating_res, skip
+
+    #TODO refactor the stuff with worker_heartbeats into a analysis func that is added by default by the broker.
     """
     for filename in request.files:
         f = request.files[filename]
@@ -85,6 +108,7 @@ def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
         max_operating_res = int(detector_options['max_operating_res'])
         skip = int(detector_options['skip'])
 
+        #TODO move this part into analysis func in broker
         if not pool_can_do_more_work(worker_pool) and worker_heartbeats(db_url):
             #store the files as broker
             session = create_session(db_url)
@@ -94,6 +118,7 @@ def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
             # or
             # this ?time of request will be set only when a worker asks for this file
             session.close()
+        #TODO move this part into analysis func in broker
         else:
             if analysis_func is None:
                 analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
@@ -105,6 +130,11 @@ def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
 
 def download_results(up_dir, db_url):
     """
+    Downloads the results of analysis
+
+    Args:
+        up_dir: path to directory where to store the uploaded video files
+        db_url: url to database
     """
     session = create_session(db_url)
     filepath = os.path.join(up_dir, request.form["filename"])
@@ -122,25 +152,40 @@ def download_results(up_dir, db_url):
         return make_response("There is no file with this name: "+request.form["filename"], 404)
 
 
-def create_worker_blueprint(up_dir, db_url, num_workers, analysis_func=None):
-    worker_pool = multiprocessing.Pool(num_workers)
-    worker_pool.futures_list = []
-    worker_bp = Blueprint("worker_bp", __name__)
-    up_dir_func = (wraps(upload_recordings)(partial(upload_recordings, up_dir, db_url, worker_pool, analysis_func)))
+class P2PWorkerBlueprint(P2PBlueprint):
+
+    def __init__(self, *args, num_workers, **kwargs):
+        super(P2PWorkerBlueprint, self).__init__(*args, **kwargs)
+        self.worker_pool = multiprocessing.Pool(num_workers)
+        self.worker_pool.futures_list = []
+
+
+def create_worker_p2pblueprint(up_dir: str, db_url: str, num_workers: int,
+                               analysis_func: Callable[[str], str] = None) -> P2PBlueprint:
+    """
+    Creates a P2PBlueprint. The worker blueprint has the responsibility of responding to requests of uploading video files
+    in order to be analyzed and requests of downloading the analysis results.
+
+    Args:
+        up_dir: path to directory where to store the uploaded video files
+        db_url: url to database
+        num_workers: number of workers for processing video files in parallel
+        analysis_func: callable that receives the path to a video file. the function should return the path to the results file
+    """
+
+    worker_bp = P2PWorkerBlueprint("worker_bp", __name__, num_workers=num_workers, role="worker")
+    up_dir_func = (wraps(upload_recordings)(partial(upload_recordings, up_dir, db_url, worker_bp.worker_pool, analysis_func)))
     worker_bp.route("/upload_recordings", methods=['POST'])(up_dir_func)
     down_res_func = (wraps(download_results)(partial(download_results, up_dir, db_url)))
     worker_bp.route("/download_results", methods=['GET'])(down_res_func)
-    worker_bp.role = "worker"
-    return worker_bp, worker_pool
+
+    return worker_bp
 
 
-def create_worker_microservice(up_dir, db_url, num_workers):
+def create_worker_service(up_dir, db_url, num_workers):
     # TODO should I create different databases for workers, brokers, etc???
     #  in order to avoid conflict between workers and brokers?
-    app = Flask(__name__)
-    app.roles = []
-    app.time_regular_funcs = []
-    worker_bp, worker_pool = create_worker_blueprint(up_dir, db_url, num_workers)
+    app = P2PFlaskApp(__name__)
+    worker_bp = create_worker_p2pblueprint(up_dir, db_url, num_workers)
     app.register_blueprint(worker_bp)
-    app.roles.append(worker_bp.role)
-    return app, worker_pool
+    return app

@@ -1,7 +1,7 @@
 def flaskuimain():
     from truckms.service.gui_interface import create_guiservice
     from truckms.service.worker.user_client import get_job_dispathcher
-    from truckms.service.bookkeeper import create_bookkeeper_app
+    from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
     import os
     # to package app
     # https://www.reddit.com/r/Python/comments/bzql1t/create_htmlcssjavascript_gui_using_pythonflask/
@@ -17,9 +17,8 @@ def flaskuimain():
     work_func, work_pool, list_futures = get_job_dispathcher(db_url=db_url, num_workers=1, max_operating_res=320, skip=0, local_port=port)
     uiapp, app = create_guiservice(db_url, work_func, port)
 
-    bookkeeper_bp, bookkeeper_time_regular_func = create_bookkeeper_app(local_port=port, app_roles=app.roles, discovery_ips_file="discovery_ips")
+    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=[], discovery_ips_file="discovery_ips")
     app.register_blueprint(bookkeeper_bp)
-    app.time_regular_funcs.append(bookkeeper_time_regular_func)
 
     uiapp.run()
 

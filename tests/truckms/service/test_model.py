@@ -81,7 +81,7 @@ def test_remote_columns(tmpdir):
     assert len(results) == 1
 
 
-from truckms.service.worker.server import create_worker_microservice
+from truckms.service.worker.server import create_worker_service
 from truckms.service.bookkeeper import ServerThread
 def test_query_remote(tmpdir):
     url = 'sqlite:///' + os.path.join(tmpdir.strpath, "video_statuses.db")
@@ -103,7 +103,7 @@ def test_query_remote(tmpdir):
     up_dir = os.path.join(tmpdir.strpath, "updir")
     os.mkdir(up_dir)
     worker_db_url = 'sqlite:///' + os.path.join(tmpdir.strpath, "workerdb.db")
-    app, _ = create_worker_microservice(up_dir, db_url=worker_db_url,num_workers=1)
+    app, _ = create_worker_service(up_dir, db_url=worker_db_url, num_workers=1)
     server1 = ServerThread(app, port=5000)
     server1.start()
     for q in query:
@@ -140,7 +140,7 @@ def test_remove_dead_requests(tmpdir):
     up_dir = os.path.join(tmpdir.strpath, "updir")
     os.mkdir(up_dir)
     worker_db_url = 'sqlite:///' + os.path.join(tmpdir.strpath, "workerdb.db")
-    app, _ = create_worker_microservice(up_dir, db_url=worker_db_url, num_workers=1)
+    app, _ = create_worker_service(up_dir, db_url=worker_db_url, num_workers=1)
     server1 = ServerThread(app, port=5000)
     server1.start()
     query = VideoStatuses.get_video_statuses(session)

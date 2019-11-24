@@ -1,4 +1,4 @@
-from truckms.service.worker.server import create_worker_blueprint, create_worker_microservice
+from truckms.service.worker.server import create_worker_p2pblueprint, create_worker_service
 import os
 from mock import Mock
 import truckms
@@ -23,7 +23,7 @@ def test_create_worker_blueprint(tmpdir):
     up_dir = os.path.join(tmpdir.strpath, "updir")
     os.mkdir(up_dir)
     db_url = 'sqlite:///' + os.path.join(tmpdir.strpath, "database.sqlite")
-    worker_app, worker_pool = create_worker_microservice(up_dir, db_url, 1)
+    worker_app, worker_pool = create_worker_service(up_dir, db_url, 1)
     client = worker_app.test_client()
 
     with open(os.path.join(tmpdir.strpath, 'dummy.avi'), 'wb') as f: pass
