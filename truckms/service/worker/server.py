@@ -62,41 +62,11 @@ def analyze_and_updatedb(db_url: str, video_path: str, analysis_func: Callable[[
     return destination
 
 
-def pool_can_do_more_work(worker_pool):
-    """
-    Checks if there are available workers in the pool.
-    """
-    count_opened = 0
-    for apply_result in worker_pool.futures_list[:]:
-        try:
-            apply_result.get(1)
-            # if not timeout exception, then we can safely remove the object
-            worker_pool.futures_list.remove(apply_result)
-        except:
-            count_opened+=1
-    if count_opened < worker_pool._processes:
-        return True
-    else:
-        return False
-
-
-def worker_heartbeats(db_url):
-    """
-    If a client worker (worker that cannot be reachable and asks a broker for work) is available, then it will send a
-    signal to the broker and ask for work.
-    """
-    session = create_session(db_url)
-    boolean = HeartBeats.has_recent_heartbeat(session, minutes=20)
-    session.close()
-    return boolean
-
-
 def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
     """
     request must contain the file data and the options for running the detector
     max_operating_res, skip
 
-    #TODO refactor the stuff with worker_heartbeats into a analysis func that is added by default by the broker.
     """
     for filename in request.files:
         f = request.files[filename]
@@ -108,23 +78,11 @@ def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
         max_operating_res = int(detector_options['max_operating_res'])
         skip = int(detector_options['skip'])
 
-        #TODO move this part into analysis func in broker
-        if not pool_can_do_more_work(worker_pool) and worker_heartbeats(db_url):
-            #store the files as broker
-            session = create_session(db_url)
-            VideoStatuses.add_video_status(session, file_path=filepath, max_operating_res=max_operating_res, skip=skip)
-            # this ? time of request will be updated both at uploading and at dispatching to worker. we want to serve the oldest request that does not have a results path
-            # and we need to know which one is the most ignored
-            # or
-            # this ?time of request will be set only when a worker asks for this file
-            session.close()
-        #TODO move this part into analysis func in broker
-        else:
-            if analysis_func is None:
-                analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
+        if analysis_func is None:
+            analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
 
-            res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
-            worker_pool.futures_list.append(res)
+        res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
+        worker_pool.futures_list.append(res)
     return make_response("Files uploaded and started runniing the detector. Check later for the results", 200)
 
 
@@ -161,7 +119,7 @@ class P2PWorkerBlueprint(P2PBlueprint):
 
 
 def create_worker_p2pblueprint(up_dir: str, db_url: str, num_workers: int,
-                               analysis_func: Callable[[str], str] = None) -> P2PBlueprint:
+                               analysis_func: Callable[[str], str] = None) -> P2PWorkerBlueprint:
     """
     Creates a P2PBlueprint. The worker blueprint has the responsibility of responding to requests of uploading video files
     in order to be analyzed and requests of downloading the analysis results.
@@ -182,7 +140,10 @@ def create_worker_p2pblueprint(up_dir: str, db_url: str, num_workers: int,
     return worker_bp
 
 
-def create_worker_service(up_dir, db_url, num_workers):
+def create_worker_service(up_dir, db_url, num_workers) -> P2PFlaskApp:
+    """
+    Creates a P2PFlaskApp with worker blueprint registered
+    """
     # TODO should I create different databases for workers, brokers, etc???
     #  in order to avoid conflict between workers and brokers?
     app = P2PFlaskApp(__name__)

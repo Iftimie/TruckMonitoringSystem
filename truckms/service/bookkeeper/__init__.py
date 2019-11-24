@@ -11,6 +11,7 @@ import traceback
 from typing import Tuple
 logger = logging.getLogger(__name__)
 import socket
+from typing import List
 
 NodeState = namedtuple('NodeState', ['ip', 'port', 'workload', 'hardware', 'nickname', 'node_type', 'email'])
 #TODO move this to a database. its too anoying to conver from dict to tuple, to namedtuple just to store them in a set...
@@ -30,7 +31,19 @@ def node_states(set_states):
         return jsonify([a._asdict() for a in set_states])
 
 
-def create_bookkeeper_p2pblueprint(local_port, app_roles, discovery_ips_file) -> P2PBlueprint:
+def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discovery_ips_file: str) -> P2PBlueprint:
+    """
+    Creates the bookkeeper blueprint
+
+    Args:
+        local_port: integer
+        app_roles:
+        discovery_ips_file: path to file with initial configuration of the network. The file should contain a list with
+            reachable addresses
+
+    Return:
+        P2PBluePrint
+    """
     bookkeeper_bp = P2PBlueprint("bookkeeper_bp", __name__, role="bookkeeper")
     set_states = set()  # TODO replace with a local syncronized database
     func = (wraps(node_states)(partial(node_states, set_states)))

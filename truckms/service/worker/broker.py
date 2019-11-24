@@ -3,8 +3,11 @@ from functools import wraps, partial
 from werkzeug import secure_filename
 from flask import Blueprint, Flask, send_file, send_from_directory
 from truckms.service.model import create_session, VideoStatuses, HeartBeats
-from truckms.service.worker.server import create_worker_service
 import os
+from truckms.service_v2.api import P2PFlaskApp
+from truckms.service.worker.server import create_worker_p2pblueprint
+from truckms.service.worker import server
+from truckms.service.worker.server import analyze_movie, analyze_and_updatedb
 
 
 def heartbeat(db_url):
@@ -76,11 +79,93 @@ def create_broker_blueprint(up_dir, db_url):
     return broker_bp
 
 
-def create_broker_microservice(up_dir, db_url):
-    # num_workers is 0 because this service is only a broker, however, a worker can also be a broker
-    app, worker_pool = create_worker_service(up_dir, db_url, num_workers=1)
-    worker_pool._processes = 0
+def pool_can_do_more_work(worker_pool):
+    """
+    Checks if there are available workers in the pool.
+    """
+    count_opened = 0
+    for apply_result in worker_pool.futures_list[:]:
+        try:
+            apply_result.get(1)
+            # if not timeout exception, then we can safely remove the object
+            worker_pool.futures_list.remove(apply_result)
+        except:
+            count_opened+=1
+    if count_opened < worker_pool._processes:
+        return True
+    else:
+        return False
+
+
+def worker_heartbeats(db_url):
+    """
+    If a client worker (worker that cannot be reachable and asks a broker for work) is available, then it will send a
+    signal to the broker and ask for work.
+    """
+    session = create_session(db_url)
+    boolean = HeartBeats.has_recent_heartbeat(session, minutes=20)
+    session.close()
+    return boolean
+
+
+def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
+    """
+    Overwritten route from truckms.service.worker.server
+    """
+    for filename in request.files:
+        f = request.files[filename]
+        filename = secure_filename(filename)
+        filepath = os.path.join(up_dir, filename)
+        f.save(filepath)
+
+        detector_options = request.form
+        max_operating_res = int(detector_options['max_operating_res'])
+        skip = int(detector_options['skip'])
+
+        if not pool_can_do_more_work(worker_pool) and worker_heartbeats(db_url):
+            # store the files as broker
+            session = create_session(db_url)
+            VideoStatuses.add_video_status(session, file_path=filepath, max_operating_res=max_operating_res, skip=skip)
+            # this ? time of request will be updated both at uploading and at dispatching to worker. we want to serve the oldest request that does not have a results path
+            # and we need to know which one is the most ignored
+            # or
+            # this ?time of request will be set only when a worker asks for this file
+            session.close()
+        else:
+            if analysis_func is None:
+                analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
+        if analysis_func is None:
+            analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
+
+            res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
+            worker_pool.futures_list.append(res)
+        res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
+        worker_pool.futures_list.append(res)
+    return make_response("Files uploaded and started runniing the detector. Check later for the results", 200)
+
+
+def create_broker_microservice(up_dir, db_url, num_workers=0) -> P2PFlaskApp:
+    """
+    Args:
+        up_dir: path to directory where to store video files and files with results
+        db_url: url to database
+        num_workers: number of workers for the worker_blueprint. In this case is 0 because this service is by default
+        only a broker, however, a worker_blueprint can also be a broker and not have num_workers set on 0
+
+    Return:
+        P2PFlaskApp
+    """
+    app = P2PFlaskApp(__name__)
+    worker_bp = create_worker_p2pblueprint(up_dir, db_url, num_workers=1 if num_workers == 0 else num_workers)
+
+    # Overwriting the /upload_recordings rule from create_worker_p2pblueprint
+    up_dir_func = (
+        wraps(upload_recordings)(partial(upload_recordings, up_dir, db_url, worker_bp.worker_pool)))
+    worker_bp.route("/upload_recordings", methods=['POST'])(up_dir_func)
+    if num_workers == 0:
+        worker_bp.worker_pool._processes = 0
+    app.register_blueprint(worker_bp)
+
     broker_bp = create_broker_blueprint(up_dir, db_url)
     app.register_blueprint(broker_bp)
-    app.roles.append(broker_bp.role)
-    return app, worker_pool
+    return app

@@ -11,13 +11,11 @@ def brokermain():
 
     port = 5001
     host = "0.0.0.0"
-    time_interval = 10
 
-    app, worker_pool = create_broker_microservice(up_dir, db_url)
+    app = create_broker_microservice(up_dir, db_url)
 
-    bookkeeper_bp, bookkeeper_time_regular_func = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file="discovery_ips")
+    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file= "discovery_ips")
     app.register_blueprint(bookkeeper_bp)
-    app.time_regular_funcs.append(bookkeeper_time_regular_func)
 
     app.run(host=host, port=port)
 
