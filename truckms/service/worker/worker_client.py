@@ -7,6 +7,8 @@ import logging
 import traceback
 logger = logging.getLogger(__name__)
 import os
+import inspect
+
 
 def get_available_brokers(local_port):
     res1 = []
@@ -47,6 +49,9 @@ def find_response_with_work(local_port):
                     break
             except:  # except connection timeout or something like that
                 pass
+        if work_found is False:
+            func = inspect.currentframe().f_back.f_code
+            logger.info("No work found {} {} {}".format(func.co_name, func.co_filename, func.co_firstlineno))
         time.sleep(1)
 
     # TODO it may be possible that res allready contains broker ip and port?

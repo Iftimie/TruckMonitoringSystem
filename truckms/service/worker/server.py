@@ -66,7 +66,6 @@ def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
     """
     request must contain the file data and the options for running the detector
     max_operating_res, skip
-
     """
     for filename in request.files:
         f = request.files[filename]

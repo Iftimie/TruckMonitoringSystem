@@ -139,9 +139,8 @@ def create_bookkeeper_service(local_port: int, discovery_ips_file: str) -> P2PFl
         P2PFlaskApp
     """
     app = P2PFlaskApp(__name__)
-    bookkeeper_bp, time_regular_func = create_bookkeeper_p2pblueprint(local_port, app.roles, discovery_ips_file)
+    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port, app.roles, discovery_ips_file)
     app.register_blueprint(bookkeeper_bp)
-    app.register_time_regular_func(time_regular_func)
 
     return app
 
