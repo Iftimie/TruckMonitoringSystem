@@ -120,7 +120,7 @@ def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> T
     def check_status():
         session = create_session(db_url)
         VideoStatuses.check_and_download(session)
-        VideoStatuses.remove_dead_requests(session)
+        # VideoStatuses.remove_dead_requests(session)
         # TODO call remove_dead_requests or insteand of removing, just restart them
         query = VideoStatuses.get_video_statuses(session)
         session.close()

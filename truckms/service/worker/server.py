@@ -95,19 +95,23 @@ def download_results(up_dir, db_url):
     """
     session = create_session(db_url)
     filepath = os.path.join(up_dir, request.form["filename"])
-    session.close()
+    response = None
     try:
         item = VideoStatuses.find_results_path(session, filepath)
         if item.results_path is not None:
             if len(item.results_path.split(os.sep)) == 1:
-                return send_from_directory(up_dir, item.results_path)
+                response = send_from_directory(up_dir, item.results_path)
             else:
-                return send_file(item.results_path)
+                response = send_file(item.results_path)
         else:
-            return make_response("File still processing", 202)
+            response = make_response("File still processing", 202)
     except:
-        return make_response("There is no file with this name: "+request.form["filename"], 404)
-
+        logger.info(traceback.format_exc())
+        
+    session.close()
+    if response is None:
+        response = make_response("There is no file with this name: "+request.form["filename"], 404)
+    return response
 
 class P2PWorkerBlueprint(P2PBlueprint):
 

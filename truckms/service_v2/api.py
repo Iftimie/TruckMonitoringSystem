@@ -104,7 +104,7 @@ class P2PBlueprint(Blueprint):
         decorator_function = super(P2PBlueprint, self).route(*args, **kwargs)
         def decorated_function_catcher(f):
             if rule in self.rule_mappings:
-                self.overwritten_rules.append((rule, f))
+                self.overwritten_rules.append((rule, self.rule_mappings[rule]))
             self.rule_mappings[rule] = f
             return decorator_function(f)
 

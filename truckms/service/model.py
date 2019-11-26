@@ -103,6 +103,8 @@ class VideoStatuses(Base):
         #  new request should be made
         for q in query:
             try:
+                # TODO
+                # before deleting, just check how old it its
                 filename = os.path.basename(q.file_path)
                 request_data = {"filename": filename}
                 res = requests.get('http://{}:{}/download_results'.format(q.remote_ip, q.remote_port), data=request_data)

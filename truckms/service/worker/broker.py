@@ -53,14 +53,14 @@ def download_recordings(up_dir, db_url):
 
 
 def upload_results(up_dir, db_url):
+    session = create_session(db_url)
     for filename in request.files:
         f = request.files[filename]
         filename = secure_filename(filename)
         filepath = os.path.join(up_dir, filename)
         f.save(filepath)
-        session = create_session(db_url)
         VideoStatuses.update_results_path(session, file_path=None, new_results_path=filepath)
-        session.close()
+    session.close()
     return make_response("Thanks for your precious work", 200)
 
 
@@ -112,6 +112,8 @@ def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
     """
     Overwritten route from truckms.service.worker.server
     """
+    session = create_session(db_url)
+
     for filename in request.files:
         f = request.files[filename]
         filename = secure_filename(filename)
@@ -122,25 +124,22 @@ def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
         max_operating_res = int(detector_options['max_operating_res'])
         skip = int(detector_options['skip'])
 
-        if not pool_can_do_more_work(worker_pool) and worker_heartbeats(db_url):
+        # TODO put the condition back
+        # if not pool_can_do_more_work(worker_pool) and worker_heartbeats(db_url):
+        if True:
             # store the files as broker
-            session = create_session(db_url)
             VideoStatuses.add_video_status(session, file_path=filepath, max_operating_res=max_operating_res, skip=skip)
             # this ? time of request will be updated both at uploading and at dispatching to worker. we want to serve the oldest request that does not have a results path
             # and we need to know which one is the most ignored
             # or
             # this ?time of request will be set only when a worker asks for this file
-            session.close()
         else:
             if analysis_func is None:
                 analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
-        if analysis_func is None:
-            analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
 
             res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
             worker_pool.futures_list.append(res)
-        res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
-        worker_pool.futures_list.append(res)
+    session.close()
     return make_response("Files uploaded and started runniing the detector. Check later for the results", 200)
 
 

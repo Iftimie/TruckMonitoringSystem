@@ -7,7 +7,7 @@ def flaskuimain():
     # https://www.reddit.com/r/Python/comments/bzql1t/create_htmlcssjavascript_gui_using_pythonflask/
     # https://github.com/ClimenteA/flaskwebgui
 
-    db_url = 'sqlite:///' + 'database.sqlite'
+    db_url = 'sqlite:///' + r'D:\tms_data\guiservice\database.sqlite'
     remove_db = True
     if remove_db and os.path.exists(db_url.replace('sqlite:///', '')):
         os.remove(db_url.replace('sqlite:///', ''))

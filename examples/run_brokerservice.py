@@ -4,6 +4,7 @@ def brokermain():
     import os
 
     up_dir = "/data1/workspaces/aiftimie/tms/worker_updir"
+    up_dir = r"D:\tms_data\broker\up_dir"
     db_url = 'sqlite:///' + os.path.join(up_dir, 'database.sqlite')
     remove_db = True
     if remove_db and os.path.exists(db_url.replace('sqlite:///', '')):

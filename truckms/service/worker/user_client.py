@@ -70,10 +70,14 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port
 
     def dispatch_work(video_path):
         lru_ip, lru_port = select_lru_worker(local_port)
+        #delete this
+        def evaluate_workload():
+            return False
         if evaluate_workload() or lru_ip is None:
             # do not remove this. this is useful. we don't want to upload in broker (waste time and storage when we want to process locally
             res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
             list_futures.append(res)
+            logger.info("Analyzing file locally")
         else:
             session = create_session(db_url)
             VideoStatuses.add_video_status(session, file_path=video_path, results_path=None, remote_ip=lru_ip, remote_port=lru_port)
@@ -83,6 +87,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port
             assert res.content == b"Files uploaded and started runniing the detector. Check later for the results"
             session.close()
             time.sleep(2)
+            logger.info("Dispacthed work to {},{}".format(lru_ip, lru_port))
             # do work remotely
 
     return dispatch_work, worker_pool, list_futures
