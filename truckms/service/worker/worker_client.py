@@ -43,6 +43,7 @@ def find_response_with_work(local_port):
             try:
                 res = requests.get('http://{}:{}/download_recordings'.format(broker_ip, broker_port))
                 if res.content != b'Sorry, got no work to do':
+                    logger.info("Found work from {}, {}".format(broker_ip, broker_port))
                     work_found = True
                     res_broker_ip = broker_ip
                     res_broker_port = broker_port
