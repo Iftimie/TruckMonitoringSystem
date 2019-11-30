@@ -62,6 +62,10 @@ def analyze_and_updatedb(db_url: str, video_path: str, analysis_func: Callable[[
     return destination
 
 
+def echo():
+    return make_response("I exist", 200)
+
+
 def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
     """
     request must contain the file data and the options for running the detector
@@ -139,6 +143,7 @@ def create_worker_p2pblueprint(up_dir: str, db_url: str, num_workers: int,
     worker_bp.route("/upload_recordings", methods=['POST'])(up_dir_func)
     down_res_func = (wraps(download_results)(partial(download_results, up_dir, db_url)))
     worker_bp.route("/download_results", methods=['GET'])(down_res_func)
+    worker_bp.route("/echo", methods=['GET'])(echo)
 
     return worker_bp
 
