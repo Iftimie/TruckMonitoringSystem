@@ -28,6 +28,29 @@ def evaluate_workload():
         return False
 
 
+def get_available_nodes(local_port):
+    # TODO this is duplicated code, refactor it
+
+    try:
+        node_states_list = requests.get('http://localhost:{}/node_states'.format(local_port)).json()
+    except:
+        return []
+
+    for res in node_states_list[:]:
+        try:
+            response = requests.get('http://{}:{}/echo'.format(res['ip'], res['port']))
+            if response.status_code != 200:
+                node_states_list.remove(res)
+                logger.info("removed because of status")
+        except:
+            node_states_list.remove(res)
+            logger.info("removed because of exception")
+
+    if len(node_states_list) == 0:
+        return []
+    return node_states_list
+
+
 def select_lru_worker(local_port):
     """
     Selects the least recently used worker from the known states and returns its IP and PORT
@@ -46,7 +69,9 @@ def select_lru_worker(local_port):
     while res1:
         try:
             response = requests.get('http://{}:{}/echo'.format(res1[0]['ip'], res1[0]['port']))
-            if response.status_code != 200:
+            if response.status_code == 200:
+                break
+            else:
                 res1.pop(0)
         except:
             res1.pop(0)

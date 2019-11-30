@@ -13,6 +13,11 @@ import logging
 import traceback
 from truckms.service_v2.api import P2PFlaskApp, P2PBlueprint
 from typing import Callable
+import sys
+logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S',
+                        handlers=[
+                            logging.StreamHandler(sys.stdout)
+                        ])
 logger = logging.getLogger(__name__)
 
 
@@ -53,17 +58,15 @@ def analyze_and_updatedb(db_url: str, video_path: str, analysis_func: Callable[[
     destination = None
     try:
         session = create_session(db_url)
+        logger.info("Started processing file")
         VideoStatuses.add_video_status(session, file_path=video_path, results_path=None)
         destination = analysis_func(video_path)
         VideoStatuses.update_results_path(session, file_path=video_path, new_results_path=destination)
         session.close()
+        logger.info("Finished processing file")
     except:
         logger.info(traceback.format_exc())
     return destination
-
-
-def echo():
-    return make_response("I exist", 200)
 
 
 def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
@@ -143,7 +146,6 @@ def create_worker_p2pblueprint(up_dir: str, db_url: str, num_workers: int,
     worker_bp.route("/upload_recordings", methods=['POST'])(up_dir_func)
     down_res_func = (wraps(download_results)(partial(download_results, up_dir, db_url)))
     worker_bp.route("/download_results", methods=['GET'])(down_res_func)
-    worker_bp.route("/echo", methods=['GET'])(echo)
 
     return worker_bp
 

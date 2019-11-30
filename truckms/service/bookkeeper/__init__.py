@@ -73,20 +73,25 @@ def update_function(local_port, app_roles, discovery_ips_file):
                               'workload': find_workload(),
                               'hardware': "Nvidia GTX 960M Intel i7",
                               'nickname': "rmstn",
-                              'node_type': ",".join(app_roles + ['bookkeeper']),
+                              'node_type': ",".join(app_roles),
                               'email': 'iftimie.alexandru.florentin@gmail.com'})
 
         try:
-            res = requests.get('http://checkip.dyndns.org/')
-            part = res.content.decode('utf-8').split(": ")[1]
+            externalipres = requests.get('http://checkip.dyndns.org/')
+            part = externalipres.content.decode('utf-8').split(": ")[1]
             ip_ = part.split("<")[0]
-            discovered_states.append({'ip': ip_,
-                                  'port': local_port,
-                                  'workload': find_workload(),
-                                  'hardware': "Nvidia GTX 960M Intel i7",
-                                  'nickname': "rmstn",
-                                  'node_type': ",".join(app_roles + ['bookkeeper']),
-                                  'email': 'iftimie.alexandru.florentin@gmail.com'})
+            try:
+                echo_response = requests.get('http://{}:{}/echo'.format(ip_, local_port), timeout=3)
+                if echo_response.status_code == 200:
+                    discovered_states.append({'ip': ip_,
+                                              'port': local_port,
+                                              'workload': find_workload(),
+                                              'hardware': "Nvidia GTX 960M Intel i7",
+                                              'nickname': "rmstn",
+                                              'node_type': ",".join(app_roles),
+                                              'email': 'iftimie.alexandru.florentin@gmail.com'})
+            except:
+                pass
         except:
             logger.info(traceback.format_exc())
 
@@ -129,8 +134,9 @@ def update_function(local_port, app_roles, discovery_ips_file):
         requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states)
         for state in res:
             try:
-                requests.post('http://{}:{}/node_states'.format(state['ip'], state['port']), json=discovered_states)
+                response = requests.post('http://{}:{}/node_states'.format(state['ip'], state['port']), json=discovered_states)
             except:
+                logger.info("{}{} no longer exists".format(state['ip'], state['port']))
                 #some adresses may be dead
                 #TODO maybe remove them?
                 pass

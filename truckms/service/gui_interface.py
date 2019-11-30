@@ -1,5 +1,6 @@
 from truckms.inference.neural import pandas_to_pred_iter, pred_iter_to_pandas, plot_detections
 from truckms.inference.utils import framedatapoint_generator_by_frame_ids2
+from truckms.service.worker.user_client import get_available_nodes
 from flask import Flask, render_template, make_response, request, redirect, url_for
 import os.path as osp
 from flask_bootstrap import Bootstrap
@@ -48,6 +49,7 @@ def open_browser_func(self, localhost):
 
 
 def image2htmlstr(image):
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
     is_success, buffer = cv2.imencode(".jpg", image)
     io_buf = io.BytesIO(buffer)
     figdata_png = base64.b64encode(io_buf.getvalue())
@@ -164,6 +166,13 @@ def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> T
             resp = make_response(render_template("show_video.html", first_image_str=first_image, images=plots_gen))
         except StopIteration:
             resp = make_response(render_template("show_video.html", first_image_str='', images=[]))
+        return resp
+
+    @app.route("/show_nodestates")
+    @ignore_remote_addresses
+    def show_workers():
+        node_list = get_available_nodes(local_port=port)
+        resp = make_response(render_template("show_nodestates.html", worker_list=node_list))
         return resp
 
     @app.route('/')

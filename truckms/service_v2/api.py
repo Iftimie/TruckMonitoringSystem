@@ -1,4 +1,4 @@
-from flask import Flask, Blueprint
+from flask import Flask, Blueprint, make_response
 import time
 import threading
 from typing import Tuple, List
@@ -69,6 +69,10 @@ class P2PFlaskApp(Flask):
         super(P2PFlaskApp, self).run(*args, **kwargs)
 
 
+def echo():
+    return make_response("I exist", 200)
+
+
 class P2PBlueprint(Blueprint):
     """
     The P2PBlueprint also has a background task, a function that is designed to be called every N seconds.
@@ -82,6 +86,7 @@ class P2PBlueprint(Blueprint):
         self.role = role
         self.rule_mappings = {}
         self.overwritten_rules = [] # List[Tuple[str, callable]]
+        self.route("/echo", methods=['GET'])(echo)
 
     def register_time_regular_func(self, f):
         """
@@ -95,6 +100,9 @@ class P2PBlueprint(Blueprint):
         """
         Overwritten method for catching the rules and their functions in a map. In case the function is a locally declared function such as a partial,
         and we may want to overwrite that method, we need to store somewhere that locally declared function, otherwise we cannot access it.
+
+        Example of route override:
+        https://github.com/Iftimie/TruckMonitoringSystem/blob/6405f0341ad41c32fae7e4bab2d264b65a1d8ee9/truckms/service/worker/broker.py#L163
         """
         if args:
             rule = args[0]

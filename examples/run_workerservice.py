@@ -1,9 +1,13 @@
 def workermain():
     from truckms.service.worker.server import create_worker_service
     from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
+    import os
 
     db_url = 'sqlite:///' + 'database.sqlite'
     up_dir = "/data1/workspaces/aiftimie/tms/worker_updir"
+    remove_db = True
+    if remove_db and os.path.exists(db_url.replace('sqlite:///', '')):
+        os.remove(db_url.replace('sqlite:///', ''))
 
     port = 5000
     host = "0.0.0.0"
