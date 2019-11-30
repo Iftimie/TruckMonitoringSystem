@@ -67,13 +67,28 @@ def update_function(local_port, app_roles, discovery_ips_file):
         s.connect(("8.8.8.8", 80))
         ip_ = s.getsockname()[0]
         s.close()
-        discovered_states = [{'ip': ip_,
+        discovered_states = []
+        discovered_states.append({'ip': ip_,
                               'port': local_port,
                               'workload': find_workload(),
                               'hardware': "Nvidia GTX 960M Intel i7",
                               'nickname': "rmstn",
                               'node_type': ",".join(app_roles + ['bookkeeper']),
-                              'email': 'iftimie.alexandru.florentin@gmail.com'}]
+                              'email': 'iftimie.alexandru.florentin@gmail.com'})
+
+        try:
+            res = requests.get('http://checkip.dyndns.org/')
+            part = res.content.decode('utf-8').split(": ")[1]
+            ip_ = part.split("<")[0]
+            discovered_states.append({'ip': ip_,
+                                  'port': local_port,
+                                  'workload': find_workload(),
+                                  'hardware': "Nvidia GTX 960M Intel i7",
+                                  'nickname': "rmstn",
+                                  'node_type': ",".join(app_roles + ['bookkeeper']),
+                                  'email': 'iftimie.alexandru.florentin@gmail.com'})
+        except:
+            logger.info(traceback.format_exc())
 
         # other states
         if discovery_ips_file is not None:
