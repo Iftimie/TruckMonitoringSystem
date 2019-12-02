@@ -1,6 +1,6 @@
 from truckms.inference.neural import create_model, pred_iter_to_pandas, compute
 from truckms.inference.neural import create_model_efficient
-from truckms.inference.utils import framedatapoint_generator
+from truckms.inference.utils import framedatapoint_generator, get_video_file_size
 from truckms.inference.analytics import filter_pred_detections
 import os
 from truckms.service.model import create_session, VideoStatuses, HeartBeats
@@ -12,8 +12,9 @@ import multiprocessing
 import logging
 import traceback
 from truckms.service_v2.api import P2PFlaskApp, P2PBlueprint
-from typing import Callable
+from typing import Callable, Iterable
 import sys
+from truckms.api import PredictionDatapoint
 logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S',
                         handlers=[
                             logging.StreamHandler(sys.stdout)
@@ -21,7 +22,21 @@ logging.basicConfig(level=logging.INFO, format='[%(asctime)s] %(message)s', date
 logger = logging.getLogger(__name__)
 
 
-def analyze_movie(video_path, max_operating_res, skip=0):
+def generator_hook(video_path, pdp_iter: Iterable[PredictionDatapoint], progress_hook: Callable[[int, int], None]) -> Iterable[
+    PredictionDatapoint]:
+    """
+    Used in analyze_movie
+    """
+    size = get_video_file_size(video_path) - 1
+    # size - 1 because we are working with indexes. if frame_id=size-1 then the percentage done is 100
+    checkpoint = int((size - 1) * 5 / 100)
+    for pdp in pdp_iter:
+        if (pdp.frame_id + 1) % checkpoint == 0:
+            progress_hook(pdp.frame_id, size)
+        yield pdp
+
+
+def analyze_movie(video_path, max_operating_res, skip=0, progress_hook: Callable[[int, int], None] = None):
     """
     Attention!!! if the movie is short or too fast and skip  is too big, then it may result with no detections
     #TODO think about this
@@ -31,26 +46,40 @@ def analyze_movie(video_path, max_operating_res, skip=0):
         max_operating_res: the resolution used for analyzing the video file. The lower the resolution, the earlier it
             will finish but with less accuracy
         skip: number of frames to skip. the higher the number, the earlier the function will finish
-
+        progress_hook: function that is called with two integer arguments. the first one represents the current frame index
+            the second represents the final index. the function should not return anything. The hook will actually get
+            called once every 5% is done of the total work
     Return:
           path to results file
     """
     model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=max_operating_res))
     image_gen = framedatapoint_generator(video_path, skip=skip)
-    pred_gen = compute(image_gen, model=model, batch_size=5)
+    # TODO set batchsize by the available VRAM
+    pred_gen = compute(image_gen, model=model, batch_size=25)
     filtered_pred = filter_pred_detections(pred_gen)
+    if progress_hook is not None:
+        filtered_pred = generator_hook(video_path, filtered_pred, progress_hook)
     df = pred_iter_to_pandas(filtered_pred)
     destination = os.path.splitext(video_path)[0]+'.csv'
     df.to_csv(destination)
+    if progress_hook is not None:
+        # call one more time the hook. this is just for clean ending of the processing. it may happen in case where the
+        # skip is 5 that the final index is not reached, and in percentage it will look like 99.9% finished
+        size = get_video_file_size(video_path) - 1
+        progress_hook(size, size)
     return destination
 
 
-def analyze_and_updatedb(db_url: str, video_path: str, analysis_func: Callable[[str], str]):
+def analyze_and_updatedb(db_url: str, video_path: str, analysis_func: Callable[[
+                                                                                   str,
+                                                                                   Callable[[int, int], None]
+                                                                               ], str]):
     """
     Args:
         db_url: url for database
         video_path: path to a file on the local disk
         analysis_func: a function that receives an argument with the video path and returns the path to results.csv
+            the function OPTIONALLY (can be None) receives a progress_hook
 
     Return:
         path to results file
@@ -59,8 +88,13 @@ def analyze_and_updatedb(db_url: str, video_path: str, analysis_func: Callable[[
     try:
         session = create_session(db_url)
         logger.info("Started processing file")
-        VideoStatuses.add_video_status(session, file_path=video_path, results_path=None)
-        destination = analysis_func(video_path)
+        vs = VideoStatuses.add_video_status(session, file_path=video_path, results_path=None)
+
+        def progress_hook(current_index, end_index):
+
+            vs.progress = current_index / end_index * 100.0
+            session.commit()
+        destination = analysis_func(video_path, progress_hook=progress_hook)
         VideoStatuses.update_results_path(session, file_path=video_path, new_results_path=destination)
         session.close()
         logger.info("Finished processing file")

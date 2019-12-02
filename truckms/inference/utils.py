@@ -2,9 +2,17 @@ import cv2
 from contextlib import contextmanager
 from truckms.api import FrameDatapoint
 from deprecated import deprecated
+from typing import Iterable
 
 
-def framedatapoint_generator(video_path, skip=5, max_frames=-1) -> FrameDatapoint:
+def get_video_file_size(video_path):
+    cap = cv2.VideoCapture(video_path)
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    return frame_count
+
+
+def framedatapoint_generator(video_path, skip=5, max_frames=-1) -> Iterable[FrameDatapoint]:
     """
     Generator function for processing images and keeping account of their frame ids
 
@@ -26,6 +34,7 @@ def framedatapoint_generator(video_path, skip=5, max_frames=-1) -> FrameDatapoin
         idx += 1
         if idx == max_frames: break
         ret, image = cap.read()
+    cap.release()
 
 
 @deprecated(reason="Not efficient. Use framedatapoint_generator_by_frame_ids2")
@@ -56,6 +65,7 @@ def framedatapoint_generator_by_frame_ids(video_path, frame_ids) -> FrameDatapoi
 
         idx += 1
         ret, image = cap.read()
+    cap.release()
 
 
 def framedatapoint_generator_by_frame_ids2(video_path, frame_ids) -> FrameDatapoint:
@@ -79,6 +89,7 @@ def framedatapoint_generator_by_frame_ids2(video_path, frame_ids) -> FrameDatapo
         if res:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             yield FrameDatapoint(image, frame_num)
+    cap.release()
 
 
 @contextmanager

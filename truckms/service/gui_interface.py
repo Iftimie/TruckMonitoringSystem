@@ -129,10 +129,11 @@ def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> T
         video_items = []
 
         #TODO also render on HTML the time of execution if it exists
-
+        # TODO why the hell I am putting the query results in a list???? I should pass directly the query
         for item in query:
             video_items.append({'filename': item.file_path,
                                 'status': 'ready' if item.results_path is not None else 'processing',
+                                'progress': item.progress,
                                 'time_of_request': item.time_of_request.strftime(
                                     "%m/%d/%Y, %H:%M:%S") if item.time_of_request is not None else 'none'})
         partial_destination_url = '/show_video?filename='

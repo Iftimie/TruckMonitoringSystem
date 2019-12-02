@@ -1,10 +1,12 @@
-from truckms.service.worker.server import create_worker_p2pblueprint, create_worker_service
+from truckms.service.worker.server import create_worker_p2pblueprint, create_worker_service, analyze_and_updatedb, \
+    analyze_movie
 import os
 from mock import Mock
-import truckms
+import os.path as osp
 from truckms.service import worker
 from truckms.service.model import create_session
 from truckms.service.model import VideoStatuses
+from functools import partial
 
 
 class PickableMock(Mock):
@@ -42,3 +44,12 @@ def test_create_worker_blueprint(tmpdir):
     assert results[0].file_path == os.path.join(up_dir, 'dummy.avi')
     assert results[0].results_path == "dummy.csv"
 
+
+def test_analyze_and_updatedb(tmpdir):
+    db_url = 'sqlite:///' + os.path.join(tmpdir.strpath, "database.sqlite")
+    test_video_path = osp.join(osp.dirname(__file__), '..','..', 'service' , 'data', 'cut.mkv')
+    analyis_func = partial(analyze_movie, max_operating_res=320, skip=0)
+    analyze_and_updatedb(db_url, test_video_path, analysis_func=analyis_func)
+    session = create_session(db_url)
+    statuses = VideoStatuses.get_video_statuses(session)
+    assert statuses[0].progress == 100.0

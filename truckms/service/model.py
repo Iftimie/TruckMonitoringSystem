@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime
+from sqlalchemy import Column, Integer, String, DateTime, Float
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -56,6 +56,7 @@ class VideoStatuses(Base):
     max_operating_res = Column(Integer, nullable=True)
     skip = Column(Integer, nullable=True)
     time_of_request = Column(DateTime, default=datetime.utcnow, nullable=True)
+    progress = Column(Float, nullable=True, default=0.0)
 
     @staticmethod
     def get_video_statuses(session):
@@ -123,9 +124,15 @@ class VideoStatuses(Base):
         Args:
             session: sql session
             kwargs: keyword arguments used to assign values to the columns
+
+        Return:
+            return the newly added video status
         """
-        session.add(VideoStatuses(**kwargs))
+        vs = VideoStatuses(**kwargs)
+        session.add(vs)
         session.commit()
+        return vs
+
 
     @staticmethod
     def update_results_path(session, file_path, new_results_path):

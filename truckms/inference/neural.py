@@ -9,6 +9,7 @@ import pandas as pd
 import torchvision
 import torch
 import math
+from typing import Iterable
 
 try:
     device
@@ -68,7 +69,8 @@ def iterable2batch(fdp_iterable: FrameDatapoint, batch_size=5, cdevice=device):
     yield BatchedFrameDatapoint(batch, batch_ids)
 
 
-def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None, batch_size=5, cdevice=device) -> PredictionDatapoint:
+def compute(fdp_iterable: Iterable[FrameDatapoint], model, filter_classes=None, batch_size=5, cdevice=device)\
+        -> Iterable[PredictionDatapoint]:
     """
     Computes the predictions for an iterable of FrameDatapoint. It batches the images internally and works. The images
     must be in format H, W, C. Images must be in RGB format.
@@ -79,6 +81,7 @@ def compute(fdp_iterable: FrameDatapoint, model, filter_classes=None, batch_size
         model: Faster-RCNN model
         filter_classes: only classes found in this argument will be yielded
         batch_size: number of images to forward at once
+        cdevice: 'cpu' or 'gpu'
 
     Yields:
         PredictionDatapoint
