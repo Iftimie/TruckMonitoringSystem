@@ -90,12 +90,24 @@ def save_response(up_dir, res):
     return filepath, max_operating_res, skip
 
 
+
+
 def do_work(up_dir, db_url, local_port):
     res, broker_ip, broker_port = find_response_with_work(local_port=local_port)
     filepath, max_operating_res, skip = save_response(up_dir, res)
     # TODO I should get from somewhere from the response the max_operating_res and skip
-    analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
-    results_path = analyze_and_updatedb(db_url, filepath, analysis_func)
+    # this is an ugly hack
+    def workerclient_analysis_func(video_path, progress_hook):
+        def new_progress_hook(current_index, end_index):
+            # actually this shoud make a post request
+            data = {"filename": os.path.basename(video_path),
+                    "progress": current_index / end_index * 100}
+            print("wtf???")
+            res = requests.post('http://{}:{}/update_video_status'.format(broker_ip, broker_port), json=data)
+            print(res.content)
+            progress_hook(current_index, end_index)
+        return analyze_movie(video_path, max_operating_res, skip, new_progress_hook)
+    results_path = analyze_and_updatedb(db_url, filepath, workerclient_analysis_func)
     upload_results(results_path, broker_ip, broker_port)
 
     # for a broker, the workload will be 0 or 100. a worker can signal a broker. when signalling, the workload will be automatically set to 0

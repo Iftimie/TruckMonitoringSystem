@@ -5,7 +5,7 @@ from truckms.inference.analytics import filter_pred_detections
 import os
 from truckms.service.model import create_session, VideoStatuses, HeartBeats
 from flask import Blueprint, Flask, send_file, send_from_directory
-from flask import request, make_response
+from flask import request, make_response, jsonify
 from werkzeug import secure_filename
 from functools import partial, wraps
 import multiprocessing
@@ -94,6 +94,7 @@ def analyze_and_updatedb(db_url: str, video_path: str, analysis_func: Callable[[
 
             vs.progress = current_index / end_index * 100.0
             session.commit()
+        # to do refactor this. this should not look like this
         destination = analysis_func(video_path, progress_hook=progress_hook)
         VideoStatuses.update_results_path(session, file_path=video_path, new_results_path=destination)
         session.close()
@@ -145,7 +146,7 @@ def download_results(up_dir, db_url):
             else:
                 response = send_file(item.results_path)
         else:
-            response = make_response("File still processing", 202)
+            response = make_response(jsonify(item.to_json()), 202)
     except:
         logger.info(traceback.format_exc())
         

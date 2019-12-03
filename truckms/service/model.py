@@ -58,6 +58,13 @@ class VideoStatuses(Base):
     time_of_request = Column(DateTime, default=datetime.utcnow, nullable=True)
     progress = Column(Float, nullable=True, default=0.0)
 
+    def to_json(self):
+        return {"max_operating_res": self.max_operating_res,
+                "skip": self.skip,
+                "time_of_request": self.time_of_request,
+                "progress": self.progress,
+                "filename": os.path.basename(self.file_path)}
+
     @staticmethod
     def get_video_statuses(session):
         """
@@ -83,12 +90,18 @@ class VideoStatuses(Base):
                 request_data = {"filename": filename}
                 res = requests.get('http://{}:{}/download_results'.format(q.remote_ip, q.remote_port),
                                    data=request_data)
-                if res.status_code == 200 and res.content != b'There is no file with this name: ' + bytes(filename,
-                                                                                  encoding='utf8'):
+                if res.status_code == 200:
                     filepath, _ = os.path.splitext(q.file_path)
                     q.results_path = filepath + ".csv"
                     with open(q.results_path, 'wb') as f:
                         f.write(res.content)
+                    q.progress = 100.0  # since we received the file, that means it is completed. We need to do this,
+                    # because due to lack of syncronization, we can download the file before updating the progress,
+                    # and the progress will stick to something like 93% although it finished
+                    session.commit()
+                elif res.status_code == 202:
+                    json = res.json()
+                    q.progress = float(json['progress'])
                     session.commit()
             except: # timeout error
                 pass
@@ -159,6 +172,7 @@ class VideoStatuses(Base):
         #TODO in debug mode, because of multiple runs, more duplicates may appear
         assert len(query) >= 1
         return query[0]
+
 
 
 def create_session(db_url):

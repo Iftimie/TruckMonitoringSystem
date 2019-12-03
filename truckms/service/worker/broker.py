@@ -4,7 +4,7 @@ from werkzeug import secure_filename
 from flask import Blueprint, Flask, send_file, send_from_directory
 from truckms.service.model import create_session, VideoStatuses, HeartBeats
 import os
-from truckms.service_v2.api import P2PFlaskApp
+from truckms.service_v2.api import P2PFlaskApp, P2PBlueprint
 from truckms.service.worker.server import create_worker_p2pblueprint
 from truckms.service.worker import server
 from truckms.service.worker.server import analyze_movie, analyze_and_updatedb
@@ -64,8 +64,22 @@ def upload_results(up_dir, db_url):
     return make_response("Thanks for your precious work", 200)
 
 
+# TODO I need to refactor this into P2P data and automatically update the status of data on whichever node it is
+def update_video_status(db_url):
+    """
+    """
+    data = request.json
+    session = create_session(db_url)
+    print(data['filename'])
+    item = session.query(VideoStatuses).filter(VideoStatuses.file_path.contains(data['filename'])).all()[0]
+    item.progress = data['progress']
+    session.commit()
+    session.close()
+    return make_response("ok", 200)
+
+
 def create_broker_blueprint(up_dir, db_url):
-    broker_bp = Blueprint("broker_bp", __name__)
+    broker_bp = P2PBlueprint("broker_bp", __name__, role="broker")
     heartbeat_func = (wraps(heartbeat)(partial(heartbeat, db_url)))
     broker_bp.route("/heartbeat", methods=['POST'])(heartbeat_func)
 
@@ -75,7 +89,9 @@ def create_broker_blueprint(up_dir, db_url):
     down_rec_func = (wraps(download_recordings)(partial(download_recordings, up_dir, db_url)))
     broker_bp.route("/download_recordings", methods=['GET'])(down_rec_func)
 
-    broker_bp.role = "broker"
+    update_video_status_func = (wraps(update_video_status)(partial(update_video_status, db_url)))
+    broker_bp.route("/update_video_status", methods=['POST'])(update_video_status_func)
+
     return broker_bp
 
 
@@ -106,7 +122,6 @@ def worker_heartbeats(db_url):
     boolean = HeartBeats.has_recent_heartbeat(session, minutes=20)
     session.close()
     return boolean
-
 
 def upload_recordings(up_dir, db_url, worker_pool, analysis_func=None):
     """

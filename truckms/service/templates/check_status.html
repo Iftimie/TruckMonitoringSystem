@@ -32,7 +32,7 @@
                               >
                         {{ row['filename'] }}</button></td>
                   <td>{{ row['status'] }}</td>
-                  <td>{{ row['progress'] }}</td>
+                  <td>{{ "{:.2f}".format(row['progress'])}}</td>
                   <td>{{ row['time_of_request'] }}</td>
               </tr>
             {% endfor %}
