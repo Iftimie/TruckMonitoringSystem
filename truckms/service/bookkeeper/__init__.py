@@ -1,4 +1,5 @@
-from flask import Flask, make_response, request, jsonify
+from flask import make_response, request, jsonify
+from truckms.service_v2.api import P2PFlaskApp, P2PBlueprint
 from collections import namedtuple
 from flask import Blueprint
 from functools import partial, wraps
@@ -7,8 +8,10 @@ from werkzeug.serving import make_server
 import requests
 import logging
 import traceback
+from typing import Tuple
 logger = logging.getLogger(__name__)
 import socket
+from typing import List
 
 NodeState = namedtuple('NodeState', ['ip', 'port', 'workload', 'hardware', 'nickname', 'node_type', 'email'])
 #TODO move this to a database. its too anoying to conver from dict to tuple, to namedtuple just to store them in a set...
@@ -28,12 +31,27 @@ def node_states(set_states):
         return jsonify([a._asdict() for a in set_states])
 
 
-def create_bookkeeper_blueprint():
-    bookkeeper_bp = Blueprint("bookkeeper_bp", __name__)
+def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discovery_ips_file: str) -> P2PBlueprint:
+    """
+    Creates the bookkeeper blueprint
+
+    Args:
+        local_port: integer
+        app_roles:
+        discovery_ips_file: path to file with initial configuration of the network. The file should contain a list with
+            reachable addresses
+
+    Return:
+        P2PBluePrint
+    """
+    bookkeeper_bp = P2PBlueprint("bookkeeper_bp", __name__, role="bookkeeper")
     set_states = set()  # TODO replace with a local syncronized database
     func = (wraps(node_states)(partial(node_states, set_states)))
     bookkeeper_bp.route("/node_states", methods=['POST', 'GET'])(func)
-    bookkeeper_bp.role = "bookkeeper"
+
+    time_regular_func = partial(update_function, local_port, app_roles, discovery_ips_file)
+    bookkeeper_bp.register_time_regular_func(time_regular_func)
+
     return bookkeeper_bp
 
 
@@ -49,13 +67,33 @@ def update_function(local_port, app_roles, discovery_ips_file):
         s.connect(("8.8.8.8", 80))
         ip_ = s.getsockname()[0]
         s.close()
-        discovered_states = [{'ip': ip_,
+        discovered_states = []
+        discovered_states.append({'ip': ip_,
                               'port': local_port,
                               'workload': find_workload(),
                               'hardware': "Nvidia GTX 960M Intel i7",
                               'nickname': "rmstn",
-                              'node_type': ",".join(app_roles + ['bookkeeper']),
-                              'email': 'iftimie.alexandru.florentin@gmail.com'}]
+                              'node_type': ",".join(app_roles),
+                              'email': 'iftimie.alexandru.florentin@gmail.com'})
+
+        try:
+            externalipres = requests.get('http://checkip.dyndns.org/')
+            part = externalipres.content.decode('utf-8').split(": ")[1]
+            ip_ = part.split("<")[0]
+            try:
+                echo_response = requests.get('http://{}:{}/echo'.format(ip_, local_port), timeout=3)
+                if echo_response.status_code == 200:
+                    discovered_states.append({'ip': ip_,
+                                              'port': local_port,
+                                              'workload': find_workload(),
+                                              'hardware': "Nvidia GTX 960M Intel i7",
+                                              'nickname': "rmstn",
+                                              'node_type': ",".join(app_roles),
+                                              'email': 'iftimie.alexandru.florentin@gmail.com'})
+            except:
+                pass
+        except:
+            logger.info(traceback.format_exc())
 
         # other states
         if discovery_ips_file is not None:
@@ -96,8 +134,9 @@ def update_function(local_port, app_roles, discovery_ips_file):
         requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states)
         for state in res:
             try:
-                requests.post('http://{}:{}/node_states'.format(state['ip'], state['port']), json=discovered_states)
+                response = requests.post('http://{}:{}/node_states'.format(state['ip'], state['port']), json=discovered_states)
             except:
+                logger.info("{}{} no longer exists".format(state['ip'], state['port']))
                 #some adresses may be dead
                 #TODO maybe remove them?
                 pass
@@ -105,19 +144,24 @@ def update_function(local_port, app_roles, discovery_ips_file):
         logger.info(traceback.format_exc())
 
 
-def create_bookkeeper_app(local_port, app_roles, discovery_ips_file):
-    bookkeeper_bp = create_bookkeeper_blueprint()
-    time_regular_func = partial(update_function, local_port, app_roles, discovery_ips_file)
-    return bookkeeper_bp, time_regular_func
+def create_bookkeeper_service(local_port: int, discovery_ips_file: str) -> P2PFlaskApp:
+    """
+    Creates a bookkeeper service. The bookkeeper service has the role of discovering other nodes in the network.
+    It consists of a server that handles GET or POST requests about the node states. It also has a background active
+    function that makes requests to the local bookkeeper server and to remote bookkeeper servers in order to make new
+    discoveries.
 
+    Args:
+        local_port: the local port tells the time_regular_func on which port to make requests to /node_states
+        discovery_ips_file: path to a file containing node states. the network discovery starts from making requests to
+            nodes found in this file
 
-def create_bookkeeper_service(local_port, discovery_ips_file):
-    app = Flask(__name__)
-    app.roles = []
-    app.time_regular_funcs = []
-    bookkeeper_bp, time_regular_func = create_bookkeeper_app(local_port, app.roles, discovery_ips_file)
+    Returns:
+        P2PFlaskApp
+    """
+    app = P2PFlaskApp(__name__)
+    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port, app.roles, discovery_ips_file)
     app.register_blueprint(bookkeeper_bp)
-    app.time_regular_funcs.append(time_regular_func)
 
     return app
 

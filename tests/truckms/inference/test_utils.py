@@ -1,7 +1,11 @@
 from truckms.inference.utils import framedatapoint_generator, framedatapoint_generator_by_frame_ids,\
-    framedatapoint_generator_by_frame_ids2
+    framedatapoint_generator_by_frame_ids2, get_video_file_size
 import os.path as osp
 from truckms.api import FrameDatapoint
+
+
+def test_get_video_file_size():
+    assert get_video_file_size(video_path=osp.join(osp.dirname(__file__), '..', 'service' , 'data', 'cut.mkv')) == 160
 
 
 def test_image_generator():
