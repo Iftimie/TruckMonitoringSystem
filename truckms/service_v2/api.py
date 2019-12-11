@@ -25,6 +25,7 @@ class P2PFlaskApp(Flask):
         self.overwritten_routes = []  # List[Tuple[str, callable]]
         super(P2PFlaskApp, self).__init__(*args, **kwargs)
         self.roles = []
+        self._blueprints = []
         self._time_regular_funcs = []
         self._time_regular_thread = None
         self._time_interval = 10
@@ -58,6 +59,7 @@ class P2PFlaskApp(Flask):
                 self.register_time_regular_func(f)
             self.roles.append(blueprint.role)
             self.overwritten_routes += blueprint.overwritten_rules
+        self._blueprints.append(blueprint)
         super(P2PFlaskApp, self).register_blueprint(blueprint)
 
     # TODO I should also implement the shutdown method that will close the time_regular_thread

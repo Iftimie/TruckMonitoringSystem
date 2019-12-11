@@ -1,5 +1,5 @@
 from truckms.service.bookkeeper import ServerThread
-from truckms.service.bookkeeper import create_bookkeeper_service, create_bookkeeper_blueprint
+from truckms.service.bookkeeper import create_bookkeeper_service, create_bookkeeper_p2pblueprint
 from truckms.service.worker.server import create_worker_p2pblueprint
 from truckms.service import bookkeeper
 import requests
@@ -22,7 +22,7 @@ def create_bookkeeper_worker_ms(tmpdir, number):
     os.mkdir(up_dir)
     app = Flask(__name__)
     app.roles = []
-    bookkeeper_bp = create_bookkeeper_blueprint()
+    bookkeeper_bp = create_bookkeeper_p2pblueprint()
     app.register_blueprint(bookkeeper_bp)
     # app.roles.append(bookkeeper_bp.role)
 

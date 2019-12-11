@@ -25,7 +25,7 @@ def test_create_worker_blueprint(tmpdir):
     up_dir = os.path.join(tmpdir.strpath, "updir")
     os.mkdir(up_dir)
     db_url = 'sqlite:///' + os.path.join(tmpdir.strpath, "database.sqlite")
-    worker_app, worker_pool = create_worker_service(up_dir, db_url, 1)
+    worker_app = create_worker_service(up_dir, db_url, 1)
     client = worker_app.test_client()
 
     with open(os.path.join(tmpdir.strpath, 'dummy.avi'), 'wb') as f: pass
@@ -35,8 +35,8 @@ def test_create_worker_blueprint(tmpdir):
     res = client.post("/upload_recordings", data=file_data)
     assert (res.status_code == 200)
     assert (res.data == b"Files uploaded and started runniing the detector. Check later for the results")
-    worker_pool.close()
-    worker_pool.join()
+    worker_app._blueprints[0].worker_pool.close()
+    worker_app._blueprints[0].worker_pool.join()
     session = create_session(db_url)
     results = VideoStatuses.get_video_statuses(session)
     assert len(results) == 1
