@@ -1,4 +1,4 @@
-from flask import Flask, Blueprint
+from flask import Flask, Blueprint, make_response
 import time
 import threading
 from typing import Tuple, List
@@ -25,6 +25,7 @@ class P2PFlaskApp(Flask):
         self.overwritten_routes = []  # List[Tuple[str, callable]]
         super(P2PFlaskApp, self).__init__(*args, **kwargs)
         self.roles = []
+        self._blueprints = []
         self._time_regular_funcs = []
         self._time_regular_thread = None
         self._time_interval = 10
@@ -58,6 +59,7 @@ class P2PFlaskApp(Flask):
                 self.register_time_regular_func(f)
             self.roles.append(blueprint.role)
             self.overwritten_routes += blueprint.overwritten_rules
+        self._blueprints.append(blueprint)
         super(P2PFlaskApp, self).register_blueprint(blueprint)
 
     # TODO I should also implement the shutdown method that will close the time_regular_thread
@@ -67,6 +69,10 @@ class P2PFlaskApp(Flask):
                                                      args=(self._time_regular_funcs, self._time_interval))
         self._time_regular_thread.start()
         super(P2PFlaskApp, self).run(*args, **kwargs)
+
+
+def echo():
+    return make_response("I exist", 200)
 
 
 class P2PBlueprint(Blueprint):
@@ -82,6 +88,7 @@ class P2PBlueprint(Blueprint):
         self.role = role
         self.rule_mappings = {}
         self.overwritten_rules = [] # List[Tuple[str, callable]]
+        self.route("/echo", methods=['GET'])(echo)
 
     def register_time_regular_func(self, f):
         """
@@ -95,6 +102,9 @@ class P2PBlueprint(Blueprint):
         """
         Overwritten method for catching the rules and their functions in a map. In case the function is a locally declared function such as a partial,
         and we may want to overwrite that method, we need to store somewhere that locally declared function, otherwise we cannot access it.
+
+        Example of route override:
+        https://github.com/Iftimie/TruckMonitoringSystem/blob/6405f0341ad41c32fae7e4bab2d264b65a1d8ee9/truckms/service/worker/broker.py#L163
         """
         if args:
             rule = args[0]

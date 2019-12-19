@@ -17,7 +17,7 @@ def flaskuimain():
     work_func, work_pool, list_futures = get_job_dispathcher(db_url=db_url, num_workers=1, max_operating_res=320, skip=0, local_port=port)
     uiapp, app = create_guiservice(db_url, work_func, port)
 
-    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=[], discovery_ips_file="discovery_ips")
+    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file="discovery_ips")
     app.register_blueprint(bookkeeper_bp)
 
     uiapp.run()

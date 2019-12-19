@@ -11,6 +11,7 @@ import numpy as np
 from numpy import dot
 from scipy.linalg import inv, block_diag
 from truckms.api import PredictionDatapoint
+from typing import Iterable
 
 
 class Tracker():  # class for Kalman Filter-based tracker
@@ -278,7 +279,7 @@ def pipeline(pred, tracker_list, id_incrementer, max_age=4, min_hits=3):
     return detections_list2_dict_numpy(all_good_boxes), all_good_trackers, id_incrementer
 
 
-def filter_pred_detections(pdp_iterable: PredictionDatapoint) -> PredictionDatapoint:
+def filter_pred_detections(pdp_iterable: Iterable[PredictionDatapoint]) -> Iterable[PredictionDatapoint]:
     """
     Assigns obj_id to predictions.
 
