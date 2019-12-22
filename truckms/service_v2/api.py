@@ -121,4 +121,10 @@ class P2PBlueprint(Blueprint):
         return decorated_function_catcher
 
 
+class P2PData:
+    """
 
+    """
+
+    def __init__(self):
+        pass
