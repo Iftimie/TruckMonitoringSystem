@@ -1,10 +1,12 @@
 import montydb
 import requests
-from flask import request
+from flask import request, jsonify
+from werkzeug import secure_filename
 from flask import Blueprint
 from functools import wraps, partial
 from copy import deepcopy
 import logging
+import io
 logger = logging.getLogger(__name__)
 
 
@@ -16,14 +18,31 @@ def default_serialize(data):
     {}, {"key":value}
     {"filename":handle}, {}
     """
+    files = {k: v for k, v in data.items() if isinstance(v, io.IOBase)}
+    if files and "files_significance" not in data:
+        raise ValueError("key files_significance must be in data")
+    for k in files:
+        del data[k]
+    json = jsonify(data)
+    return files, json
 
 
 def default_deserialize(file, json):
-    f = request.files[filename]
-    filename = secure_filename(filename)
-    filepath = os.path.join(up_dir, filename)
-    f.save(filepath)
+    """
+    both are dictionaries
+    #TODO implement for .ZIP file
+    """
+    listkeys = list(file.keys())
+    assert len(listkeys) <= 1
+    if listkeys:
+        filename = listkeys[0]
+        filepath = filename  # os.path.join(up_dir, filename)
+        file[filepath].save(filepath)
+        sign = json["files_significance"][filename]
+        json[sign] = filepath
+        del json["files_significance"]
 
+    return json
 
 def p2p_route_insert_one(db_path, db, col, deserializer=default_deserialize):
     collection = montydb.MontyClient(db_path)[db][col]
@@ -37,9 +56,8 @@ def p2p_route_insert_one(db_path, db, col, deserializer=default_deserialize):
 
     data_to_insert = deserializer(file, json)
     # what do I do with the file?
-    data = json
-    data["nodes"].append(request.remote_url)
-    collection.insert_one(data)
+    data_to_insert["nodes"].append(request.remote_url)
+    collection.insert_one(data_to_insert)
 
 
 
