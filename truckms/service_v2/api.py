@@ -1,7 +1,9 @@
 from flask import Flask, Blueprint, make_response
 import time
 import threading
-from typing import Tuple, List
+import logging
+import requests
+logger = logging.getLogger(__name__)
 
 
 class P2PFlaskApp(Flask):
@@ -119,6 +121,24 @@ class P2PBlueprint(Blueprint):
             return decorator_function(f)
 
         return decorated_function_catcher
+
+
+def self_is_reachable(local_port):
+    """
+    return the public address: ip:port if it is reachable
+    else it returns None
+    """
+    externalipres = requests.get('http://checkip.dyndns.org/')
+    part = externalipres.content.decode('utf-8').split(": ")[1]
+    ip_ = part.split("<")[0]
+    try:
+        echo_response = requests.get('http://{}:{}/echo'.format(ip_, local_port), timeout=3)
+        if echo_response.status_code == 200:
+            return "{}:{}".format(ip_, local_port)
+        else:
+            return None
+    except:
+        return None
 
 
 class P2PData:

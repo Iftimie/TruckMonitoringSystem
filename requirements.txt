@@ -25,5 +25,5 @@ flaskwebgui
 sqlalchemy
 requests
 netifaces
-montydb
+tinymongo
 requests-toolbelt

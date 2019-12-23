@@ -1,94 +1,133 @@
-import montydb
 import requests
-from flask import request, jsonify
+from flask import request
+from json import dumps, loads
 from werkzeug import secure_filename
-from flask import Blueprint
+from truckms.service_v2.api import P2PBlueprint
 from functools import wraps, partial
 from copy import deepcopy
 import logging
 import io
+import traceback
+import tinymongo
+from truckms.service_v2.api import self_is_reachable
+import os
+from typing import Tuple
 logger = logging.getLogger(__name__)
 
 
-def default_serialize(data):
+def default_serialize(data) -> Tuple[dict, str]:
     """
     data should be a dictionary
     return tuple containing a dictionary with handle for a single file and json
     example:
-    {}, {"key":value}
-    {"filename":handle}, {}
+    {}, json string: '{"key":value}'
+    {"filename":handle}, '{}'
     """
-    files = {k: v for k, v in data.items() if isinstance(v, io.IOBase)}
-    if files and "files_significance" not in data:
-        raise ValueError("key files_significance must be in data")
-    for k in files:
-        del data[k]
-    json = jsonify(data)
-    return files, json
+    files = {os.path.basename(v.name): v for k, v in data.items() if isinstance(v, io.IOBase)}
+    files_significance = {os.path.basename(v.name): k for k, v in data.items() if isinstance(v, io.IOBase)}
+    new_data = {k: v for k, v in data.items() if not isinstance(v, io.IOBase)}
+    new_data["files_significance"] = files_significance
+    json_obj = dumps(new_data)
+    return files, json_obj
 
 
-def default_deserialize(file, json):
+def default_deserialize(files, json, up_dir):
     """
     both are dictionaries
+    the files dict should contain a single handle to file
     #TODO implement for .ZIP file
     """
-    listkeys = list(file.keys())
+    data = loads(json)
+
+    listkeys = list(files.keys())
     assert len(listkeys) <= 1
     if listkeys:
         filename = listkeys[0]
-        filepath = filename  # os.path.join(up_dir, filename)
-        file[filepath].save(filepath)
-        sign = json["files_significance"][filename]
-        json[sign] = filepath
-        del json["files_significance"]
+        filepath = os.path.join(up_dir, filename)
+        files[filename].save(filepath)
+        sign = data["files_significance"][filename]
+        data[sign] = filepath
+    del data["files_significance"]
 
-    return json
+    return data
+
 
 def p2p_route_insert_one(db_path, db, col, deserializer=default_deserialize):
-    collection = montydb.MontyClient(db_path)[db][col]
-
     if request.files:
-        filename = request.files[0]
-        file = {secure_filename(filename), request.files[filename]}
+        filename = list(request.files.keys())[0]
+        files = {secure_filename(filename): request.files[filename]}
     else:
-        file = {}
-    json = request.json
+        files = dict()
 
-    data_to_insert = deserializer(file, json)
-    # what do I do with the file?
-    data_to_insert["nodes"].append(request.remote_url)
-    collection.insert_one(data_to_insert)
+    data_to_insert = deserializer(files, request.form['json'])
+    # collection.insert_one(data_to_insert)
+    update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
 
 
-
-def create_p2p_blueprint(db_url):
-    p2p_blueprint = Blueprint("p2p_blueprint", __name__)
-    p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db_url)))
+def create_p2p_blueprint(up_dir, db_url):
+    p2p_blueprint = P2PBlueprint("p2p_blueprint", __name__, role="storage")
+    new_deserializer = partial(default_deserialize, up_dir=up_dir)
+    p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db_path=db_url, deserializer=new_deserializer)))
     p2p_blueprint.route("/insert_one/<db>/<col>", methods=['POST'])(p2p_route_insert_one_func)
+    return p2p_blueprint
 
 
-def insert_one(db_path, db, col, data):
-    collection = montydb.MontyClient(db_path)[db][col]
-    data = deepcopy(data)
-    data["nodes"] = []
-    collection.insert_one(data)
+# def insert_one(db_path, db, col, data):
+#
+#     collection = tinymongo.TinyMongoClient(db_path)[db][col]
+#     data = deepcopy(data)
+#     data["nodes"] = []
+#     collection.insert(data)
+
+def separate_io_data(data):
+    files = {k: v for k, v in data.items() if isinstance(v, io.IOBase)}
+    new_data = {k: v for k, v in data.items() if not isinstance(v, io.IOBase)}
+    for k in files:
+        new_data[k] = files[k].name
+    return files, new_data
 
 
-def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, post_func=requests.post):
+def update_one(db_path, db, col, query, doc, upsert=False):
+    collection = tinymongo.TinyMongoClient(db_path)[db][col]
+    _, query = separate_io_data(query)
+    _, doc = separate_io_data(doc)
+    res = list(collection.find(query))
+    if len(res) == 0 and upsert is True:
+        if "nodes" not in doc:
+            doc["nodes"] = []
+        collection.insert(doc)
+    elif len(res) == 1:
+        collection.update_one(query, {"$set": doc})
+    else:
+        raise ValueError("More than 1 document found with this query: {}. Documents found: {}".format(str(query), str(res)))
+
+
+def p2p_insert_one(db_path, db, col, data, nodes, local_port, serializer=default_serialize, post_func=requests.post):
     """
     post_func is used especially for testing
     """
-    collection = montydb.MontyClient(db_path)[db][col]
-    update = deepcopy(data)
-    update["nodes"] = nodes
-    collection.update_one(data, update)
+    try:
+        update = data
+        update["nodes"] = nodes
+        update_one(db_path, db, col, data, update, upsert=True)
+    except ValueError as e:
+        logger.info(traceback.format_exc())
+        raise e
+
     for i, node in enumerate(nodes):
-        data_to_send = deepcopy(data)
-        data_to_send["nodes"] = nodes[:i] + nodes[i+1:]
-        file, json = serializer(data_to_send)
+        # the data sent to a node will not contain in "nodes" list the pointer to that node. only to other nodes
+        # TODO deepcopy data before modification
+        data["nodes"] = nodes[:i] + nodes[i+1:]
+        public_address = self_is_reachable(local_port)
+        if public_address:
+            data['nodes'].append(public_address)
+        file, json = serializer(data)
+        del data["nodes"]
         try:
-            post_func("http://{}/insert_one/{}/{}".format(node, db, col), files=file, json=json)
+            post_func("http://{}/insert_one/{}/{}".format(node, db, col), files=file, json={"json": json})
         except:
+            traceback.print_exc()
+            logger.info(traceback.format_exc())
             logger.info("Unable to post p2p data")
 
 
