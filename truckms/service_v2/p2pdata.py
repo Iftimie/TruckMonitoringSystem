@@ -64,11 +64,24 @@ def p2p_route_insert_one(db_path, db, col, deserializer=default_deserialize):
     update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
 
 
+def p2p_route_update_one(db_path, db, col, deserializer=default_deserialize):
+    if request.files:
+        filename = list(request.files.keys())[0]
+        files = {secure_filename(filename): request.files[filename]}
+    else:
+        files = dict()
+    update_data = deserializer(files, request.form['update_json'])
+    filter_data = deserializer({}, request.form['filter_json'])
+    update_one(db_path, db, col, filter_data, update_data, upsert=False)
+
+
 def create_p2p_blueprint(up_dir, db_url):
     p2p_blueprint = P2PBlueprint("p2p_blueprint", __name__, role="storage")
     new_deserializer = partial(default_deserialize, up_dir=up_dir)
     p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db_path=db_url, deserializer=new_deserializer)))
     p2p_blueprint.route("/insert_one/<db>/<col>", methods=['POST'])(p2p_route_insert_one_func)
+    p2p_route_update_one_func = (wraps(p2p_route_update_one)(partial(p2p_route_update_one, db_path=db_url, deserializer=new_deserializer)))
+    p2p_blueprint.route("/update_one/<db>/<col>", methods=['POST'])(p2p_route_update_one_func)
     return p2p_blueprint
 
 
@@ -99,7 +112,7 @@ def update_one(db_path, db, col, query, doc, upsert=False):
     elif len(res) == 1:
         collection.update_one(query, {"$set": doc})
     else:
-        raise ValueError("More than 1 document found with this query: {}. Documents found: {}".format(str(query), str(res)))
+        raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(query), str(res)))
 
 
 def p2p_insert_one(db_path, db, col, data, nodes, local_port, serializer=default_serialize, post_func=requests.post):
@@ -116,7 +129,6 @@ def p2p_insert_one(db_path, db, col, data, nodes, local_port, serializer=default
 
     for i, node in enumerate(nodes):
         # the data sent to a node will not contain in "nodes" list the pointer to that node. only to other nodes
-        # TODO deepcopy data before modification
         data["nodes"] = nodes[:i] + nodes[i+1:]
         public_address = self_is_reachable(local_port)
         if public_address:
@@ -131,9 +143,32 @@ def p2p_insert_one(db_path, db, col, data, nodes, local_port, serializer=default
             logger.info("Unable to post p2p data")
 
 
-def p2p_update(db, col, filter, update):
-    collection = montydb.MontyClient[db][col]
-    item = collection.find(filter)
-    collection.update_one(filter, update)
+def p2p_update_one(db_path, db, col, filter, update, serializer=default_serialize, post_func=requests.post):
+    try:
+        update_one(db_path, db, col, filter, update, upsert=False)
+    except ValueError as e:
+        logger.info(traceback.format_exc())
+        raise e
 
+    collection = tinymongo.TinyMongoClient(db_path)[db][col]
+    res = list(collection.find(filter))
+    if len(res) != 1:
+        raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(filter), str(res)))
 
+    nodes = res[0]["nodes"]
+
+    for i, node in enumerate(nodes):
+        # node information will not be sent in update function.
+        # TODO or maybe on the long term I should do this?
+        #  like, when data is partitioned
+
+        files, update_json = serializer(update)
+        _, filter_json = serializer(filter)
+
+        try:
+            post_func("http://{}/update_one/{}/{}".format(node, db, col), files=files, json={"update_json": update_json,
+                                                                                            "filter_json": filter_json})
+        except:
+            traceback.print_exc()
+            logger.info(traceback.format_exc())
+            logger.info("Unable to post p2p data")
