@@ -8,10 +8,35 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def p2p_route_insert_one(db_path, db, col):
+def default_serialize(data):
+    """
+    data should be a dictionary
+    return tuple containing a dictionary with handle for a single file and json
+    example:
+    {}, {"key":value}
+    {"filename":handle}, {}
+    """
+
+
+def default_deserialize(file, json):
+    f = request.files[filename]
+    filename = secure_filename(filename)
+    filepath = os.path.join(up_dir, filename)
+    f.save(filepath)
+
+
+def p2p_route_insert_one(db_path, db, col, deserializer=default_deserialize):
     collection = montydb.MontyClient(db_path)[db][col]
 
-    files, json = deserialize(request)
+    if request.files:
+        filename = request.files[0]
+        file = {secure_filename(filename), request.files[filename]}
+    else:
+        file = {}
+    json = request.json
+
+    data_to_insert = deserializer(file, json)
+    # what do I do with the file?
     data = json
     data["nodes"].append(request.remote_url)
     collection.insert_one(data)
@@ -31,7 +56,7 @@ def insert_one(db_path, db, col, data):
     collection.insert_one(data)
 
 
-def p2p_insert_one(db_path, db, col, data, nodes, serializer, post_func=requests.post):
+def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, post_func=requests.post):
     """
     post_func is used especially for testing
     """
@@ -42,9 +67,9 @@ def p2p_insert_one(db_path, db, col, data, nodes, serializer, post_func=requests
     for i, node in enumerate(nodes):
         data_to_send = deepcopy(data)
         data_to_send["nodes"] = nodes[:i] + nodes[i+1:]
-        files, json = serializer(data_to_send)
+        file, json = serializer(data_to_send)
         try:
-            post_func("http://{}/insert_one/{}/{}".format(node, db, col), files=files, json=json)
+            post_func("http://{}/insert_one/{}/{}".format(node, db, col), files=file, json=json)
         except:
             logger.info("Unable to post p2p data")
 
