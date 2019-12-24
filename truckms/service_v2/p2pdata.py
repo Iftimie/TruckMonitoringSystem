@@ -13,6 +13,7 @@ from truckms.service_v2.api import self_is_reachable
 import os
 from typing import Tuple
 logger = logging.getLogger(__name__)
+import time
 
 
 def default_serialize(data) -> Tuple[dict, str]:
@@ -75,7 +76,7 @@ def p2p_route_update_one(db_path, db, col, deserializer=default_deserialize, pos
     filter_data = deserializer({}, request.form['filter_json'])
     visited_nodes = loads(request.form['visited_json'])
     # update_one(db_path, db, col, filter_data, update_data, upsert=False)
-    visited_nodes = p2p_update_one(db_path, db, col, filter_data, update_data, post_func=post_func, visited_nodes=visited_nodes)
+    visited_nodes = p2p_push_update_one(db_path, db, col, filter_data, update_data, post_func=post_func, visited_nodes=visited_nodes)
     return jsonify(visited_nodes)
 
 
@@ -104,11 +105,22 @@ def separate_io_data(data):
     return files, new_data
 
 
+def validate_document(document):
+    for k in document:
+        if isinstance(document[k], dict):
+            raise ValueError("Cannot have nested dictionaries in current implementation")
+
+
 def update_one(db_path, db, col, query, doc, upsert=False):
+    """
+    This function is entry point for both insert and update.
+    """
+    validate_document(doc)
     collection = tinymongo.TinyMongoClient(db_path)[db][col]
     _, query = separate_io_data(query)
     _, doc = separate_io_data(doc)
     res = list(collection.find(query))
+    doc["timestamp"] = time.time()
     if len(res) == 0 and upsert is True:
         if "nodes" not in doc:
             doc["nodes"] = []
@@ -148,7 +160,7 @@ def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, 
             logger.info("Unable to post p2p data")
 
 
-def p2p_update_one(db_path, db, col, filter, update, serializer=default_serialize, post_func=requests.post, visited_nodes=None):
+def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_serialize, post_func=requests.post, visited_nodes=None):
     if visited_nodes is None:
         visited_nodes = []
     try:
