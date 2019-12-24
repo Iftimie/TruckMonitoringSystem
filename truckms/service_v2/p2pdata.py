@@ -43,11 +43,16 @@ def default_deserialize(files, json, up_dir):
     listkeys = list(files.keys())
     assert len(listkeys) <= 1
     if listkeys:
-        filename = listkeys[0]
-        filepath = os.path.join(up_dir, filename)
-        # todo what happens if this data allready exists. a new filename should be added
-        files[filename].save(filepath)
-        sign = data["files_significance"][filename]
+        original_filename = listkeys[0]
+        filepath = os.path.join(up_dir, original_filename)
+        original_filepath = filepath
+        i = 1
+        while os.path.exists(filepath):
+            filename, file_extension = os.path.splitext(original_filepath)
+            filepath = filename + "_{}_".format(i) + file_extension
+            i += 1
+        files[original_filename].save(filepath)
+        sign = data["files_significance"][original_filename]
         data[sign] = filepath
     del data["files_significance"]
 
@@ -237,6 +242,7 @@ class WrapperSave:
         with open(filepath, 'wb') as f:
             f.write(self.bytes)
 
+
 def merge_downloaded_data(original_data, merging_data):
     if not merging_data:
         return {}
@@ -244,18 +250,24 @@ def merge_downloaded_data(original_data, merging_data):
     result_update = {}
     for k in update_keys:
         if "timestamp" in k:continue
-        result_update[k] = max(merging_data, key=lambda d: d['timestamp'] if d[k] != original_data[k] else 0)[k]
+        if all(d[k] == original_data[k] for d in merging_data):
+            result_update[k] = max(merging_data, key=lambda d: d['timestamp'])[k]
+        else:
+            result_update[k] = max(merging_data, key=lambda d: d['timestamp'] if d[k] != original_data[k] else 0)[k]
 
     return result_update
+
 
 def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_file_keys=None, post_func=requests.post):
     if hint_file_keys is None:
         hint_file_keys = []
 
+    req_keys = list(set(req_keys) | set(["timestamp"]))
+
     collection = tinymongo.TinyMongoClient(db_path)[db][col]
     collection_res = list(collection.find(filter))
     if len(collection_res) != 1:
-        raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(filter), str(res)))
+        raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(filter), str(collection_res)))
 
     nodes = collection_res[0]["nodes"]
 

@@ -466,3 +466,81 @@ def test_p2p_pull_update_one(tmpdir):
     assert node0data["res"] == 800
     assert node0data["key0"] == "conflicting_value1"
     assert node0data["key1"] == "non_conflicting_value"
+
+
+def test_p2p_pull_update_one_with_files(tmpdir):
+    import tinymongo
+
+    db, col = "mydb", "movie_statuses"
+    node1data = {"res": 320, "name": "somename", "key0": "value0", "key1": "value1",
+                 "file": None}
+    nodes = ["0000:0000", "1111:1111", "2222:2222"]
+    db_url0 = os.path.join(tmpdir, "mongodb0")
+    db_url1 = os.path.join(tmpdir, "mongodb1")
+    db_url2 = os.path.join(tmpdir, "mongodb2")
+
+    def post_func(url, **kwargs):
+        data = dict()
+        data.update(kwargs["files"])
+        data.update(kwargs["json"])
+        print(url)
+        client = urls[url]
+        return client.post('/'.join(url.split("/")[3:]), data=data)
+
+    def create_app(db_url, current_addr_func):
+        app = P2PFlaskApp(__name__)
+        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=db_url,
+                                      current_address_func=current_addr_func)
+        app.register_blueprint(p2p_bp)
+        return app
+
+    client0 = create_app(db_url0, lambda: "0000:0000").test_client()
+    client1 = create_app(db_url1, lambda: "1111:1111").test_client()
+    client2 = create_app(db_url2, lambda: "2222:2222").test_client()
+    urls = {
+            "http://{}/insert_one/{}/{}".format(nodes[0], db, col): client0,
+            "http://{}/push_update_one/{}/{}".format(nodes[0], db, col): client0,
+
+            "http://{}/insert_one/{}/{}".format(nodes[1], db, col): client1,
+            "http://{}/push_update_one/{}/{}".format(nodes[1], db, col): client1,
+            "http://{}/pull_update_one/{}/{}".format(nodes[1], db, col): client1,
+
+            "http://{}/insert_one/{}/{}".format(nodes[2], db, col): client2,
+            "http://{}/push_update_one/{}/{}".format(nodes[2], db, col): client2,
+            "http://{}/pull_update_one/{}/{}".format(nodes[2], db, col): client2
+    }
+
+    # we insert here and remotely
+    p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111", "2222:2222"], post_func=post_func,
+                   current_address_func=lambda: "0000:0000")
+    # we update remotely the node list. assume node 1 can reach node 0
+    node1filter_ = {"name": "somename"}
+    node1update_data = list(tinymongo.TinyMongoClient(db_url1)[db][col].find(node1filter_))[0]
+    node1update_data = {k: node1update_data[k] for k in node1update_data if k != "_id"}
+    node1update_data["res"] = 800
+    node1update_data["key0"] = "conflicting_value0"
+    with open(os.path.join(tmpdir, "dummy1.txt"), 'w') as f:
+        f.write("dummy1")
+    node1update_data["file"] = os.path.join(tmpdir, "dummy2.txt")
+    update_one(db_url1, db, col, node1filter_, node1update_data)
+    # the client worker will download the data and will insert it by itself
+    node2filter_ = node1filter_
+    node2update_data = list(tinymongo.TinyMongoClient(db_url2)[db][col].find(node2filter_))[0]
+    with open(os.path.join(tmpdir, "dummy2.txt"), 'w') as f:
+        f.write("dummy2")
+    node2update_data["key1"] = "non_conflicting_value"
+    node2update_data["key0"] = "conflicting_value1"
+    node2update_data["file"] = os.path.join(tmpdir, "dummy2.txt")
+    update_one(db_url2, db, col, node2filter_, node2update_data)
+
+    pprint(list(tinymongo.TinyMongoClient(db_url0)[db][col].find()))
+    pprint(list(tinymongo.TinyMongoClient(db_url1)[db][col].find()))
+    pprint(list(tinymongo.TinyMongoClient(db_url2)[db][col].find()))
+
+    p2p_pull_update_one(db_url0, db, col, node1filter_, ["res", "key0", "key1", "file"], hint_file_keys=["file"], post_func=post_func,
+                        deserializer=partial(default_deserialize, up_dir=tmpdir))
+    node0data = list(tinymongo.TinyMongoClient(db_url0)[db][col].find(node2filter_))[0]
+    assert node0data["res"] == 800
+    assert node0data["key0"] == "conflicting_value1"
+    assert node0data["key1"] == "non_conflicting_value"
+    assert node0data["file"] == os.path.join(tmpdir, "dummy2_2_.txt")
