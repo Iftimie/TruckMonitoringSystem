@@ -1,5 +1,5 @@
 import requests
-from flask import request, jsonify
+from flask import request, jsonify, send_file, make_response
 from json import dumps, loads
 from werkzeug import secure_filename
 from truckms.service_v2.api import P2PBlueprint
@@ -45,6 +45,7 @@ def default_deserialize(files, json, up_dir):
     if listkeys:
         filename = listkeys[0]
         filepath = os.path.join(up_dir, filename)
+        # todo what happens if this data allready exists. a new filename should be added
         files[filename].save(filepath)
         sign = data["files_significance"][filename]
         data[sign] = filepath
@@ -66,7 +67,7 @@ def p2p_route_insert_one(db_path, db, col, deserializer=default_deserialize, cur
     update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
 
 
-def p2p_route_update_one(db_path, db, col, deserializer=default_deserialize, post_func=requests.post):
+def p2p_route_push_update_one(db_path, db, col, deserializer=default_deserialize, post_func=requests.post):
     if request.files:
         filename = list(request.files.keys())[0]
         files = {secure_filename(filename): request.files[filename]}
@@ -80,13 +81,41 @@ def p2p_route_update_one(db_path, db, col, deserializer=default_deserialize, pos
     return jsonify(visited_nodes)
 
 
-def create_p2p_blueprint(up_dir, db_url, post_func, current_address_func=lambda: None):
+def p2p_route_pull_update_one(db_path, db, col, serializer=default_serialize):
+    req_keys = loads(request.form['req_keys_json'])
+    filter_data = loads(request.form['filter_json'])
+    hint_file_keys = loads(request.form['hint_file_keys_json'])
+    required_list = list(tinymongo.TinyMongoClient(db_path)[db][col].find(filter_data))
+    assert len(required_list) == 1
+    required_data = required_list[0]
+    data_to_send = {}
+    for k in req_keys:
+        if k not in hint_file_keys:
+            data_to_send[k] = required_data[k]
+        else:
+            data_to_send[k] = open(required_data[k])
+    files, json = serializer(data_to_send)
+    if files:
+        k = list(files.keys())[0]
+        result = send_file(files[k].name, as_attachment=True)
+        result.headers['update_json'] = json
+    else:
+        result = make_response("")
+        # result = send_file(__file__, as_attachment=True)
+        result.headers['update_json'] = json
+
+    return result
+
+
+def create_p2p_blueprint(up_dir, db_url, post_func=requests.post, current_address_func=lambda: None):
     p2p_blueprint = P2PBlueprint("p2p_blueprint", __name__, role="storage")
     new_deserializer = partial(default_deserialize, up_dir=up_dir)
     p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db_path=db_url, deserializer=new_deserializer, current_address_func=current_address_func)))
     p2p_blueprint.route("/insert_one/<db>/<col>", methods=['POST'])(p2p_route_insert_one_func)
-    p2p_route_update_one_func = (wraps(p2p_route_update_one)(partial(p2p_route_update_one, db_path=db_url, deserializer=new_deserializer, post_func=post_func)))
-    p2p_blueprint.route("/update_one/<db>/<col>", methods=['POST'])(p2p_route_update_one_func)
+    p2p_route_push_update_one_func = (wraps(p2p_route_push_update_one)(partial(p2p_route_push_update_one, db_path=db_url, deserializer=new_deserializer, post_func=post_func)))
+    p2p_blueprint.route("/push_update_one/<db>/<col>", methods=['POST'])(p2p_route_push_update_one_func)
+    p2p_route_pull_update_one_func = (wraps(p2p_route_pull_update_one)(partial(p2p_route_pull_update_one, db_path=db_url)))
+    p2p_blueprint.route("/pull_update_one/<db>/<col>", methods=['POST'])(p2p_route_pull_update_one_func)
     return p2p_blueprint
 
 
@@ -187,7 +216,7 @@ def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_ser
         visited_json = dumps(visited_nodes)
 
         try:
-            res = post_func("http://{}/update_one/{}/{}".format(node, db, col), files=files, json={"update_json": update_json,
+            res = post_func("http://{}/push_update_one/{}/{}".format(node, db, col), files=files, json={"update_json": update_json,
                                                                                                    "filter_json": filter_json,
                                                                                                    "visited_json": visited_json})
             if res.status_code == 200:
@@ -198,3 +227,70 @@ def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_ser
             logger.info("Unable to post p2p data")
 
     return visited_nodes
+
+
+class WrapperSave:
+    def __init__(self, data):
+        self.bytes = data
+
+    def save(self, filepath):
+        with open(filepath, 'wb') as f:
+            f.write(self.bytes)
+
+def merge_downloaded_data(original_data, merging_data):
+    if not merging_data:
+        return {}
+    update_keys = merging_data[0].keys()
+    result_update = {}
+    for k in update_keys:
+        if "timestamp" in k:continue
+        result_update[k] = max(merging_data, key=lambda d: d['timestamp'] if d[k] != original_data[k] else 0)[k]
+
+    return result_update
+
+def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_file_keys=None, post_func=requests.post):
+    if hint_file_keys is None:
+        hint_file_keys = []
+
+    collection = tinymongo.TinyMongoClient(db_path)[db][col]
+    collection_res = list(collection.find(filter))
+    if len(collection_res) != 1:
+        raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(filter), str(res)))
+
+    nodes = collection_res[0]["nodes"]
+
+    files_to_remove_after_download = []
+    merging_data = []
+
+    for i, node in enumerate(nodes):
+
+        req_keys_json = dumps(req_keys)
+        filter_json = dumps(filter)
+        hint_file_keys_json = dumps(hint_file_keys)
+
+
+        try:
+            res = post_func("http://{}/pull_update_one/{}/{}".format(node, db, col), files={}, json={"req_keys_json": req_keys_json,
+                                                                                          "filter_json": filter_json,
+                                                                                          "hint_file_keys_json": hint_file_keys_json})
+
+            if res.status_code == 200:
+                update_json = res.headers['update_json']
+                files = {}
+                if 'Content-Disposition' in res.headers:
+                    filename = res.headers['Content-Disposition'].split("filename=")[1]
+                    files = {filename: WrapperSave(res.data)}
+                downloaded_data = deserializer(files, update_json)
+                merging_data.append(downloaded_data)
+        except:
+            traceback.print_exc()
+            logger.info(traceback.format_exc())
+            logger.info("Unable to post p2p data")
+
+    update = merge_downloaded_data(collection_res[0], merging_data)
+
+    try:
+        update_one(db_path, db, col, filter, update, upsert=False)
+    except ValueError as e:
+        logger.info(traceback.format_exc())
+        raise e
