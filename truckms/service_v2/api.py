@@ -141,10 +141,3 @@ def self_is_reachable(local_port):
         return None
 
 
-class P2PData:
-    """
-
-    """
-
-    def __init__(self):
-        pass
