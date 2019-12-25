@@ -14,6 +14,33 @@ import os
 from typing import Tuple
 logger = logging.getLogger(__name__)
 import time
+from functools import wraps
+import inspect
+
+
+def fixate_args(**fixed_kwargs):
+    """
+    Unlike functools.partial where you fixate the arguments, maybe we are unable to fixate the arguments because in
+    flask we have routing and we cannot ignore the arguments that are passed from routing.
+    For example we may fixate some arguments in p2p_route_push_update_one() for security reasons. We may want db and collection
+    to be only "mydb" and "mycollection". One way to do this would be to call functools.partial.
+    But that function is used in flask routing, and other functions from this p2pframework such as p2p_push_update_one
+    will call the function with duplicated arguments.
+    """
+    def inner_decorator(f):
+        formal_args = list(inspect.signature(f).parameters.keys())
+        positions_to_check = {i:arg for i, arg in enumerate(formal_args) if arg in fixed_kwargs}
+        @wraps(f)
+        def wrap(*args, **kwargs):
+            for i, val in enumerate(args):
+                if i in positions_to_check and not val == fixed_kwargs[positions_to_check[i]]:
+                    raise ValueError("bad argument: expected ", fixed_kwargs[positions_to_check[i]], "found", val)
+            for k in kwargs:
+                if k in fixed_kwargs and not kwargs[k] == fixed_kwargs[k]:
+                    raise ValueError("bad argument: expected ", fixed_kwargs[k], "found", kwargs[k])
+            return f(*args, **kwargs)
+        return wrap
+    return inner_decorator
 
 
 def default_serialize(data) -> Tuple[dict, str]:
@@ -72,6 +99,16 @@ def p2p_route_insert_one(db_path, db, col, deserializer=default_deserialize, cur
     update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
 
 
+# def p2p_route_insert_many(db_path, db, col, deserializer=default_deserialize, current_address_func=lambda: None):
+#     if request.files:
+#         raise ValueError("Not implemented for many documents with files")
+#
+#     data_to_insert = deserializer({}, request.form['json'])
+#     data_to_insert["current_address"] = current_address_func()
+#     # collection.insert_one(data_to_insert)
+#     update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
+
+
 def p2p_route_push_update_one(db_path, db, col, deserializer=default_deserialize, post_func=requests.post):
     if request.files:
         filename = list(request.files.keys())[0]
@@ -81,8 +118,10 @@ def p2p_route_push_update_one(db_path, db, col, deserializer=default_deserialize
     update_data = deserializer(files, request.form['update_json'])
     filter_data = deserializer({}, request.form['filter_json'])
     visited_nodes = loads(request.form['visited_json'])
+    recursive = request.form["recursive"]
     # update_one(db_path, db, col, filter_data, update_data, upsert=False)
-    visited_nodes = p2p_push_update_one(db_path, db, col, filter_data, update_data, post_func=post_func, visited_nodes=visited_nodes)
+    if recursive:
+        visited_nodes = p2p_push_update_one(db_path, db, col, filter_data, update_data, post_func=post_func, visited_nodes=visited_nodes)
     return jsonify(visited_nodes)
 
 
@@ -194,7 +233,7 @@ def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, 
             logger.info("Unable to post p2p data")
 
 
-def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_serialize, post_func=requests.post, visited_nodes=None):
+def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_serialize, post_func=requests.post, visited_nodes=None, recursive=True):
     if visited_nodes is None:
         visited_nodes = []
     try:
@@ -223,7 +262,8 @@ def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_ser
         try:
             res = post_func("http://{}/push_update_one/{}/{}".format(node, db, col), files=files, json={"update_json": update_json,
                                                                                                    "filter_json": filter_json,
-                                                                                                   "visited_json": visited_json})
+                                                                                                   "visited_json": visited_json,
+                                                                                                        "recursive": recursive})
             if res.status_code == 200:
                 visited_nodes = list(set(visited_nodes) | set(res.json))
         except:
@@ -258,7 +298,7 @@ def merge_downloaded_data(original_data, merging_data):
     return result_update
 
 
-def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_file_keys=None, post_func=requests.post):
+def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_file_keys=None, post_func=requests.post, merging_func=merge_downloaded_data):
     if hint_file_keys is None:
         hint_file_keys = []
 
@@ -299,7 +339,7 @@ def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_f
             logger.info(traceback.format_exc())
             logger.info("Unable to post p2p data")
 
-    update = merge_downloaded_data(collection_res[0], merging_data)
+    update = merging_func(collection_res[0], merging_data)
 
     try:
         update_one(db_path, db, col, filter, update, upsert=False)
