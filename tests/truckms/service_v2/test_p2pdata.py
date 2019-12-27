@@ -53,7 +53,7 @@ def test_p2p_insert_one(tmpdir):
     def post_func(url, **kwargs):
         data = dict()
         data.update(kwargs["files"])
-        data.update(kwargs["json"])
+        data.update(kwargs["data"])
         client = urls[url]
         client.post('/'.join(url.split("/")[3:]), data=data)
 
@@ -96,7 +96,7 @@ def test_p2p_insert_one_with_files(tmpdir):
     def post_func(url, **kwargs):
         data = dict()
         data.update(kwargs["files"])
-        data.update(kwargs["json"])
+        data.update(kwargs["data"])
         client = urls[url]
         client.post('/'.join(url.split("/")[3:]), data=data)
 
@@ -142,7 +142,7 @@ def test_p2p_update_one(tmpdir):
     def post_func(url, **kwargs):
         data = dict()
         data.update(kwargs["files"])
-        data.update(kwargs["json"])
+        data.update(kwargs["data"])
         client = urls[url]
         client.post('/'.join(url.split("/")[3:]), data=data)
 
@@ -203,7 +203,7 @@ def test_p2p_update_one_with_files(tmpdir):
     def post_func(url, **kwargs):
         data = dict()
         data.update(kwargs["files"])
-        data.update(kwargs["json"])
+        data.update(kwargs["data"])
         client = urls[url]
         client.post('/'.join(url.split("/")[3:]), data=data)
 
@@ -271,7 +271,7 @@ def test_p2p_link(tmpdir):
     def post_func(url, **kwargs):
         data = dict()
         data.update(kwargs["files"])
-        data.update(kwargs["json"])
+        data.update(kwargs["data"])
         client = urls[url]
         return client.post('/'.join(url.split("/")[3:]), data=data)
 
@@ -344,7 +344,7 @@ def test_p2p_link_with_files(tmpdir):
     def post_func(url, **kwargs):
         data = dict()
         data.update(kwargs["files"])
-        data.update(kwargs["json"])
+        data.update(kwargs["data"])
         client = urls[url]
         return client.post('/'.join(url.split("/")[3:]), data=data)
 
@@ -411,7 +411,7 @@ def test_p2p_pull_update_one(tmpdir):
     def post_func(url, **kwargs):
         data = dict()
         data.update(kwargs["files"])
-        data.update(kwargs["json"])
+        data.update(kwargs["data"])
         print(url)
         client = urls[url]
         return client.post('/'.join(url.split("/")[3:]), data=data)
@@ -482,7 +482,7 @@ def test_p2p_pull_update_one_with_files(tmpdir):
     def post_func(url, **kwargs):
         data = dict()
         data.update(kwargs["files"])
-        data.update(kwargs["json"])
+        data.update(kwargs["data"])
         print(url)
         client = urls[url]
         return client.post('/'.join(url.split("/")[3:]), data=data)
