@@ -28,7 +28,7 @@ def heartbeat(db_url):
 
 
 def create_brokerworker_blueprint(db_url, num_workers, function_registry):
-    broker_bp = P2PWorkerBlueprint("brokerworker_bp", __name__, role="brokerworker", num_workers=num_workers)
+    broker_bp = P2PWorkerBlueprint("brokerworker_bp", __name__, role="brokerworker", num_workers=num_workers if num_workers!=0 else 1)
     if num_workers == 0:
         broker_bp.worker_pool._processes = 0
     heartbeat_func = (wraps(heartbeat)(partial(heartbeat, db_url)))
@@ -91,7 +91,7 @@ def execute_function(worker_pool, function_registry, func_name, resource):
     return make_response("Check later for the results", 200)
 
 
-def create_broker_microservice(up_dir, db_url, num_workers=0) -> P2PFlaskApp:
+def create_brokerworker_microservice(up_dir, db_url, num_workers=0) -> P2PFlaskApp:
     """
     Args:
         up_dir: path to directory where to store video files and files with results
