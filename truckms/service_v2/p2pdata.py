@@ -226,7 +226,7 @@ def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, 
         file, json = serializer(data)
         del data["nodes"]
         try:
-            post_func("http://{}/insert_one/{}/{}".format(node, db, col), files=file, json={"json": json})
+            post_func("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json})
         except:
             traceback.print_exc()
             logger.info(traceback.format_exc())
@@ -260,7 +260,7 @@ def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_ser
         visited_json = dumps(visited_nodes)
 
         try:
-            res = post_func("http://{}/push_update_one/{}/{}".format(node, db, col), files=files, json={"update_json": update_json,
+            res = post_func("http://{}/push_update_one/{}/{}".format(node, db, col), files=files, data={"update_json": update_json,
                                                                                                    "filter_json": filter_json,
                                                                                                    "visited_json": visited_json,
                                                                                                         "recursive": recursive})
@@ -322,7 +322,7 @@ def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_f
 
 
         try:
-            res = post_func("http://{}/pull_update_one/{}/{}".format(node, db, col), files={}, json={"req_keys_json": req_keys_json,
+            res = post_func("http://{}/pull_update_one/{}/{}".format(node, db, col), files={}, data={"req_keys_json": req_keys_json,
                                                                                           "filter_json": filter_json,
                                                                                           "hint_file_keys_json": hint_file_keys_json})
 
