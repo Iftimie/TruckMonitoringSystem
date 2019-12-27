@@ -18,6 +18,7 @@ import logging
 from typing import Callable
 import traceback
 import time
+import requests
 from datetime import datetime
 logger = logging.getLogger(__name__)
 
@@ -82,6 +83,9 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port
         lru_ip, lru_port = select_lru_worker(local_port)
         data = {"identifier": osp.basename(video_path), "video_path": open(video_path, 'rb'), "results": None,
                 "time_of_request": time.time(), "progress": 0.0}
+        #delete this
+        def evaluate_workload():
+            return False
         if evaluate_workload() or lru_ip is None:
             # do not remove this. this is useful. we don't want to upload in broker (waste time and storage when we want to process locally
             nodes = []
@@ -92,6 +96,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port
         else:
             nodes = [str(lru_ip)+":"+str(lru_port)]
             p2p_insert_one(db_url, "tms", "movie_statuses", data, nodes)
+            requests.post("http://{}:{}/execute_function/analyze_movie/{}".format(lru_ip, lru_port, data["identifier"]))
             # TODO call remote func with identifier
             logger.info("Dispacthed work to {},{}".format(lru_ip, lru_port))
 
