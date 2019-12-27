@@ -17,6 +17,8 @@ from truckms.service.worker.user_client import select_lru_worker, evaluate_workl
 import logging
 from typing import Callable
 import traceback
+import time
+from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
@@ -37,17 +39,18 @@ def analyze_and_updatedb(db_url: str, video_path: str, analysis_func: Callable[[
     destination = None
     try:
 
-        data = {"identifier": osp.basename(video_path), "video_path": video_path, "results_path": None}
         filter_ = {"identifier": osp.basename(video_path)}
-        tinymongo.TinyMongoClient(db_url)["tms"]["movie_statuses"].insert(data)
         logger.info("Started processing file")
 
         def progress_hook(current_index, end_index):
             update_ = {"progress": current_index / end_index * 100.0}
             p2p_push_update_one(db_url, "tms", "movie_statuses", filter_, update_)
+            time.sleep(0.5)
+            logger.info("Done % {}".format(update_['progress']))
+
         # to do refactor this. this should not look like this
-        destination = analysis_func(video_path, progress_hook)
-        update_ = {"progress": 100.0, "results_path": open(destination, 'rb')}
+        destination = analysis_func(video_path, progress_hook=progress_hook)
+        update_ = {"progress": 100.0, "results": open(destination, 'rb')}
         p2p_push_update_one(db_url, "tms", "movie_statuses", filter_, update_)
         logger.info("Finished processing file")
     except:
@@ -77,16 +80,19 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port
 
     def dispatch_work(video_path):
         lru_ip, lru_port = select_lru_worker(local_port)
+        data = {"identifier": osp.basename(video_path), "video_path": open(video_path, 'rb'), "results": None,
+                "time_of_request": time.time(), "progress": 0.0}
         if evaluate_workload() or lru_ip is None:
             # do not remove this. this is useful. we don't want to upload in broker (waste time and storage when we want to process locally
+            nodes = []
+            p2p_insert_one(db_url, "tms", "movie_statuses", data, nodes)
             res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
             list_futures.append(res)
             logger.info("Analyzing file locally")
         else:
-            data = {"identifier": osp.basename(video_path), "video_path": open(video_path, 'rb'), "results_path": None}
             nodes = [str(lru_ip)+":"+str(lru_port)]
             p2p_insert_one(db_url, "tms", "movie_statuses", data, nodes)
-
+            # TODO call remote func with identifier
             logger.info("Dispacthed work to {},{}".format(lru_ip, lru_port))
 
     return dispatch_work, worker_pool, list_futures
@@ -108,7 +114,7 @@ def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> T
         P2PFlaskApp object
     """
 
-    app = P2PFlaskApp(__name__, template_folder=osp.join(osp.dirname(__file__), '..','..', 'service', 'templates'),
+    app = P2PFlaskApp(__name__, template_folder=osp.join(osp.dirname(__file__), '..', '..', 'service', 'templates'),
                       static_folder=osp.join(osp.dirname(__file__), '..', '..', 'service', 'templates', 'assets'))
 
     Bootstrap(app)
@@ -147,10 +153,10 @@ def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> T
         items = list(tinymongo.TinyMongoClient(db_url)["tms"]["movie_statuses"].find({}))
 
         for item in items:
-            up_dir = osp.dirname(item["filepath"])
+            up_dir = osp.dirname(item["video_path"])
             if item["results"] is None:
-                p2p_pull_update_one(db_url, "tms", "movie_statuses", {"filename": item['filename']},
-                                    req_keys=["results"], deserializer=partial(default_deserialize, up_dir=up_dir))
+                p2p_pull_update_one(db_url, "tms", "movie_statuses", {"identifier": item['identifier']},
+                                    req_keys=["results", "progress"], hint_file_keys=["results"], deserializer=partial(default_deserialize, up_dir=up_dir))
 
         # VideoStatuses.remove_dead_requests(session)
         # TODO call remove_dead_requests or insteand of removing, just restart them
@@ -160,12 +166,12 @@ def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> T
         # TODO also render on HTML the time of execution if it exists
         # TODO why the hell I am putting the query results in a list???? I should pass directly the query
         for item in items:
-            video_items.append({'filename': item['filename'],
+            video_items.append({'identifier': item['identifier'],
                                 'status': 'ready' if item['results'] is not None else 'processing',
                                 'progress': item['progress'],
-                                'time_of_request': item['time_of_request'].strftime(
-                                    "%m/%d/%Y, %H:%M:%S") if item.time_of_request is not None else 'none'})
-        partial_destination_url = '/show_video?filename='
+                                'time_of_request': datetime.utcfromtimestamp(item['time_of_request']).strftime(
+                                    "%m/%d/%Y, %H:%M:%S")})
+        partial_destination_url = '/show_video?identifier='
         resp = make_response(render_template("check_status.html", partial_destination_url=partial_destination_url,
                                              video_items=video_items))
         return resp
@@ -173,10 +179,10 @@ def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> T
     @app.route('/show_video')
     @ignore_remote_addresses
     def show_video():
-        filter_arg = request.args.get('filename')
-        item = list(tinymongo.TinyMongoClient(db_url)["tms"]["movie_statuses"].find({'filename': filter_arg}))[0]
+        filter_arg = request.args.get('identifier')
+        item = list(tinymongo.TinyMongoClient(db_url)["tms"]["movie_statuses"].find({'identifier': filter_arg}))[0]
 
-        plots_gen = html_imgs_generator(item['filepath'], item['results'])
+        plots_gen = html_imgs_generator(item['video_path'], item['results'])
 
         try:
             first_image = next(plots_gen)

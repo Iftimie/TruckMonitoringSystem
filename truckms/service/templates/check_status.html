@@ -14,7 +14,7 @@
         <table class="table table-striped table-responsive-md btn-table">
             <thead>
                 <tr>
-                  <th scope="col">Filename</th>
+                  <th scope="col">Identifier</th>
                   <th scope="col">Status</th>
                   <th scope="col">Progress</th>
                   <th scope="col">Time of request</th>
@@ -27,10 +27,10 @@
                               style="width:100%"
                               class="btn btn-indigo btn-sm m-0"
                               {% if row['status'] == 'ready' %}
-                                onclick="window.location.href='{{ partial_destination_url + row['filename'] }}'"
+                                onclick="window.location.href='{{ partial_destination_url + row['identifier'] }}'"
                               {% endif %}
                               >
-                        {{ row['filename'] }}</button></td>
+                        {{ row['identifier'] }}</button></td>
                   <td>{{ row['status'] }}</td>
                   <td>{{ "{:.2f}".format(row['progress'])}}</td>
                   <td>{{ row['time_of_request'] }}</td>

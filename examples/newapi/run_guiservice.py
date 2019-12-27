@@ -1,16 +1,17 @@
 def flaskuimain():
-    from truckms.service_v2.userclient import create_guiservice
+    from truckms.service_v2.userclient import create_guiservice, get_job_dispathcher
     from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
     import os
 
-    db_url = 'sqlite:///' + r'D:\tms_data\guiservice\database.sqlite'
+    db_url = r'D:\tms_data\guiservice\tinymongo.db'
     remove_db = True
-    if remove_db and os.path.exists(db_url.replace('sqlite:///', '')):
-        os.remove(db_url.replace('sqlite:///', ''))
+    if remove_db and os.path.exists(os.path.join(db_url, 'tms.json')):
+        os.remove(os.path.join(db_url, 'tms.json'))
+        os.rmdir(db_url)
 
     port = 5000
-
-    uiapp, app = create_guiservice(db_url, dispatch_work_func=lambda :None, port=port)
+    dispatch_work, _, _ = get_job_dispathcher(db_url, 1, 320, 1, 5000)
+    uiapp, app = create_guiservice(db_url, dispatch_work_func=dispatch_work, port=port)
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file="discovery_ips")
     app.register_blueprint(bookkeeper_bp)
