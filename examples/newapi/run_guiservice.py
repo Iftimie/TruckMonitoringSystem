@@ -1,5 +1,5 @@
 def flaskuimain():
-    from truckms.service_v2.userclient import create_guiservice, get_job_dispathcher
+    from truckms.service_v2.userclient.userclient import create_guiservice, get_job_dispathcher
     from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
     import os
 
