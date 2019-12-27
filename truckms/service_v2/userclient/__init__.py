@@ -2,7 +2,7 @@ from truckms.service.gui_interface import open_browser_func, image2htmlstr, html
 from truckms.service.gui_interface import gui_select_file
 from truckms.service_v2.api import P2PFlaskApp
 from typing import Tuple
-from flaskwebgui import FlaskUI  # get the FlaskUI class
+from flaskwebgui import FlaskUI
 from flask_bootstrap import Bootstrap
 import os.path as osp
 from flask import redirect, url_for, make_response, render_template, request
@@ -10,7 +10,86 @@ from truckms.service.worker.user_client import get_available_nodes
 from threading import Thread
 from functools import partial
 import tinymongo
-from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize
+from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize, p2p_push_update_one, p2p_insert_one
+import multiprocessing
+from truckms.service.worker.server import analyze_movie
+from truckms.service.worker.user_client import select_lru_worker, evaluate_workload
+import logging
+from typing import Callable
+import traceback
+logger = logging.getLogger(__name__)
+
+
+def analyze_and_updatedb(db_url: str, video_path: str, analysis_func: Callable[[
+                                                                                   str,
+                                                                                   Callable[[int, int], None]
+                                                                               ], str]):
+    """
+    Args:
+        db_url: url for database
+        video_path: path to a file on the local disk
+        analysis_func: a function that receives an argument with the video path and returns the path to results.csv
+            the function OPTIONALLY (can be None) receives a progress_hook
+
+    Return:
+        path to results file
+    """
+    destination = None
+    try:
+
+        data = {"identifier": osp.basename(video_path), "video_path": video_path, "results_path": None}
+        filter_ = {"identifier": osp.basename(video_path)}
+        tinymongo.TinyMongoClient(db_url)["tms"]["movie_statuses"].insert(data)
+        logger.info("Started processing file")
+
+        def progress_hook(current_index, end_index):
+            update_ = {"progress": current_index / end_index * 100.0}
+            p2p_push_update_one(db_url, "tms", "movie_statuses", filter_, update_)
+        # to do refactor this. this should not look like this
+        destination = analysis_func(video_path, progress_hook)
+        update_ = {"progress": 100.0, "results_path": open(destination, 'rb')}
+        p2p_push_update_one(db_url, "tms", "movie_statuses", filter_, update_)
+        logger.info("Finished processing file")
+    except:
+        logger.info(traceback.format_exc())
+    return destination
+
+
+def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port, analysis_func=None):
+    """
+    Creates a function that is able to dispatch work. Work can be done locally or remote.
+
+    Args:
+        db_url: url for database. used to store information about the received video files
+        num_workers: how many concurrent jobs should be done locally before dispatching to a remote worker
+        max_operating_res: operating resolution. bigger resolution will yield better detections
+        skip: how many frames should be skipped when processing, recommended 0
+        local_port: port for making requests to the bookeeper service in order to find the available workers
+        analysis_func: OPTIONAL.
+    Return:
+        function that can be called with a video_path
+    """
+    worker_pool = multiprocessing.Pool(num_workers)
+    list_futures = []  # todo this list_futures should be removed. future responses should stay in database if are needed
+
+    if analysis_func is None:
+        analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
+
+    def dispatch_work(video_path):
+        lru_ip, lru_port = select_lru_worker(local_port)
+        if evaluate_workload() or lru_ip is None:
+            # do not remove this. this is useful. we don't want to upload in broker (waste time and storage when we want to process locally
+            res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
+            list_futures.append(res)
+            logger.info("Analyzing file locally")
+        else:
+            data = {"identifier": osp.basename(video_path), "video_path": open(video_path, 'rb'), "results_path": None}
+            nodes = [str(lru_ip)+":"+str(lru_port)]
+            p2p_insert_one(db_url, "tms", "movie_statuses", data, nodes)
+
+            logger.info("Dispacthed work to {},{}".format(lru_ip, lru_port))
+
+    return dispatch_work, worker_pool, list_futures
 
 
 def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> Tuple[FlaskUI, P2PFlaskApp]:
