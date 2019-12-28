@@ -6,6 +6,7 @@ import tinymongo
 import time
 import multiprocessing
 from truckms.service.worker.server import analyze_movie
+from truckms.service_v2.userclient.userclient import analyze_and_updatedb
 from truckms.service_v2.p2pdata import create_p2p_blueprint
 from truckms.service_v2.api import self_is_reachable
 
@@ -35,7 +36,7 @@ def create_brokerworker_blueprint(db_url, num_workers, function_registry):
     broker_bp.route("/heartbeat", methods=['POST'])(heartbeat_func)
 
     execute_function_route_func = (wraps(execute_function)(partial(execute_function, broker_bp.worker_pool, function_registry)))
-    broker_bp.route("/execute_function/<func_name>/<resource>", methods=['GET'])(execute_function_route_func)
+    broker_bp.route("/execute_function/<func_name>/<resource>", methods=['POST'])(execute_function_route_func)
 
     return broker_bp
 
@@ -77,13 +78,13 @@ def execute_function(worker_pool, function_registry, func_name, resource):
     """
     Overwritten route from truckms.service.worker.server
     """
-    analysis_func = function_registry[func_name]
+    func_ = function_registry[func_name]
     # TODO check compatibility between the requested function and the requested resource
     #  also make the monitoring possible. like the user should see that something crashed in worker pool
 
     # res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
     if pool_can_do_more_work(worker_pool): # and worker_heartbeats(db_url)
-        res = worker_pool.apply_async(func=analysis_func, args=(resource,))
+        res = worker_pool.apply_async(func=func_, args=(resource,))
         worker_pool.futures_list.append(res)
     else:
         # will wait for a worker client to analyze the data
@@ -104,10 +105,11 @@ def create_brokerworker_microservice(up_dir, db_url, num_workers=0) -> P2PFlaskA
     """
     app = P2PFlaskApp(__name__)
 
-    function_registry = {"analyze_movie", partial(analyze_movie, max_operating_res=320, skip=0)}
+    analysis_func = partial(analyze_movie, max_operating_res=320, skip=0)
+    function_registry = {"analyze_and_updatedb": partial(analyze_and_updatedb, db_url=db_url, analysis_func=analysis_func)}
     broker_bp = create_brokerworker_blueprint(db_url, num_workers, function_registry=function_registry)
 
-    p2pdata_bp = create_p2p_blueprint(up_dir, db_url, current_address_func=self_is_reachable)
+    p2pdata_bp = create_p2p_blueprint(up_dir, db_url)  # TODO remove the need for this function current_address_func=self_is_reachable
 
     app.register_blueprint(broker_bp)
     app.register_blueprint(p2pdata_bp)

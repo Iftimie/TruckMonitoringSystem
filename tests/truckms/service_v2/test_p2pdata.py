@@ -7,6 +7,10 @@ from pprint import pprint
 from functools import partial
 
 
+class DummyObject:
+    pass
+
+
 def test_insert_one(tmpdir):
     import tinymongo
     db_url = os.path.join(tmpdir, "mongodb")
@@ -57,13 +61,18 @@ def test_p2p_insert_one(tmpdir):
         client = urls[url]
         client.post('/'.join(url.split("/")[3:]), data=data)
 
+    from truckms.service_v2 import p2pdata
+    mocked_requests = DummyObject()
+    mocked_requests.post = post_func
+    p2pdata.requests = mocked_requests
+
     i = 0
     def create_app():
         nonlocal i
         remote_db_url = os.path.join(tmpdir, "remote_mongodb_{}".format(i))
         i += 1
         app = P2PFlaskApp(__name__)
-        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url, post_func=post_func)
+        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url)
         app.register_blueprint(p2p_bp)
         return app
 
@@ -71,7 +80,7 @@ def test_p2p_insert_one(tmpdir):
     urls = {"http://{}/insert_one/{}/{}".format(node, db, col): create_app().test_client() for node in nodes}
 
 
-    p2p_insert_one(db_url, db, col, data, nodes, post_func=post_func, current_address_func=lambda :self_is_reachable("0000"))
+    p2p_insert_one(db_url, db, col, data, nodes, current_address_func=lambda :self_is_reachable("0000"))
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
     collection = list(collection.find())
     assert len(collection) == 1
@@ -100,13 +109,18 @@ def test_p2p_insert_one_with_files(tmpdir):
         client = urls[url]
         client.post('/'.join(url.split("/")[3:]), data=data)
 
+    from truckms.service_v2 import p2pdata
+    mocked_requests = DummyObject()
+    mocked_requests.post = post_func
+    p2pdata.requests = mocked_requests
+
     i = 0
     def create_app():
         nonlocal i
         remote_db_url = os.path.join(tmpdir, "remote_mongodb_{}".format(i))
         i += 1
         app = P2PFlaskApp(__name__)
-        p2p_bp = create_p2p_blueprint(tmpdir, remote_db_url, post_func=post_func)
+        p2p_bp = create_p2p_blueprint(tmpdir, remote_db_url)
         app.register_blueprint(p2p_bp)
         return app
 
@@ -114,7 +128,7 @@ def test_p2p_insert_one_with_files(tmpdir):
     urls = {"http://{}/insert_one/{}/{}".format(node, db, col): create_app().test_client() for node in nodes}
 
 
-    p2p_insert_one(db_url, db, col, data, nodes, post_func=post_func, current_address_func=lambda : self_is_reachable("0000"))
+    p2p_insert_one(db_url, db, col, data, nodes, current_address_func=lambda : self_is_reachable("0000"))
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
     collection = list(collection.find())
     assert len(collection) == 1
@@ -146,13 +160,18 @@ def test_p2p_update_one(tmpdir):
         client = urls[url]
         client.post('/'.join(url.split("/")[3:]), data=data)
 
+    from truckms.service_v2 import p2pdata
+    mocked_requests = DummyObject()
+    mocked_requests.post = post_func
+    p2pdata.requests = mocked_requests
+
     i = 0
     def create_app():
         nonlocal i
         remote_db_url = os.path.join(tmpdir, "remote_mongodb_{}".format(i))
         i += 1
         app = P2PFlaskApp(__name__)
-        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url, post_func=post_func)
+        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url)
         app.register_blueprint(p2p_bp)
         return app
 
@@ -162,10 +181,10 @@ def test_p2p_update_one(tmpdir):
             "http://{}/push_update_one/{}/{}".format(nodes[0], db, col): client_}
 
 
-    p2p_insert_one(db_url, db, col, data, nodes, post_func=post_func, current_address_func=lambda : self_is_reachable("0000"))
+    p2p_insert_one(db_url, db, col, data, nodes, current_address_func=lambda : self_is_reachable("0000"))
     new_data = deepcopy(data)
     new_data["name"] = "othername"
-    p2p_insert_one(db_url, db, col, new_data, nodes, post_func=post_func, current_address_func=lambda : self_is_reachable("0000"))
+    p2p_insert_one(db_url, db, col, new_data, nodes, current_address_func=lambda : self_is_reachable("0000"))
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
     collection = list(collection.find())
     assert len(collection) == 2
@@ -174,7 +193,7 @@ def test_p2p_update_one(tmpdir):
 
     filter = {"res": 320, "name": "othername"}
     update_value = {"key": "value1"}
-    p2p_push_update_one(db_url, db, col, filter, update_value, post_func=post_func)
+    p2p_push_update_one(db_url, db, col, filter, update_value)
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
     collection = list(collection.find())
     assert len(collection) == 2
@@ -207,13 +226,18 @@ def test_p2p_update_one_with_files(tmpdir):
         client = urls[url]
         client.post('/'.join(url.split("/")[3:]), data=data)
 
+    from truckms.service_v2 import p2pdata
+    mocked_requests = DummyObject()
+    mocked_requests.post = post_func
+    p2pdata.requests = mocked_requests
+
     i = 0
     def create_app():
         nonlocal i
         remote_db_url = os.path.join(tmpdir, "remote_mongodb_{}".format(i))
         i += 1
         app = P2PFlaskApp(__name__)
-        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url, post_func=post_func)
+        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url)
         app.register_blueprint(p2p_bp)
         return app
 
@@ -223,10 +247,10 @@ def test_p2p_update_one_with_files(tmpdir):
             "http://{}/push_update_one/{}/{}".format(nodes[0], db, col): client_}
 
 
-    p2p_insert_one(db_url, db, col, data, nodes, post_func=post_func)
+    p2p_insert_one(db_url, db, col, data, nodes)
     new_data = deepcopy(data)
     new_data["name"] = "othername"
-    p2p_insert_one(db_url, db, col, new_data, nodes, post_func=post_func, current_address_func=lambda : self_is_reachable("0000"))
+    p2p_insert_one(db_url, db, col, new_data, nodes, current_address_func=lambda : self_is_reachable("0000"))
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
     collection = list(collection.find())
     assert len(collection) == 2
@@ -236,7 +260,7 @@ def test_p2p_update_one_with_files(tmpdir):
     filter = {"res": 320, "name": "othername"}
     update_value = {"key": "value1",
                     "source_code_file": open(__file__, 'rb')}
-    p2p_push_update_one(db_url, db, col, filter, update_value, post_func=post_func)
+    p2p_push_update_one(db_url, db, col, filter, update_value)
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
     collection = list(collection.find())
     assert len(collection) == 2
@@ -275,9 +299,14 @@ def test_p2p_link(tmpdir):
         client = urls[url]
         return client.post('/'.join(url.split("/")[3:]), data=data)
 
+    from truckms.service_v2 import p2pdata
+    mocked_requests = DummyObject()
+    mocked_requests.post = post_func
+    p2pdata.requests = mocked_requests
+
     def create_app(db_url, current_addr_func):
         app = P2PFlaskApp(__name__)
-        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=db_url, post_func=post_func, current_address_func=current_addr_func)
+        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=db_url, current_address_func=current_addr_func)
         app.register_blueprint(p2p_bp)
         return app
 
@@ -298,7 +327,7 @@ def test_p2p_link(tmpdir):
     # node 2 can reach node 1, but cannot be reached by any node
 
     # we insert here and remotely
-    p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111"], post_func=post_func, current_address_func=lambda:"0000:0000")
+    p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111"], current_address_func=lambda:"0000:0000")
     # we update remotely the node list. assume node 1 can reach node 0
     node1filter_ = {"name": "somename"}
     node1update_data = list(tinymongo.TinyMongoClient(db_url1)[db][col].find(node1filter_))[0]
@@ -321,7 +350,7 @@ def test_p2p_link(tmpdir):
     pprint(list(collection2.find()))
 
     node2update_data = {"res": 800}
-    visited_nodes = p2p_push_update_one(db_url2, db, col, node2filter_, node2update_data, post_func=post_func)
+    visited_nodes = p2p_push_update_one(db_url2, db, col, node2filter_, node2update_data)
     assert set(visited_nodes) == set(nodes)
     collection0 = tinymongo.TinyMongoClient(db_url0)[db][col]
     collection1 = tinymongo.TinyMongoClient(db_url1)[db][col]
@@ -348,9 +377,14 @@ def test_p2p_link_with_files(tmpdir):
         client = urls[url]
         return client.post('/'.join(url.split("/")[3:]), data=data)
 
+    from truckms.service_v2 import p2pdata
+    mocked_requests = DummyObject()
+    mocked_requests.post = post_func
+    p2pdata.requests = mocked_requests
+
     def create_app(db_url, current_addr_func):
         app = P2PFlaskApp(__name__)
-        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=db_url, post_func=post_func, current_address_func=current_addr_func)
+        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=db_url, current_address_func=current_addr_func)
         app.register_blueprint(p2p_bp)
         return app
 
@@ -371,7 +405,7 @@ def test_p2p_link_with_files(tmpdir):
     # node 2 can reach node 1, but cannot be reached by any node
 
     # we insert here and remotely
-    p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111"], post_func=post_func, current_address_func=lambda:"0000:0000")
+    p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111"], current_address_func=lambda:"0000:0000")
     # we update remotely the node list. assume node 1 can reach node 0
     node1filter_ = {"name": "somename"}
     node1update_data = list(tinymongo.TinyMongoClient(db_url1)[db][col].find(node1filter_))[0]
@@ -391,7 +425,7 @@ def test_p2p_link_with_files(tmpdir):
     pprint(list(tinymongo.TinyMongoClient(db_url2)[db][col].find()))
 
     node2update_data = {"source_code_file": open(__file__, 'rb')}
-    visited_nodes = p2p_push_update_one(db_url2, db, col, node2filter_, node2update_data, post_func=post_func)
+    visited_nodes = p2p_push_update_one(db_url2, db, col, node2filter_, node2update_data)
     assert set(visited_nodes) == set(nodes)
     assert os.path.basename(list(tinymongo.TinyMongoClient(db_url0)[db][col].find())[0]['source_code_file']) == "test_p2pdata.py"
     assert os.path.basename(list(tinymongo.TinyMongoClient(db_url0)[db][col].find())[0]['source_code_file']) == "test_p2pdata.py"
@@ -415,6 +449,11 @@ def test_p2p_pull_update_one(tmpdir):
         print(url)
         client = urls[url]
         return client.post('/'.join(url.split("/")[3:]), data=data)
+
+    from truckms.service_v2 import p2pdata
+    mocked_requests = DummyObject()
+    mocked_requests.post = post_func
+    p2pdata.requests = mocked_requests
 
     def create_app(db_url, current_addr_func):
         app = P2PFlaskApp(__name__)
@@ -440,8 +479,7 @@ def test_p2p_pull_update_one(tmpdir):
     }
 
     # we insert here and remotely
-    p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111", "2222:2222"], post_func=post_func,
-                   current_address_func=lambda: "0000:0000")
+    p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111", "2222:2222"], current_address_func=lambda: "0000:0000")
     # we update remotely the node list. assume node 1 can reach node 0
     node1filter_ = {"name": "somename"}
     node1update_data = list(tinymongo.TinyMongoClient(db_url1)[db][col].find(node1filter_))[0]
@@ -460,7 +498,7 @@ def test_p2p_pull_update_one(tmpdir):
     pprint(list(tinymongo.TinyMongoClient(db_url1)[db][col].find()))
     pprint(list(tinymongo.TinyMongoClient(db_url2)[db][col].find()))
 
-    p2p_pull_update_one(db_url0, db, col, node1filter_, ["res", "key0", "key1", "timestamp"], post_func=post_func,
+    p2p_pull_update_one(db_url0, db, col, node1filter_, ["res", "key0", "key1", "timestamp"],
                         deserializer=partial(default_deserialize, up_dir=tmpdir))
     node0data = list(tinymongo.TinyMongoClient(db_url0)[db][col].find(node2filter_))[0]
     assert node0data["res"] == 800
@@ -487,6 +525,11 @@ def test_p2p_pull_update_one_with_files(tmpdir):
         client = urls[url]
         return client.post('/'.join(url.split("/")[3:]), data=data)
 
+    from truckms.service_v2 import p2pdata
+    mocked_requests = DummyObject()
+    mocked_requests.post = post_func
+    p2pdata.requests = mocked_requests
+
     def create_app(db_url, current_addr_func):
         app = P2PFlaskApp(__name__)
         p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=db_url,
@@ -511,7 +554,7 @@ def test_p2p_pull_update_one_with_files(tmpdir):
     }
 
     # we insert here and remotely
-    p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111", "2222:2222"], post_func=post_func,
+    p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111", "2222:2222"],
                    current_address_func=lambda: "0000:0000")
     # we update remotely the node list. assume node 1 can reach node 0
     node1filter_ = {"name": "somename"}
@@ -537,7 +580,7 @@ def test_p2p_pull_update_one_with_files(tmpdir):
     pprint(list(tinymongo.TinyMongoClient(db_url1)[db][col].find()))
     pprint(list(tinymongo.TinyMongoClient(db_url2)[db][col].find()))
 
-    p2p_pull_update_one(db_url0, db, col, node1filter_, ["res", "key0", "key1", "file"], hint_file_keys=["file"], post_func=post_func,
+    p2p_pull_update_one(db_url0, db, col, node1filter_, ["res", "key0", "key1", "file"], hint_file_keys=["file"],
                         deserializer=partial(default_deserialize, up_dir=tmpdir))
     node0data = list(tinymongo.TinyMongoClient(db_url0)[db][col].find(node2filter_))[0]
     assert node0data["res"] == 800

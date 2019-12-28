@@ -6,6 +6,15 @@ import requests
 logger = logging.getLogger(__name__)
 
 
+"""
+https://kite.com/blog/python/functional-programming/
+Using higher-order function with type comments is an advanced skill. Type signatures often become long and unwieldy 
+nests of Callable. For example, the correct way to type a simple higher order decorator that returns the input function 
+is by declaring F = TypeVar[‘F’, bound=Callable[..., Any]] then annotating as def transparent(func: F) -> F: return func
+. Or, you may be tempted to bail and use Any instead of trying to figure out the correct signature.
+"""
+
+
 class P2PFlaskApp(Flask):
     """
     Flask derived class for P2P applications. In this framework, the P2P app can have different roles. Not all nodes in
@@ -27,7 +36,7 @@ class P2PFlaskApp(Flask):
         self.overwritten_routes = []  # List[Tuple[str, callable]]
         super(P2PFlaskApp, self).__init__(*args, **kwargs)
         self.roles = []
-        self._blueprints = []
+        self._blueprints = {}
         self._time_regular_funcs = []
         self._time_regular_thread = None
         self._time_interval = 10
@@ -61,7 +70,7 @@ class P2PFlaskApp(Flask):
                 self.register_time_regular_func(f)
             self.roles.append(blueprint.role)
             self.overwritten_routes += blueprint.overwritten_rules
-        self._blueprints.append(blueprint)
+        self._blueprints[blueprint.name] = blueprint
         super(P2PFlaskApp, self).register_blueprint(blueprint)
 
     # TODO I should also implement the shutdown method that will close the time_regular_thread

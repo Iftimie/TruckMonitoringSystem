@@ -86,7 +86,7 @@ def default_deserialize(files, json, up_dir):
     return data
 
 
-def p2p_route_insert_one(db_path, db, col, deserializer=default_deserialize, current_address_func=lambda:None):
+def p2p_route_insert_one(db_path, db, col, deserializer=default_deserialize, current_address_func=lambda: None):
     if request.files:
         filename = list(request.files.keys())[0]
         files = {secure_filename(filename): request.files[filename]}
@@ -109,7 +109,7 @@ def p2p_route_insert_one(db_path, db, col, deserializer=default_deserialize, cur
 #     update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
 
 
-def p2p_route_push_update_one(db_path, db, col, deserializer=default_deserialize, post_func=requests.post):
+def p2p_route_push_update_one(db_path, db, col, deserializer=default_deserialize):
     if request.files:
         filename = list(request.files.keys())[0]
         files = {secure_filename(filename): request.files[filename]}
@@ -121,7 +121,7 @@ def p2p_route_push_update_one(db_path, db, col, deserializer=default_deserialize
     recursive = request.form["recursive"]
     # update_one(db_path, db, col, filter_data, update_data, upsert=False)
     if recursive:
-        visited_nodes = p2p_push_update_one(db_path, db, col, filter_data, update_data, post_func=post_func, visited_nodes=visited_nodes)
+        visited_nodes = p2p_push_update_one(db_path, db, col, filter_data, update_data, visited_nodes=visited_nodes)
     return jsonify(visited_nodes)
 
 
@@ -151,12 +151,12 @@ def p2p_route_pull_update_one(db_path, db, col, serializer=default_serialize):
     return result
 
 
-def create_p2p_blueprint(up_dir, db_url, post_func=requests.post, current_address_func=lambda: None):
+def create_p2p_blueprint(up_dir, db_url, current_address_func=lambda: None):
     p2p_blueprint = P2PBlueprint("p2p_blueprint", __name__, role="storage")
     new_deserializer = partial(default_deserialize, up_dir=up_dir)
     p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db_path=db_url, deserializer=new_deserializer, current_address_func=current_address_func)))
     p2p_blueprint.route("/insert_one/<db>/<col>", methods=['POST'])(p2p_route_insert_one_func)
-    p2p_route_push_update_one_func = (wraps(p2p_route_push_update_one)(partial(p2p_route_push_update_one, db_path=db_url, deserializer=new_deserializer, post_func=post_func)))
+    p2p_route_push_update_one_func = (wraps(p2p_route_push_update_one)(partial(p2p_route_push_update_one, db_path=db_url, deserializer=new_deserializer)))
     p2p_blueprint.route("/push_update_one/<db>/<col>", methods=['POST'])(p2p_route_push_update_one_func)
     p2p_route_pull_update_one_func = (wraps(p2p_route_pull_update_one)(partial(p2p_route_pull_update_one, db_path=db_url)))
     p2p_blueprint.route("/pull_update_one/<db>/<col>", methods=['POST'])(p2p_route_pull_update_one_func)
@@ -204,7 +204,7 @@ def update_one(db_path, db, col, query, doc, upsert=False):
         raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(query), str(res)))
 
 
-def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, post_func=requests.post, current_address_func=lambda: None):
+def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, current_address_func=lambda: None):
     """
     post_func is used especially for testing
     current_address_func: self_is_reachable should be called
@@ -226,14 +226,14 @@ def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, 
         file, json = serializer(data)
         del data["nodes"]
         try:
-            post_func("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json})
+            requests.post("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json})
         except:
             traceback.print_exc()
             logger.info(traceback.format_exc())
             logger.info("Unable to post p2p data")
 
 
-def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_serialize, post_func=requests.post, visited_nodes=None, recursive=True):
+def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_serialize, visited_nodes=None, recursive=True):
     if visited_nodes is None:
         visited_nodes = []
     try:
@@ -260,7 +260,7 @@ def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_ser
         visited_json = dumps(visited_nodes)
 
         try:
-            res = post_func("http://{}/push_update_one/{}/{}".format(node, db, col), files=files, data={"update_json": update_json,
+            res = requests.post("http://{}/push_update_one/{}/{}".format(node, db, col), files=files, data={"update_json": update_json,
                                                                                                    "filter_json": filter_json,
                                                                                                    "visited_json": visited_json,
                                                                                                         "recursive": recursive})
@@ -298,7 +298,7 @@ def merge_downloaded_data(original_data, merging_data):
     return result_update
 
 
-def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_file_keys=None, post_func=requests.post, merging_func=merge_downloaded_data):
+def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_file_keys=None, merging_func=merge_downloaded_data):
     if hint_file_keys is None:
         hint_file_keys = []
 
@@ -322,7 +322,7 @@ def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_f
 
 
         try:
-            res = post_func("http://{}/pull_update_one/{}/{}".format(node, db, col), files={}, data={"req_keys_json": req_keys_json,
+            res = requests.post("http://{}/pull_update_one/{}/{}".format(node, db, col), files={}, data={"req_keys_json": req_keys_json,
                                                                                           "filter_json": filter_json,
                                                                                           "hint_file_keys_json": hint_file_keys_json})
 

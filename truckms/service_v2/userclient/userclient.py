@@ -23,7 +23,9 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
-def analyze_and_updatedb(db_url: str, video_path: str, analysis_func: Callable[[
+# TODO the callable here. use type F = TypeVar[‘F’, bound=Callable[..., Any]]
+#  def transparent(func: F) -> F:
+def analyze_and_updatedb(video_path: str, db_url: str, analysis_func: Callable[[
                                                                                    str,
                                                                                    Callable[[int, int], None]
                                                                                ], str]):
@@ -96,7 +98,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port
         else:
             nodes = [str(lru_ip)+":"+str(lru_port)]
             p2p_insert_one(db_url, "tms", "movie_statuses", data, nodes)
-            requests.post("http://{}:{}/execute_function/analyze_movie/{}".format(lru_ip, lru_port, data["identifier"]))
+            requests.post("http://{}:{}/execute_function/analyze_and_updatedb/{}".format(lru_ip, lru_port, data["identifier"]))
             # TODO call remote func with identifier
             logger.info("Dispacthed work to {},{}".format(lru_ip, lru_port))
 
