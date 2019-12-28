@@ -39,6 +39,16 @@ def analyze_and_updatedb(video_path: str, db_url: str, analysis_func: Callable[[
     Return:
         path to results file
     """
+
+
+    # TODO here instead of video_path, this should receive an identifier. because worker_pool.apply_async(func=func_, args=(resource,))
+    #  resource is an identifier
+    #  thus in res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
+    #  in jobdispatcher, when running this function locally, it should send as args the identifier, not the video_path
+    #  that means that when the function is called, the data must allready be stored
+    #  as Lucian pointed out. data storange and execution should be separated
+
+
     destination = None
     try:
 
