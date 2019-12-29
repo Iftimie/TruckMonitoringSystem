@@ -1,4 +1,4 @@
-from flask import request, make_response
+from flask import request, make_response, jsonify
 from functools import wraps, partial
 from truckms.service_v2.api import P2PFlaskApp, P2PBlueprint
 from truckms.service.worker.server import create_worker_p2pblueprint
@@ -36,10 +36,10 @@ def create_brokerworker_blueprint(db_url, num_workers, function_registry):
     broker_bp.route("/heartbeat", methods=['POST'])(heartbeat_func)
 
     execute_function_route_func = (wraps(execute_function)(partial(execute_function, db_url, broker_bp.worker_pool, function_registry)))
-    broker_bp.route("/execute_function/<func_name>/<resource>", methods=['POST'])(execute_function_route_func)
+    broker_bp.route("/execute_function/<collection>/<func_name>/<resource>", methods=['POST'])(execute_function_route_func)
 
     search_work_func = (wraps(search_work)(partial(search_work, db_url)))
-    broker_bp.route("/search_work/<func_name>", methods=['GET'])(search_work_func)
+    broker_bp.route("/search_work/<collection>", methods=['GET'])(search_work_func)
 
 
     return broker_bp
@@ -82,19 +82,34 @@ def worker_heartbeats(db_url, minutes=20):
     return boolean
 
 
-def search_work(db_url, func_name):
+def search_work(db_url, collection, func_name):
+
+    collection = list(tinymongo.TinyMongoClient(db_url)["tms"][collection].find({}))
+    collection = [item for item in collection if "started" not in item or item["started"] != func_name]
+    if collection:
+        collection.sort(key=lambda item: item["timestamp"])  # might allready be sorted
+        item = collection[0]
+        return jsonify({"identifier": item["identifier"]})
+    else:
+        return jsonify({})
 
 
-
-def execute_function(db_url, worker_pool, function_registry, func_name, resource):
+def execute_function(db_url, worker_pool, function_registry, collection, func_name, resource):
     func_ = function_registry[func_name]
     # TODO check compatibility between the requested function and the requested resource
     #  also make the monitoring possible. like the user should see that something crashed in worker pool
 
     # TODO resources that have been added by the execute_function for them wasn't called should be deleted
 
+    item = list(tinymongo.TinyMongoClient(db_url)["tms"][collection].find({"identifier":resource}))[0]
+    is_done = "started" in item and item["started"] == func_name
+    if is_done:
+        return make_response("Allready done", 200)
+
     # res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
     if pool_can_do_more_work(worker_pool) or (not worker_heartbeats(db_url) and pool_can_do_more_work_later(worker_pool)):
+        tinymongo.TinyMongoClient(db_url)["tms"][collection].update_one({"identifier": resource},
+                                                                        {"started": func_name})
         # another check must be if the resource is allready taken by a worker client in the meantime
         # TODO here the resource progress should be updated to 1% which means that it was selected for execution
         #  this will prevent a race condition between the client worker and workerpool over this resource
