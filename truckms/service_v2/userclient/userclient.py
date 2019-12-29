@@ -25,14 +25,14 @@ logger = logging.getLogger(__name__)
 
 # TODO the callable here. use type F = TypeVar[‘F’, bound=Callable[..., Any]]
 #  def transparent(func: F) -> F:
-def analyze_and_updatedb(video_path: str, db_url: str, analysis_func: Callable[[
+def analyze_and_updatedb(video_identifier: str, db_url: str, analysis_func: Callable[[
                                                                                    str,
                                                                                    Callable[[int, int], None]
                                                                                ], str]):
     """
     Args:
         db_url: url for database
-        video_path: path to a file on the local disk
+        video_identifier: path to a file on the local disk
         analysis_func: a function that receives an argument with the video path and returns the path to results.csv
             the function OPTIONALLY (can be None) receives a progress_hook
 
@@ -52,7 +52,7 @@ def analyze_and_updatedb(video_path: str, db_url: str, analysis_func: Callable[[
     destination = None
     try:
 
-        filter_ = {"identifier": osp.basename(video_path)}
+        filter_ = {"identifier": video_identifier}
         logger.info("Started processing file")
 
         def progress_hook(current_index, end_index):
@@ -61,9 +61,10 @@ def analyze_and_updatedb(video_path: str, db_url: str, analysis_func: Callable[[
             time.sleep(0.5)
             logger.info("Done % {}".format(update_['progress']))
 
+        video_path = list(tinymongo.TinyMongoClient(db_url)["tms"]["movie_statuses"].find(filter_))[0]['video_path']
         # to do refactor this. this should not look like this
         destination = analysis_func(video_path, progress_hook=progress_hook)
-        update_ = {"progress": 100.0, "results": open(destination, 'rb')}
+        update_ = {"results": open(destination, 'rb')}
         p2p_push_update_one(db_url, "tms", "movie_statuses", filter_, update_)
         logger.info("Finished processing file")
     except:
@@ -71,15 +72,13 @@ def analyze_and_updatedb(video_path: str, db_url: str, analysis_func: Callable[[
     return destination
 
 
-def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port, analysis_func=None):
+def get_job_dispathcher(db_url, num_workers, local_port, analysis_func=None):
     """
     Creates a function that is able to dispatch work. Work can be done locally or remote.
 
     Args:
         db_url: url for database. used to store information about the received video files
         num_workers: how many concurrent jobs should be done locally before dispatching to a remote worker
-        max_operating_res: operating resolution. bigger resolution will yield better detections
-        skip: how many frames should be skipped when processing, recommended 0
         local_port: port for making requests to the bookeeper service in order to find the available workers
         analysis_func: OPTIONAL.
     Return:
@@ -89,7 +88,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port
     list_futures = []  # todo this list_futures should be removed. future responses should stay in database if are needed
 
     if analysis_func is None:
-        analysis_func = partial(analyze_movie, max_operating_res=max_operating_res, skip=skip)
+        analysis_func = partial(analyze_and_updatedb, db_url=db_url, analysis_func=analyze_movie)
 
     def dispatch_work(video_path):
         lru_ip, lru_port = select_lru_worker(local_port)
@@ -102,7 +101,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port
             # do not remove this. this is useful. we don't want to upload in broker (waste time and storage when we want to process locally
             nodes = []
             p2p_insert_one(db_url, "tms", "movie_statuses", data, nodes)
-            res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
+            res = worker_pool.apply_async(func=analysis_func, args=(data['identifier'],))
             list_futures.append(res)
             logger.info("Analyzing file locally")
         else:

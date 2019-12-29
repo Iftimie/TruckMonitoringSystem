@@ -35,8 +35,12 @@ def create_brokerworker_blueprint(db_url, num_workers, function_registry):
     heartbeat_func = (wraps(heartbeat)(partial(heartbeat, db_url)))
     broker_bp.route("/heartbeat", methods=['POST'])(heartbeat_func)
 
-    execute_function_route_func = (wraps(execute_function)(partial(execute_function, broker_bp.worker_pool, function_registry)))
+    execute_function_route_func = (wraps(execute_function)(partial(execute_function, db_url, broker_bp.worker_pool, function_registry)))
     broker_bp.route("/execute_function/<func_name>/<resource>", methods=['POST'])(execute_function_route_func)
+
+    search_work_func = (wraps(search_work)(partial(search_work, db_url)))
+    broker_bp.route("/search_work/<func_name>", methods=['GET'])(search_work_func)
+
 
     return broker_bp
 
@@ -59,7 +63,11 @@ def pool_can_do_more_work(worker_pool):
         return False
 
 
-def worker_heartbeats(db_url):
+def pool_can_do_more_work_later(worker_pool):
+    return worker_pool._processes > 0
+
+
+def worker_heartbeats(db_url, minutes=20):
     """
     If a client worker (worker that cannot be reachable and asks a broker for work) is available, then it will send a
     signal to the broker and ask for work.
@@ -68,22 +76,28 @@ def worker_heartbeats(db_url):
     result = collection.find({})
     boolean = False
     for r in result:
-        boolean = ((time.time() - r["time_of_heartbeat"]) / 60) < 20
+        boolean = ((time.time() - r["time_of_heartbeat"]) / 60) < minutes
         if boolean:
             break
     return boolean
 
 
-def execute_function(worker_pool, function_registry, func_name, resource):
-    """
-    Overwritten route from truckms.service.worker.server
-    """
+def search_work(db_url, func_name):
+
+
+
+def execute_function(db_url, worker_pool, function_registry, func_name, resource):
     func_ = function_registry[func_name]
     # TODO check compatibility between the requested function and the requested resource
     #  also make the monitoring possible. like the user should see that something crashed in worker pool
 
+    # TODO resources that have been added by the execute_function for them wasn't called should be deleted
+
     # res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, filepath, analysis_func))
-    if pool_can_do_more_work(worker_pool): # and worker_heartbeats(db_url)
+    if pool_can_do_more_work(worker_pool) or (not worker_heartbeats(db_url) and pool_can_do_more_work_later(worker_pool)):
+        # another check must be if the resource is allready taken by a worker client in the meantime
+        # TODO here the resource progress should be updated to 1% which means that it was selected for execution
+        #  this will prevent a race condition between the client worker and workerpool over this resource
         res = worker_pool.apply_async(func=func_, args=(resource,))
         worker_pool.futures_list.append(res)
     else:
@@ -105,8 +119,7 @@ def create_brokerworker_microservice(up_dir, db_url, num_workers=0) -> P2PFlaskA
     """
     app = P2PFlaskApp(__name__)
 
-    analysis_func = partial(analyze_movie, max_operating_res=320, skip=0)
-    function_registry = {"analyze_and_updatedb": partial(analyze_and_updatedb, db_url=db_url, analysis_func=analysis_func)}
+    function_registry = {"analyze_and_updatedb": partial(analyze_and_updatedb, db_url=db_url, analysis_func=analyze_movie)}
     broker_bp = create_brokerworker_blueprint(db_url, num_workers, function_registry=function_registry)
 
     p2pdata_bp = create_p2p_blueprint(up_dir, db_url)  # TODO remove the need for this function current_address_func=self_is_reachable

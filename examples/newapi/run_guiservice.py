@@ -10,7 +10,7 @@ def flaskuimain():
         os.rmdir(db_url)
 
     port = 5000
-    dispatch_work, _, _ = get_job_dispathcher(db_url, 1, 320, 1, 5000)
+    dispatch_work, _, _ = get_job_dispathcher(db_url, 1, port)
     uiapp, app = create_guiservice(db_url, dispatch_work_func=dispatch_work, port=port)
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file="discovery_ips")

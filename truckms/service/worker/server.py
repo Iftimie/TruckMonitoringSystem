@@ -36,7 +36,7 @@ def generator_hook(video_path, pdp_iter: Iterable[PredictionDatapoint], progress
         yield pdp
 
 
-def analyze_movie(video_path, max_operating_res, skip=0, progress_hook: Callable[[int, int], None] = None):
+def analyze_movie(video_path, max_operating_res=320, skip=0, progress_hook: Callable[[int, int], None] = None):
     """
     Attention!!! if the movie is short or too fast and skip  is too big, then it may result with no detections
     #TODO think about this
@@ -55,7 +55,7 @@ def analyze_movie(video_path, max_operating_res, skip=0, progress_hook: Callable
     model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=max_operating_res))
     image_gen = framedatapoint_generator(video_path, skip=skip)
     # TODO set batchsize by the available VRAM
-    pred_gen = compute(image_gen, model=model, batch_size=25)
+    pred_gen = compute(image_gen, model=model, batch_size=5)
     filtered_pred = filter_pred_detections(pred_gen)
     if progress_hook is not None:
         filtered_pred = generator_hook(video_path, filtered_pred, progress_hook)

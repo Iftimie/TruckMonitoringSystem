@@ -1,4 +1,7 @@
 from mock import Mock
+from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize
+from functools import partial
+from pprint import pprint
 class DummyObject:
     pass
 
@@ -36,14 +39,14 @@ def test_guiservice(tmpdir):
             data.update(kwargs["files"])
         if "data" in kwargs:
             data.update(kwargs["data"])
-        broker_app_test_client.post(stripped_url, data=data)
+        return broker_app_test_client.post(stripped_url, data=data)
     mocked_requests.post = post_func
     userclient.requests = mocked_requests
     p2pdata.requests = mocked_requests
 
     db_url = os.path.join(tmpdir, 'guiinterface.db')
 
-    dispatch_work, _, _ = get_job_dispathcher(db_url, 1, 320, 1, 5000)
+    dispatch_work, _, _ = get_job_dispathcher(db_url, 1, 5000)
     uiapp, app = create_guiservice(db_url, dispatch_work_func=dispatch_work, port=port)
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file="discovery_ips")
@@ -55,6 +58,15 @@ def test_guiservice(tmpdir):
     broker_worker_pool.close()
     broker_worker_pool.join()
 
-    collection = list(tinymongo.TinyMongoClient(db_url_broker_app)["tms"]["movie_statuses"].find())[0]
+    item_on_broker = list(tinymongo.TinyMongoClient(db_url_broker_app)["tms"]["movie_statuses"].find())[0]
+    assert item_on_broker['results'] is not None
 
-    pass
+    item_on_user = list(tinymongo.TinyMongoClient(db_url)["tms"]["movie_statuses"].find())[0]
+    assert item_on_user['results'] is None
+    p2p_pull_update_one(db_url, "tms", "movie_statuses", {"identifier": item_on_user['identifier']},
+                        req_keys=["results", "progress"], hint_file_keys=["results"],
+                        deserializer=partial(default_deserialize, up_dir=tmpdir))
+    item_on_user = list(tinymongo.TinyMongoClient(db_url)["tms"]["movie_statuses"].find())[0]
+    assert item_on_user['results'] is not None
+    pprint(item_on_user)
+    pprint(item_on_broker)
