@@ -107,7 +107,7 @@ def get_job_dispathcher(db_url, num_workers, local_port, analysis_func=None):
         else:
             nodes = [str(lru_ip)+":"+str(lru_port)]
             p2p_insert_one(db_url, "tms", "movie_statuses", data, nodes)
-            requests.post("http://{}:{}/execute_function/analyze_and_updatedb/{}".format(lru_ip, lru_port, data["identifier"]))
+            requests.post("http://{}:{}/execute_function/{}/analyze_and_updatedb/{}".format(lru_ip, lru_port, "movie_statuses", data["identifier"]))
             # TODO call remote func with identifier
             logger.info("Dispacthed work to {},{}".format(lru_ip, lru_port))
 
