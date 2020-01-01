@@ -204,7 +204,7 @@ def update_one(db_path, db, col, query, doc, upsert=False):
         raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(query), str(res)))
 
 
-def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, current_address_func=lambda: None):
+def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, current_address_func=lambda: None, do_upload=True):
     """
     post_func is used especially for testing
     current_address_func: self_is_reachable should be called
@@ -219,18 +219,19 @@ def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, 
         logger.info(traceback.format_exc())
         raise e
 
-    for i, node in enumerate(nodes):
-        # the data sent to a node will not contain in "nodes" list the pointer to that node. only to other nodes
-        data["nodes"] = nodes[:i] + nodes[i+1:]
-        data["nodes"] += [current_addr] if current_addr else []
-        file, json = serializer(data)
-        del data["nodes"]
-        try:
-            requests.post("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json})
-        except:
-            traceback.print_exc()
-            logger.info(traceback.format_exc())
-            logger.info("Unable to post p2p data")
+    if do_upload:
+        for i, node in enumerate(nodes):
+            # the data sent to a node will not contain in "nodes" list the pointer to that node. only to other nodes
+            data["nodes"] = nodes[:i] + nodes[i+1:]
+            data["nodes"] += [current_addr] if current_addr else []
+            file, json = serializer(data)
+            del data["nodes"]
+            try:
+                requests.post("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json})
+            except:
+                traceback.print_exc()
+                logger.info(traceback.format_exc())
+                logger.info("Unable to post p2p data")
 
 
 def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_serialize, visited_nodes=None, recursive=True):

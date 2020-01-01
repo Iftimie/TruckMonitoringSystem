@@ -5,9 +5,10 @@ logger = logging.getLogger(__name__)
 import time
 import tinymongo
 from truckms.service_v2.userclient.userclient import analyze_and_updatedb
-from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize
+from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize, p2p_push_update_one, p2p_insert_one
 from functools import partial
 from truckms.service.worker.server import analyze_movie
+import inspect
 
 
 def find_response_with_work(local_port, collection, func_name):
@@ -39,17 +40,23 @@ def find_response_with_work(local_port, collection, func_name):
     return res_json, res_broker_ip, res_broker_port
 
 
-def do_work(up_dir, db_url, local_port, func_registry=None, collection="movie_statuses"):
-    if func_registry is None:
-        func_registry = {"analyze_and_updatedb": partial(analyze_and_updatedb, db_url=db_url, analysis_func=analyze_movie)}
+def do_work(up_dir, db_url, local_port, func, db, collection):
+    """
 
-    frk = list(func_registry.keys())
-    assert len(frk) == 1
-    func_name = frk[0]
-    func = func_registry[func_name]
+    """
 
-    res, broker_ip, broker_port = find_response_with_work(local_port, collection, func_name)
-    tinymongo.TinyMongoClient(db_url)["tms"][collection].insert_one({"identifier": res['identifier'], "nodes": [broker_ip+":"+str(broker_port)]})
+    required_positional_args = []
+    for k, v in inspect.signature(func, follow_wrapped=False).parameters.items():
+        if v.default == inspect._empty:
+            required_positional_args.append(v.name)
+    assert all(key not in required_positional_args for key in ['identifier', 'nodes'])
+
+    res, broker_ip, broker_port = find_response_with_work(local_port, collection, func.__name__)
+    filter_ = {"identifier": res['identifier']}
+    local_data = dict()
+    local_data.update(filter_)
+    local_data.update({k: None for k in required_positional_args})
+    p2p_insert_one(db_url, db, collection, local_data, [broker_ip+":"+str(broker_port)], do_upload=False)
 
     deserializer = partial(default_deserialize, up_dir=up_dir)
     # TODO instead of hardcoding here the required keys. those keys could be inspected form the function declaration,
@@ -58,6 +65,9 @@ def do_work(up_dir, db_url, local_port, func_registry=None, collection="movie_st
     #  actually the question is which function should do the pull and which function should do the push
     #  I believe that the user that implements the analysis function should have no responsability of knowing about p2p_data
     #  I will curently keep it like that, but needs refactoring
-    p2p_pull_update_one(db_url, "tms", collection, {"identifier": res["identififier"]}, ["video_path"], deserializer, hint_file_keys=["video_path"])
+    p2p_pull_update_one(db_url, db, collection, filter_, required_positional_args, deserializer, hint_file_keys=func.hint_args_are_files)
 
-    func(db_url)
+    local_data_after_update = list(tinymongo.TinyMongoClient(db_url)[db][collection].find(filter_))[0]
+    kwargs = {k: v for k, v in local_data_after_update.items() if k in required_positional_args}
+    update = func(**kwargs)
+    p2p_push_update_one(db_url, db, collection, filter_, update)
