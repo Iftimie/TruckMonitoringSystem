@@ -19,11 +19,11 @@ class P2PWorkerBlueprint(P2PBlueprint):
         self.worker_pool.futures_list = []
 
 
-def heartbeat(db_url):
+def heartbeat(db_url, db="tms"):
     """
     Pottential vulnerability from flooding here
     """
-    collection = tinymongo.TinyMongoClient(db_url)["tms"]["broker_heartbeats"]
+    collection = tinymongo.TinyMongoClient(db_url)[db]["broker_heartbeats"]
     collection.insert_one({"time_of_heartbeat": time.time()})
     return make_response("Thank god you are alive", 200)
 
@@ -82,29 +82,29 @@ def worker_heartbeats(db_url, minutes=20):
     return boolean
 
 
-def search_work(db_url, collection, func_name):
+def search_work(db_url, collection, func_name, db="tms"):
 
-    col = list(tinymongo.TinyMongoClient(db_url)["tms"][collection].find({}))
+    col = list(tinymongo.TinyMongoClient(db_url)[db][collection].find({}))
 
     col = [item for item in col if "started" not in item or item["started"] != func_name]
     if col:
         col.sort(key=lambda item: item["timestamp"])  # might allready be sorted
         item = col[0]
-        tinymongo.TinyMongoClient(db_url)["tms"][collection].update_one({"identifier": item["identifier"]},
+        tinymongo.TinyMongoClient(db_url)[db][collection].update_one({"identifier": item["identifier"]},
                                                                         {"started": func_name})
         return jsonify({"identifier": item["identifier"]})
     else:
         return jsonify({})
 
 
-def execute_function(db_url, worker_pool, function_registry, collection, func_name, resource):
+def execute_function(db_url, worker_pool, function_registry, collection, func_name, resource, db="tms"):
     func_ = function_registry[func_name]
     # TODO check compatibility between the requested function and the requested resource
     #  also make the monitoring possible. like the user should see that something crashed in worker pool
 
     # TODO resources that have been added by the execute_function for them wasn't called should be deleted
 
-    item = list(tinymongo.TinyMongoClient(db_url)["tms"][collection].find({"identifier": resource}))[0]
+    item = list(tinymongo.TinyMongoClient(db_url)[db][collection].find({"identifier": resource}))[0]
     is_done = "started" in item and item["started"] == func_name
     if is_done:
         return make_response("Allready started", 200)
@@ -119,9 +119,10 @@ def execute_function(db_url, worker_pool, function_registry, collection, func_na
         # will wait for a worker client to analyze the data
         pass
     return make_response("Check later for the results", 200)
+    # TODO it should return something like a promise ?
 
 
-def create_brokerworker_microservice(up_dir, db_url, num_workers=0) -> P2PFlaskApp:
+def create_brokerworker_microservice(up_dir, db_url, num_workers=0, functions_list=None) -> P2PFlaskApp:
     """
     Args:
         up_dir: path to directory where to store video files and files with results
@@ -133,8 +134,10 @@ def create_brokerworker_microservice(up_dir, db_url, num_workers=0) -> P2PFlaskA
         P2PFlaskApp
     """
     app = P2PFlaskApp(__name__)
+    if functions_list is None:
+        functions_list = [wraps(analyze_and_updatedb)(partial(analyze_and_updatedb, db_url=db_url, analysis_func=analyze_movie))]
 
-    function_registry = {"analyze_and_updatedb": partial(analyze_and_updatedb, db_url=db_url, analysis_func=analyze_movie)}
+    function_registry = {func.__name__: func for func in functions_list}
     broker_bp = create_brokerworker_blueprint(db_url, num_workers, function_registry=function_registry)
 
     p2pdata_bp = create_p2p_blueprint(up_dir, db_url)  # TODO remove the need for this function current_address_func=self_is_reachable

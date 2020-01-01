@@ -35,8 +35,8 @@ def test_create_worker_blueprint(tmpdir):
     res = client.post("/upload_recordings", data=file_data)
     assert (res.status_code == 200)
     assert (res.data == b"Files uploaded and started runniing the detector. Check later for the results")
-    worker_app._blueprints[0].worker_pool.close()
-    worker_app._blueprints[0].worker_pool.join()
+    worker_app._blueprints['worker_bp'].worker_pool.close()
+    worker_app._blueprints['worker_bp'].worker_pool.join()
     session = create_session(db_url)
     results = VideoStatuses.get_video_statuses(session)
     assert len(results) == 1
@@ -47,7 +47,7 @@ def test_create_worker_blueprint(tmpdir):
 
 def test_analyze_and_updatedb(tmpdir):
     db_url = 'sqlite:///' + os.path.join(tmpdir.strpath, "database.sqlite")
-    test_video_path = osp.join(osp.dirname(__file__), '..','..', 'service' , 'data', 'cut.mkv')
+    test_video_path = osp.join(osp.dirname(__file__), '..', '..', 'service', 'data', 'cut.mkv')
     analyis_func = partial(analyze_movie, max_operating_res=320, skip=0)
     analyze_and_updatedb(db_url, test_video_path, analysis_func=analyis_func)
     session = create_session(db_url)

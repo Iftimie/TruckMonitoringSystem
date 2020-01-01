@@ -4,10 +4,8 @@ import logging
 logger = logging.getLogger(__name__)
 import time
 import tinymongo
-from truckms.service_v2.userclient.userclient import analyze_and_updatedb
 from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize, p2p_push_update_one, p2p_insert_one
 from functools import partial
-from truckms.service.worker.server import analyze_movie
 import inspect
 
 
