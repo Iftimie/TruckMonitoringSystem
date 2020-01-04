@@ -12,7 +12,7 @@ def get_video_file_size(video_path):
     return frame_count
 
 
-def framedatapoint_generator(video_path, skip=5, max_frames=-1) -> Iterable[FrameDatapoint]:
+def framedatapoint_generator(video_path, skip=5, max_frames=-1, grayscale=False) -> Iterable[FrameDatapoint]:
     """
     Generator function for processing images and keeping account of their frame ids
 
@@ -24,12 +24,16 @@ def framedatapoint_generator(video_path, skip=5, max_frames=-1) -> Iterable[Fram
         FrameDatapoint
     """
     assert skip >= 0
+
     cap = cv2.VideoCapture(video_path)
     ret, image = cap.read()
     idx = 0
     while ret:
         if idx % (skip+1) == 0:
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            if grayscale:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            else:
+                image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
             yield FrameDatapoint(image, idx)
         idx += 1
         if idx == max_frames: break

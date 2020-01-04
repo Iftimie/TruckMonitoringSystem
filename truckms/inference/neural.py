@@ -196,7 +196,7 @@ def plot_detections(fdp_iterable: FrameDatapoint, pdp_iterable: PredictionDatapo
     def plots_gen():
         for fdp, pdp in zip(fdp_iterable, pdp_iterable):
             assert fdp.frame_id == pdp.frame_id
-            plotted_image = plot_over_image(fdp.image, pdp.pred)
+            plotted_image = plot_over_image(fdp.image, pdp.pred, fdp.frame_id)
             yield FrameDatapoint(plotted_image, pdp.frame_id)
 
     return plots_gen()
