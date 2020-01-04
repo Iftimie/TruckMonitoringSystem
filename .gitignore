@@ -18,5 +18,9 @@ tests/truckms/service/worker/dummy.avi
 tests/truckms/service/dummy.avi
 tests/truckms/service/dummy.csv
 
+garbage/results_motion_map/
+garbage/results_every_frame/
+
 tmsvenv/
 examples/log.txt
+*.bin
