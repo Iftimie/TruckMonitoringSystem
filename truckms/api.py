@@ -40,10 +40,14 @@ class FrameDatapoint:
 
     The image should be in RGB format. It the image was read from disk with opencv then it should be converted from BGR to RGB
     """
-    def __init__(self, image, frame_id):
+    def __init__(self, image, frame_id, reason=None):
         assert isinstance(image, np.ndarray)
         self.image = image
         self.frame_id = frame_id
+        self.reason = reason
+
+    def __repr__(self):
+        return "frame_id{}".format(self.frame_id)
 
 
 class BatchedFrameDatapoint:
@@ -55,14 +59,16 @@ class BatchedFrameDatapoint:
 
     #TODO do I really need this?
     """
-    def __init__(self, batch_images, batch_frames_ids):
+    def __init__(self, batch_images, batch_frames_ids, batch_reason):
         assert isinstance(batch_images, list)
         assert isinstance(batch_frames_ids, list)
+        assert isinstance(batch_reason, list)
         if len(batch_images)>0:
             assert len(batch_images[0]) == 3
-        assert len(batch_frames_ids) == len(batch_images)
+        assert len(batch_frames_ids) == len(batch_images) == len(batch_reason)
         self.batch_images = batch_images
         self.batch_frames_ids = batch_frames_ids
+        self.batch_reason = batch_reason
 
 
 class PredictionDatapoint:
@@ -70,13 +76,17 @@ class PredictionDatapoint:
     Encapsulates the output from the neural network
     """
 
-    def __init__(self, pred, frame_id):
+    def __init__(self, pred, frame_id, reason=None):
         """
         Args:
             pred: dictionary with keys boxes, scores, labels, obj_id
             frame_id: id of the frame
+            reason: string describing the reason for which this prediction datapoint is created. for example it could be
+                None if there is no particular reason, or a string such as "movement" meaning that at this frame_id, there was a motion detected,
+                although there was nothing detected
         """
-        assert all(isinstance(pred[k], np.ndarray) for k in pred)
+        array_keys = ['boxes', 'scores', 'labels', 'obj_id']
+        assert all(isinstance(pred[k], np.ndarray) for k in array_keys)
         assert len(pred['boxes'].shape) == 2
         assert len(pred['scores'].shape) == 1
         assert len(pred['labels'].shape) == 1
@@ -86,6 +96,10 @@ class PredictionDatapoint:
         assert pred['scores'].shape[0] == pred['labels'].shape[0]
         self.pred = pred
         self.frame_id = frame_id
+        self.reason = reason
+
+    def __repr__(self):
+        return "frame_id{}".format(self.frame_id)
 
 
 class TargetDatapoint:

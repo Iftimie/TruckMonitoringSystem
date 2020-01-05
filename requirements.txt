@@ -6,7 +6,7 @@ opencv-python
 matplotlib
 deprecated
 numpy
-pandas
+pandas==0.24.2
 typing
 youtube_dl
 flask

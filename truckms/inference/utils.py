@@ -12,7 +12,7 @@ def get_video_file_size(video_path):
     return frame_count
 
 
-def framedatapoint_generator(video_path, skip=5, max_frames=-1, grayscale=False) -> Iterable[FrameDatapoint]:
+def framedatapoint_generator(video_path, skip=5, max_frames=-1, grayscale=False, reason=None) -> Iterable[FrameDatapoint]:
     """
     Generator function for processing images and keeping account of their frame ids
 
@@ -34,7 +34,7 @@ def framedatapoint_generator(video_path, skip=5, max_frames=-1, grayscale=False)
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             else:
                 image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            yield FrameDatapoint(image, idx)
+            yield FrameDatapoint(image, idx, reason)
         idx += 1
         if idx == max_frames: break
         ret, image = cap.read()
@@ -72,7 +72,7 @@ def framedatapoint_generator_by_frame_ids(video_path, frame_ids) -> FrameDatapoi
     cap.release()
 
 
-def framedatapoint_generator_by_frame_ids2(video_path, frame_ids) -> FrameDatapoint:
+def framedatapoint_generator_by_frame_ids2(video_path, frame_ids, reason=None) -> FrameDatapoint:
     """
     Generator function for processing images. Only the frames whose ids appear in the frame_ids argument are yielded
 
@@ -92,7 +92,7 @@ def framedatapoint_generator_by_frame_ids2(video_path, frame_ids) -> FrameDatapo
         res, image = cap.read()
         if res:
             image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-            yield FrameDatapoint(image, frame_num)
+            yield FrameDatapoint(image, frame_num, reason)
     cap.release()
 
 
