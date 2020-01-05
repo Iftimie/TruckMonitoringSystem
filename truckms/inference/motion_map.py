@@ -152,9 +152,14 @@ def motion_filter(movement_gen, threshold=1000):
             yield 0
 
 
-def motion_expander(array_motion, kernel_size=10):
-    res = (np.convolve(array_motion, [1] * kernel_size, 'same') > 0).astype(np.uint8)
-    return res
+def motion_expander(array_motion, kernel_size=35):
+    # res = (np.convolve(array_motion, [1] * kernel_size, 'same') > 0).astype(np.uint8)
+    new_array = [0] * array_motion.shape[0]
+    for idx, val in enumerate(array_motion):
+        if val == 1:
+            for i in range(kernel_size + 1):
+                new_array[idx+i] = 1
+    return np.array(new_array)
 
 
 def movement_frames_indexes(video_test, movement_gen=movement_generator, motion_filter=motion_filter):
