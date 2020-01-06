@@ -176,6 +176,9 @@ class Detection:
 
 
 def detections_list2_dict_numpy(all_boxes):
+    """
+    Transforms a list of detections to a dictionary. Necessary for wrapping it into a prediction datapoint
+    """
     boxes, scores, labels, ids_ = [], [], [], []
     for item in all_boxes:
         boxes.append(item.box)

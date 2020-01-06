@@ -82,10 +82,6 @@ class P2PFlaskApp(Flask):
         super(P2PFlaskApp, self).run(*args, **kwargs)
 
 
-def echo():
-    return make_response("I exist", 200)
-
-
 class P2PBlueprint(Blueprint):
     """
     The P2PBlueprint also has a background task, a function that is designed to be called every N seconds.
@@ -99,7 +95,14 @@ class P2PBlueprint(Blueprint):
         self.role = role
         self.rule_mappings = {}
         self.overwritten_rules = [] # List[Tuple[str, callable]]
-        self.route("/echo", methods=['GET'])(echo)
+        self.route("/echo", methods=['GET'])(P2PBlueprint.echo)
+
+    @staticmethod
+    def echo():
+        """
+        Implicit function binded(routed) to /echo path. This helps a client determine if a broker/worker/P2Papp if it still exists.
+        """
+        return make_response("I exist", 200)
 
     def register_time_regular_func(self, f):
         """
@@ -135,6 +138,7 @@ class P2PBlueprint(Blueprint):
 def self_is_reachable(local_port):
     """
     return the public address: ip:port if it is reachable
+    It makes a call to a public server such as 'http://checkip.dyndns.org/'. Inspired from the bitcoin protocol
     else it returns None
     """
     externalipres = requests.get('http://checkip.dyndns.org/')

@@ -34,7 +34,8 @@ setuptools.setup(
         'mock',
         'gputil',
         'sqlalchemy',
-        'netifaces'
+        'netifaces',
+        'typing-extensions'
       ],
 
     keywords=['object', 'detection', 'truck']

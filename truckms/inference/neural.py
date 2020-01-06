@@ -12,6 +12,7 @@ import math
 from typing import Iterable
 
 try:
+    # check if device is allready globally set
     device
 except NameError:
     device = 'cuda' if torch.cuda.is_available() else "cpu"
@@ -32,7 +33,7 @@ def create_model(conf_thr=0.5, max_operating_res=800):
 
 def create_model_efficient(model_creation_func=create_model):
     """
-    Fuses batchnorm layers and applies ReLu activation inplace
+    Fuses batchnorm layers and applies ReLu activation inplace. Results in a bit faster model
     """
     model = model_creation_func().to('cpu')
     modules_to_fuse = get_modules_to_fuse(model)
@@ -44,7 +45,7 @@ def create_model_efficient(model_creation_func=create_model):
     return model
 
 
-def iterable2batch(fdp_iterable: FrameDatapoint, batch_size=5, cdevice=device):
+def iterable2batch(fdp_iterable: Iterable[FrameDatapoint], batch_size=5, cdevice=device):
     """
     Transforms an iterable of FrameDatapoint into BatchedFrameDatapoint
 
@@ -149,7 +150,7 @@ def pred_iter_to_pandas(pdp_iterable):
     return pd.DataFrame(data=list_dict)
 
 
-def pandas_to_pred_iter(data_frame) -> PredictionDatapoint:
+def pandas_to_pred_iter(data_frame) -> Iterable[PredictionDatapoint]:
     """
     Generator that yields PredictionDatapoint from a pandas dataframe
 
@@ -189,7 +190,7 @@ def pandas_to_pred_iter(data_frame) -> PredictionDatapoint:
     yield PredictionDatapoint(prediction, frame_id)
 
 
-def plot_detections(fdp_iterable: FrameDatapoint, pdp_iterable: PredictionDatapoint) -> FrameDatapoint:
+def plot_detections(fdp_iterable: FrameDatapoint, pdp_iterable: PredictionDatapoint) -> Iterable[FrameDatapoint]:
     """
     Plots over the imtages the deections. The number of images should match the number of predictions
 
@@ -209,5 +210,3 @@ def plot_detections(fdp_iterable: FrameDatapoint, pdp_iterable: PredictionDatapo
             yield FrameDatapoint(plotted_image, pdp.frame_id)
 
     return plots_gen()
-
-

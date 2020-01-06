@@ -56,14 +56,12 @@ class BatchedFrameDatapoint:
 
     The images must have an id_. id_ can be set to a list of integers or to a list of None, however it will help
              identify the position in movie if frames are skipped if it is an integer
-
-    #TODO do I really need this?
     """
     def __init__(self, batch_images, batch_frames_ids, batch_reason):
         assert isinstance(batch_images, list)
         assert isinstance(batch_frames_ids, list)
         assert isinstance(batch_reason, list)
-        if len(batch_images)>0:
+        if len(batch_images) > 0:
             assert len(batch_images[0]) == 3
         assert len(batch_frames_ids) == len(batch_images) == len(batch_reason)
         self.batch_images = batch_images

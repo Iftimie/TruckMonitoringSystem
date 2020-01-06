@@ -27,3 +27,4 @@ requests
 netifaces
 tinymongo
 requests-toolbelt
+typing-extensions

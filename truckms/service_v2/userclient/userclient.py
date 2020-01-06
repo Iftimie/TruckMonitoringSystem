@@ -15,7 +15,8 @@ import multiprocessing
 from truckms.service.worker.server import analyze_movie
 from truckms.service.worker.user_client import select_lru_worker, evaluate_workload
 import logging
-from typing import Callable
+from typing import Callable, TypeVar, Any
+from typing_extensions import Protocol
 import traceback
 import time
 import requests
@@ -23,12 +24,12 @@ from datetime import datetime
 logger = logging.getLogger(__name__)
 
 
-# TODO the callable here. use type F = TypeVar[‘F’, bound=Callable[..., Any]]
-#  def transparent(func: F) -> F:
-def analyze_and_updatedb(video_identifier: str, db_url: str, analysis_func: Callable[[
-                                                                                   str,
-                                                                                   Callable[[int, int], None]
-                                                                               ], str]):
+progress_hook = TypeVar('progress_hook', bound=Callable[[int, int], None])
+class AnalysisFunc(Protocol):
+    def __call__(self, video_id: str, p_hook: progress_hook) -> str: ...
+
+
+def analyze_and_updatedb(video_identifier: str, db_url: str, analysis_func: AnalysisFunc):
     """
     Args:
         db_url: url for database
@@ -40,14 +41,12 @@ def analyze_and_updatedb(video_identifier: str, db_url: str, analysis_func: Call
         path to results file
     """
 
-
     # TODO here instead of video_path, this should receive an identifier. because worker_pool.apply_async(func=func_, args=(resource,))
     #  resource is an identifier
     #  thus in res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))
     #  in jobdispatcher, when running this function locally, it should send as args the identifier, not the video_path
     #  that means that when the function is called, the data must allready be stored
     #  as Lucian pointed out. data storange and execution should be separated
-
 
     destination = None
     try:
@@ -63,7 +62,7 @@ def analyze_and_updatedb(video_identifier: str, db_url: str, analysis_func: Call
 
         video_path = list(tinymongo.TinyMongoClient(db_url)["tms"]["movie_statuses"].find(filter_))[0]['video_path']
         # to do refactor this. this should not look like this
-        destination = analysis_func(video_path, progress_hook=progress_hook)
+        destination = analysis_func(video_path, p_hook=progress_hook)
         update_ = {"results": open(destination, 'rb')}
         p2p_push_update_one(db_url, "tms", "movie_statuses", filter_, update_)
         logger.info("Finished processing file")
@@ -94,8 +93,9 @@ def get_job_dispathcher(db_url, num_workers, local_port, analysis_func=None):
         lru_ip, lru_port = select_lru_worker(local_port)
         data = {"identifier": osp.basename(video_path), "video_path": open(video_path, 'rb'), "results": None,
                 "time_of_request": time.time(), "progress": 0.0}
-        #delete this
+
         def evaluate_workload():
+            # delete this
             return False
         if evaluate_workload() or lru_ip is None:
             # do not remove this. this is useful. we don't want to upload in broker (waste time and storage when we want to process locally

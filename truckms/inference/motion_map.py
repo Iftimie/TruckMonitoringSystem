@@ -125,6 +125,21 @@ def pytorch_motion_map(video_file):
 
 
 def movement_generator(video_test, diff_skip=7, erosion=2, binary_threshold=50):
+    """
+    Generator that yields movement values. The number yielded of frame_ids will be the same as the video length.
+    Movement values are computed basically as the difference between 2 frames separated by diff_skip other frames.
+    Some cleaning morphological operations are applied for bettwe results.
+
+    Args:
+        video_test: path to video file
+        diff_skip: difference in time (ids) between the frames that have to be subtracted
+        erosion: erosion iterations. higher value will result in smaller movement values as more pixels are erased
+        binary_threshold: the difference between pixels of two frames will be accepted for futher processing if the pixels
+            is higher than a threshold
+
+    Yields:
+        integer movement value
+    """
     image_gen = framedatapoint_generator(video_test, skip=0, grayscale=True)
     image_gen1, image_gen2 = tee(image_gen)
 
@@ -145,6 +160,9 @@ def movement_generator(video_test, diff_skip=7, erosion=2, binary_threshold=50):
 
 
 def motion_filter(movement_gen, threshold=1000):
+    """
+    Generator filtering the movement values. Higher value will result in fewer accpted frames.
+    """
     for movement in movement_gen:
         if movement > threshold:
             yield 1
@@ -153,6 +171,10 @@ def motion_filter(movement_gen, threshold=1000):
 
 
 def motion_expander(array_motion, kernel_size=35):
+    """
+    Once a motion is detected at frame i we may want to expand the search and also take into consideration the next
+        'kernel_size' frames.
+    """
     # res = (np.convolve(array_motion, [1] * kernel_size, 'same') > 0).astype(np.uint8)
     new_array = [0] * array_motion.shape[0]
     for idx, val in enumerate(array_motion):
@@ -163,6 +185,16 @@ def motion_expander(array_motion, kernel_size=35):
 
 
 def movement_frames_indexes(video_test, movement_gen=movement_generator, motion_filter=motion_filter):
+    """
+    Function that finds frames in a video file where motion is present in the sequence.
+    Args:
+        video_test: file to be analyzed
+        movement_gen: a generator that receives the video file and yields values representing the movement value in a frame
+        motion_filter: a generator coupled to the previous that filters out movement values that are under a threshold
+
+    Returns:
+        array of frame ids where motion is present
+    """
     movement_array = np.array([motion_presence for motion_presence in motion_filter(movement_gen(video_test))])
     expanded_array = motion_expander(movement_array)
     res = np.where(expanded_array)[0]

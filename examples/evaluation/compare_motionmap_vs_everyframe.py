@@ -1,7 +1,7 @@
 from truckms.service.worker.server import analyze_movie
 from truckms.service.gui_interface import html_imgs_generator
 from truckms.inference.utils import get_video_file_size
-from garbage.evaluate_algorithm import compare_multiple_dataframes
+from truckms.evaluation.comparison import compare_multiple_dataframes
 import os.path as osp
 import os
 import cv2
