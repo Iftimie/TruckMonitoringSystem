@@ -4,6 +4,10 @@ import threading
 import logging
 import requests
 logger = logging.getLogger(__name__)
+import io
+from warnings import warn
+import collections
+import inspect
 
 
 """
@@ -46,6 +50,7 @@ class P2PFlaskApp(Flask):
         # do not add view from self.overwritten_routes
         for rule_, view_func_ in self.overwritten_routes:
             if rule_ == rule and view_func == view_func_:
+                warn("Overwritten rule: {}".format(rule))
                 return
         return super(P2PFlaskApp, self).add_url_rule(rule, endpoint, view_func, **options)
 
@@ -70,6 +75,7 @@ class P2PFlaskApp(Flask):
                 self.register_time_regular_func(f)
             self.roles.append(blueprint.role)
             self.overwritten_routes += blueprint.overwritten_rules
+
         self._blueprints[blueprint.name] = blueprint
         super(P2PFlaskApp, self).register_blueprint(blueprint)
 
@@ -154,3 +160,33 @@ def self_is_reachable(local_port):
         return None
 
 
+def validate_arguments(args, kwargs):
+    if len(args) != 0:
+        raise ValueError("All arguments to a function in this p2p framework need to be specified keyword arguments")
+    if "identifier" not in kwargs:
+        raise ValueError("In this p2p framework, identifier must be passed as keyword argument. "
+                         "This helps for memoization and retrieving the results from a function")
+    for v in kwargs.values():
+        if any(isinstance(v, T) for T in [dict, tuple]):
+            raise ValueError("Currently, for simplicity only integers, floats, strings and a single file are allowed as "
+                             "arguments")
+    if "value_for_key_is_file" in kwargs.values():
+        raise ValueError("'value_for_key_is_file' string is a reserved value in this p2p framework. It helps "
+                         "identifying a file.")
+    files = [v for v in kwargs.values() if isinstance(v, io.IOBase)]
+    if len(files) > 1:
+        raise ValueError("p2p framework does not currently support sending more files")
+    if files:
+        if any(not file.closed for file in files):
+            raise ValueError("all files should be closed. I don't want to cause pain...")
+
+    callables = [v for v in kwargs.values() if isinstance(v, collections.Callable)]
+    for callable in callables:
+        ret_anno = inspect.signature(callable).return_annotation
+        has_return_keyword = "return" in inspect.getsource(callable) or 'lambda' in inspect.getsource(callable)
+        if has_return_keyword:
+            if ret_anno != dict:
+                warn("If function returns a dictionary in order to update a document in collection, then annotate it with '-> dict'")
+            else:
+                warn("Found return value and dict return annotation. The returned value will be used to update the document in collection")
+    # callables should be simply ignored exept for a single one which is the one which returns an update
