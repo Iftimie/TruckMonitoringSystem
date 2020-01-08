@@ -214,6 +214,7 @@ def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, 
         update = data
         update["nodes"] = nodes
         update["current_address"] = current_addr
+        # TODO should be insert and throw error if identifier exists
         update_one(db_path, db, col, data, update, upsert=True)
     except ValueError as e:
         logger.info(traceback.format_exc())
@@ -232,6 +233,9 @@ def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, 
                 traceback.print_exc()
                 logger.info(traceback.format_exc())
                 logger.info("Unable to post p2p data")
+
+    del update["nodes"]
+    del update["current_address"]
 
 
 def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_serialize, visited_nodes=None, recursive=True):

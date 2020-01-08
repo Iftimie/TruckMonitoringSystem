@@ -1,5 +1,5 @@
 from flask import make_response, request, jsonify
-from truckms.service_v2.api import P2PFlaskApp, P2PBlueprint
+from truckms.service_v2.api import P2PFlaskApp, P2PBlueprint, find_free_port
 from collections import namedtuple
 from flask import Blueprint
 from functools import partial, wraps
@@ -12,6 +12,7 @@ from typing import Tuple
 logger = logging.getLogger(__name__)
 import socket
 from typing import List
+
 
 NodeState = namedtuple('NodeState', ['ip', 'port', 'workload', 'hardware', 'nickname', 'node_type', 'email'])
 #TODO move this to a database. its too anoying to conver from dict to tuple, to namedtuple just to store them in a set...
@@ -58,6 +59,7 @@ def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discov
 def update_function(local_port, app_roles, discovery_ips_file):
     """
     Function for bookkeeper to make network discovery
+    discovery_ips_file: can be None
     """
     try:
         res = requests.get('http://localhost:{}/node_states'.format(local_port)).json()  # will get the data defined above

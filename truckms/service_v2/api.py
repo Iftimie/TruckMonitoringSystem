@@ -8,6 +8,8 @@ import io
 from warnings import warn
 import collections
 import inspect
+import socket
+from contextlib import closing
 
 
 """
@@ -29,7 +31,7 @@ class P2PFlaskApp(Flask):
      discovery)
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, *args, local_port=None, **kwargs):
         """
         Args:
             args: positional arguments
@@ -44,6 +46,17 @@ class P2PFlaskApp(Flask):
         self._time_regular_funcs = []
         self._time_regular_thread = None
         self._time_interval = 10
+        if local_port is None:
+            local_port = find_free_port()
+        self.local_port = local_port
+        self.route("/echo", methods=['GET'])(P2PFlaskApp.echo)
+
+    @staticmethod
+    def echo():
+        """
+        Implicit function binded(routed) to /echo path. This helps a client determine if a broker/worker/P2Papp if it still exists.
+        """
+        return make_response("I exist", 200)
 
     def add_url_rule(self, rule, endpoint=None, view_func=None, **options):
         # Flask registers views when an application starts
@@ -53,6 +66,21 @@ class P2PFlaskApp(Flask):
                 warn("Overwritten rule: {}".format(rule))
                 return
         return super(P2PFlaskApp, self).add_url_rule(rule, endpoint, view_func, **options)
+
+    def register_blueprint(self, blueprint, **options):
+        """
+        Overwritten method. It helps identifying overwritten routes
+        """
+        if isinstance(blueprint, P2PBlueprint):
+            for f in blueprint.time_regular_funcs:
+                self.register_time_regular_func(f)
+            self.roles.append(blueprint.role)
+            self.overwritten_routes += blueprint.overwritten_rules
+
+        self._blueprints[blueprint.name] = blueprint
+        super(P2PFlaskApp, self).register_blueprint(blueprint)
+
+    # TODO I should also implement the shutdown method that will close the time_regular_thread
 
     @staticmethod
     def _time_regular(list_funcs, time_interval):
@@ -69,19 +97,14 @@ class P2PFlaskApp(Flask):
         """
         self._time_regular_funcs.append(f)
 
-    def register_blueprint(self, blueprint, **options):
-        if isinstance(blueprint, P2PBlueprint):
-            for f in blueprint.time_regular_funcs:
-                self.register_time_regular_func(f)
-            self.roles.append(blueprint.role)
-            self.overwritten_routes += blueprint.overwritten_rules
-
-        self._blueprints[blueprint.name] = blueprint
-        super(P2PFlaskApp, self).register_blueprint(blueprint)
-
-    # TODO I should also implement the shutdown method that will close the time_regular_thread
-
     def run(self, *args, **kwargs):
+        if len(args) > 0:
+            raise ValueError("Specify arguments by keyword arguments")
+        if 'port' in kwargs:
+            raise ValueError("port argument does not need to be specified as it either specified in constructor or generated randomly")
+
+        kwargs['port'] = self.local_port
+
         self._time_regular_thread = threading.Thread(target=P2PFlaskApp._time_regular,
                                                      args=(self._time_regular_funcs, self._time_interval))
         self._time_regular_thread.start()
@@ -101,14 +124,6 @@ class P2PBlueprint(Blueprint):
         self.role = role
         self.rule_mappings = {}
         self.overwritten_rules = [] # List[Tuple[str, callable]]
-        self.route("/echo", methods=['GET'])(P2PBlueprint.echo)
-
-    @staticmethod
-    def echo():
-        """
-        Implicit function binded(routed) to /echo path. This helps a client determine if a broker/worker/P2Papp if it still exists.
-        """
-        return make_response("I exist", 200)
 
     def register_time_regular_func(self, f):
         """
@@ -141,6 +156,13 @@ class P2PBlueprint(Blueprint):
         return decorated_function_catcher
 
 
+def find_free_port():
+    with closing(socket.socket(socket.AF_INET, socket.SOCK_STREAM)) as s:
+        s.bind(('', 0))
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        return s.getsockname()[1]
+
+
 def self_is_reachable(local_port):
     """
     return the public address: ip:port if it is reachable
@@ -161,10 +183,11 @@ def self_is_reachable(local_port):
 
 
 def find_update_callables(kwargs):
-    callables = [v for v in kwargs.values() if isinstance(v, collections.Callable)]
+    callables = [(k, v) for k, v in kwargs.items() if isinstance(v, collections.Callable)]
     update_callables = list(filter(
-        lambda c: ("return" in inspect.getsource(c) or 'lambda' in inspect.getsource(c)) and inspect.signature(
-            c).return_annotation == dict, callables))
+        lambda kc: ("return" in inspect.getsource(kc[1]) or 'lambda' in inspect.getsource(kc[1])) and inspect.signature(
+            kc[1]).return_annotation == dict, callables))
+    update_callables = {k: v for k, v in update_callables}
     return update_callables
 
 
@@ -175,7 +198,7 @@ def validate_arguments(args, kwargs):
         raise ValueError("In this p2p framework, identifier must be passed as keyword argument. "
                          "This helps for memoization and retrieving the results from a function")
     for v in kwargs.values():
-        if any(isinstance(v, T) for T in [dict, tuple]):
+        if any(isinstance(v, T) for T in [dict, tuple, list]):
             raise ValueError("Currently, for simplicity only integers, floats, strings and a single file are allowed as "
                              "arguments")
     if "value_for_key_is_file" in kwargs.values():
@@ -187,6 +210,10 @@ def validate_arguments(args, kwargs):
     if files:
         if any(not file.closed for file in files):
             raise ValueError("all files should be closed. I don't want to cause pain...")
+
+    lambda_callables = [v for v in kwargs.values() if isinstance(v, collections.Callable) and 'lambda' in inspect.getsource(v)]
+    if len(lambda_callables) > 0:
+        raise ValueError("Lambda functions are not allowed because these are local functions and cannot be pickled")
 
     update_callables = find_update_callables(kwargs)
     if len(update_callables) > 1:

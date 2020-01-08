@@ -15,7 +15,6 @@ def analysis_func(file_handler, arg_0, arg_1):
 
 
 # I should also need a decorator that checks that BufferedReader arguments are closed when passed
-bj
 # @p2p_register(db_url, db, coll, workload_evaluator=some_func)
 def analysis_func2(video_file_handler, arg_0, arg_1, func=lambda :None):
     return_data = dict()
