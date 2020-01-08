@@ -9,6 +9,7 @@ from truckms.service.worker.server import analyze_movie
 from truckms.service_v2.userclient.userclient import analyze_and_updatedb
 from truckms.service_v2.p2pdata import create_p2p_blueprint
 from truckms.service_v2.api import self_is_reachable
+import requests
 
 
 class P2PWorkerBlueprint(P2PBlueprint):
@@ -41,8 +42,14 @@ def create_brokerworker_blueprint(db_url, num_workers, function_registry):
     search_work_func = (wraps(search_work)(partial(search_work, db_url)))
     broker_bp.route("/search_work/<collection>/<func_name>", methods=['GET'])(search_work_func)
 
-
     return broker_bp
+
+
+def call_remote_func(ip, port, db, col, func_name, identifier):
+    requests.post(
+        "http://{ip}:{port}/execute_function/{db}/{col}/{fname}/{identifier}".format(ip=ip, port=port, db=db,
+                                                                                     col=col, fname=func_name,
+                                                                                     identifier=identifier))
 
 
 def pool_can_do_more_work(worker_pool):
@@ -145,3 +152,5 @@ def create_brokerworker_microservice(up_dir, db_url, num_workers=0, functions_li
     app.register_blueprint(broker_bp)
     app.register_blueprint(p2pdata_bp)
     return app
+
+

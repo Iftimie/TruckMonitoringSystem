@@ -160,6 +160,14 @@ def self_is_reachable(local_port):
         return None
 
 
+def find_update_callables(kwargs):
+    callables = [v for v in kwargs.values() if isinstance(v, collections.Callable)]
+    update_callables = list(filter(
+        lambda c: ("return" in inspect.getsource(c) or 'lambda' in inspect.getsource(c)) and inspect.signature(
+            c).return_annotation == dict, callables))
+    return update_callables
+
+
 def validate_arguments(args, kwargs):
     if len(args) != 0:
         raise ValueError("All arguments to a function in this p2p framework need to be specified keyword arguments")
@@ -180,13 +188,9 @@ def validate_arguments(args, kwargs):
         if any(not file.closed for file in files):
             raise ValueError("all files should be closed. I don't want to cause pain...")
 
-    callables = [v for v in kwargs.values() if isinstance(v, collections.Callable)]
-    for callable in callables:
-        ret_anno = inspect.signature(callable).return_annotation
-        has_return_keyword = "return" in inspect.getsource(callable) or 'lambda' in inspect.getsource(callable)
-        if has_return_keyword:
-            if ret_anno != dict:
-                warn("If function returns a dictionary in order to update a document in collection, then annotate it with '-> dict'")
-            else:
-                warn("Found return value and dict return annotation. The returned value will be used to update the document in collection")
-    # callables should be simply ignored exept for a single one which is the one which returns an update
+    update_callables = find_update_callables(kwargs)
+    if len(update_callables) > 1:
+        raise ValueError("Only one function that has return_annotation with dict and has return keyword is accepted")
+    warn(
+        "If function returns a dictionary in order to update a document in collection, then annotate it with '-> dict'"
+        "If found return value and dict return annotation. The returned value will be used to update the document in collection")

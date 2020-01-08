@@ -1,6 +1,7 @@
 from truckms.service_v2.userclient.p2p_client import register_p2p_func
 import traceback
 import os.path as osp
+import multiprocessing
 
 
 def some_func(identifier, arg1, arg2, arg3):
@@ -13,9 +14,22 @@ def some_progress_func() -> dict:
 def some_other_progress_func() -> dict:
     return {"a": "b"}
 
+class p2papp:
+
+    def __init__(self):
+        self.local_port = 1000
+        self.worker_pool = multiprocessing.Pool(1)
+        self.list_futures = []
+
 def test_register_p2p_func(tmpdir):
-    dec_func = register_p2p_func(None, None, None)(some_func)
+    db_url, db, col = osp.join(tmpdir, "file.txt"), "a", "b"
+    app = p2papp()
+    dec_func = register_p2p_func(app, db_url, db, col)(some_func)
     dec_func(identifier="a", arg1="c", arg2="d", arg3=3)
+
+    # app.worker_pool.close()
+    # app.worker_pool.join()
+    app.list_futures[0].get()
 
     try:
         dec_func("a", arg1="c", arg2="d", arg3=3)
