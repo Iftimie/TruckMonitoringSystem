@@ -7,7 +7,7 @@ from functools import partial
 from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize, p2p_push_update_one, p2p_insert_one
 import logging
 from truckms.service_v2.api import self_is_reachable
-from truckms.service_v2.brokerworker.brokerworker import call_remote_func
+from truckms.service_v2.brokerworker.p2p_brokerworker import call_remote_func
 import multiprocessing
 import requests
 import collections
@@ -102,6 +102,7 @@ def process_func_kwargs_decorator(f, kwargs, db_url, db, col):
     decorated_func = wraps(f)(partial(new_func, f=f, keys_file_paths=keys_file_paths, db_url=db_url, db=db, col=col))
     return decorated_func, new_kwargs
 
+
 def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False):
     """
     In p2p client the register decorator will have the role of deciding if the function should be executed remotely or
@@ -137,7 +138,6 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False):
 
             lru_ip, lru_port = select_lru_worker(self.local_port)
 
-
             if can_do_locally_func() or lru_ip is None:
                 nodes = []
                 p2p_insert_one(db_url, db, col, mongodb_data, nodes)
@@ -147,9 +147,7 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False):
             else:
                 nodes = [str(lru_ip) + ":" + str(lru_port)]
                 p2p_insert_one(db_url, db, col, mongodb_data, nodes, current_address_func=self_is_reachable)
-                call_remote_func(lru_ip, lru_port, db, col, new_f.__name__, kwargs['identifier'])
-
-                # TODO call remote func with identifier
+                call_remote_func(lru_ip, lru_port, db, col, new_f, kwargs['identifier'])
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
         return wrap
     return inner_decorator
