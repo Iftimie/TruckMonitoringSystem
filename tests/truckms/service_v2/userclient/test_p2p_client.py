@@ -1,4 +1,5 @@
-from truckms.service_v2.userclient.p2p_client import register_p2p_func, create_p2p_client_app
+from tests.truckms.service_v2.functions_to_test import func_return_dict, func_return_val, complex_func
+from truckms.service_v2.userclient.p2p_client import create_p2p_client_app
 import traceback
 import os.path as osp
 import multiprocessing
@@ -96,22 +97,6 @@ def test_register_p2p_func(tmpdir):
     except:
         traceback.print_exc()
         assert False
-
-
-def func_return_dict(arg1, arg2) -> dict:
-    return {arg1: arg2}
-
-
-def func_return_val():
-    return 10
-
-
-def complex_func(identifier, int_arg, str_arg, file_arg, func_arg, func_arg_ret_dict) -> dict:
-    ret_dict = func_arg_ret_dict("func_arg_ret_dict_key", 10)
-    assert ret_dict is not None
-    val = "{},{},{},{}".format(identifier, int_arg, str_arg, func_arg(), file_arg.name)
-    ret_dict = {"val": val}
-    return ret_dict
 
 
 def test_register_p2p_func2(tmpdir):

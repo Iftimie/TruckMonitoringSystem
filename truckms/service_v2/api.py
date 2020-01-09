@@ -191,7 +191,7 @@ def find_update_callables(kwargs):
     return update_callables
 
 
-def validate_arguments(args, kwargs):
+def validate_arguments(f, args, kwargs):
     if len(args) != 0:
         raise ValueError("All arguments to a function in this p2p framework need to be specified keyword arguments")
     if "identifier" not in kwargs:
@@ -221,3 +221,25 @@ def validate_arguments(args, kwargs):
     warn(
         "If function returns a dictionary in order to update a document in collection, then annotate it with '-> dict'"
         "If found return value and dict return annotation. The returned value will be used to update the document in collection")
+
+    # check that callables have been apriori declared with annotation Callable in order
+    # to avoid storing them in the database
+    f_param_sign = inspect.signature(f).parameters
+    for k, v in kwargs.items():
+        if not isinstance(v, collections.Callable): continue
+        f_param_k = f_param_sign[k]
+        if f_param_k.annotation != collections.Callable:
+            raise ValueError("{k} must be annotated with Callable in order be capable of decoding the function code from the database")
+
+
+def validate_function_signature(func):
+    formal_args = list(inspect.signature(func).parameters.keys())
+    if "identifier" not in formal_args:
+        raise ValueError("In this p2p framework, one argument to the function must be the identifier. "
+                         "This helps for memoization and retrieving the results from a function")
+
+    if not ("return" in inspect.getsource(func) and inspect.signature(func).return_annotation == dict):
+        raise ValueError("Function must return something. And must be return annotated with dict")
+
+    # TODO in the future all formal args should have type annotations
+    #  and provide serialization and deserialization methods for each

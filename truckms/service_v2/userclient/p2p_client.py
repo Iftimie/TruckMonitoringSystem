@@ -1,15 +1,13 @@
-from truckms.service_v2.api import P2PFlaskApp, validate_arguments, find_update_callables
+from truckms.service_v2.api import P2PFlaskApp, validate_arguments, find_update_callables, validate_function_signature
 from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
 from functools import wraps
 from truckms.service_v2.userclient.userclient import select_lru_worker
-import inspect
 from functools import partial
-from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize, p2p_push_update_one, p2p_insert_one
+from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one
 import logging
 from truckms.service_v2.api import self_is_reachable
 from truckms.service_v2.brokerworker.p2p_brokerworker import call_remote_func
 import multiprocessing
-import requests
 import collections
 import io
 logger = logging.getLogger(__name__)
@@ -119,17 +117,10 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False):
             if not specified, then it means all calls should be done remotely
     """
     def inner_decorator(f):
-        formal_args = list(inspect.signature(f).parameters.keys())
-        if "identifier" not in formal_args:
-            raise ValueError("In this p2p framework, one argument to the function must be the identifier. "
-                             "This helps for memoization and retrieving the results from a function")
-
-        if not ("return" in inspect.getsource(f) and inspect.signature(f).return_annotation == dict):
-            raise ValueError("Function must return something. And must be return annotated with dict")
-
+        validate_function_signature(f)
         @wraps(f)
         def wrap(*args, **kwargs):
-            validate_arguments(args, kwargs)
+            validate_arguments(f, args, kwargs)
             # this mongodb_data should be always before any mofication of the kwargs
             mongodb_data = {k: v for (k, v) in kwargs.items() if not isinstance(v, collections.Callable)}
 
