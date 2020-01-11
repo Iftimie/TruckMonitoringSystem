@@ -570,7 +570,9 @@ def test_p2p_pull_update_one_with_files(tmpdir):
 
     db, col = "mydb", "movie_statuses"
     node1data = {"res": 320, "name": "somename", "key0": "value0", "key1": "value1",
-                 "file": None}
+                 "file": None, "some_func": lambda: 100}
+    ki = get_default_key_interpreter(node1data)
+
     nodes = ["0000:0000", "1111:1111", "2222:2222"]
     db_url0 = os.path.join(tmpdir, "mongodb0")
     db_url1 = os.path.join(tmpdir, "mongodb1")
@@ -592,7 +594,7 @@ def test_p2p_pull_update_one_with_files(tmpdir):
     def create_app(db_url, current_addr_func):
         app = P2PFlaskApp(__name__)
         p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=db_url,
-                                      current_address_func=current_addr_func)
+                                      current_address_func=current_addr_func, key_interpreter=ki)
         app.register_blueprint(p2p_bp)
         return app
 
@@ -614,6 +616,7 @@ def test_p2p_pull_update_one_with_files(tmpdir):
 
     # we insert here and remotely
     p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111", "2222:2222"],
+                   key_interpreter=ki,
                    current_address_func=lambda: "0000:0000")
     # we update remotely the node list. assume node 1 can reach node 0
     node1filter_ = {"name": "somename"}
@@ -639,7 +642,7 @@ def test_p2p_pull_update_one_with_files(tmpdir):
     pprint(list(tinymongo.TinyMongoClient(db_url1)[db][col].find()))
     pprint(list(tinymongo.TinyMongoClient(db_url2)[db][col].find()))
 
-    p2p_pull_update_one(db_url0, db, col, node1filter_, ["res", "key0", "key1", "file"], hint_file_keys=["file"],
+    p2p_pull_update_one(db_url0, db, col, node1filter_, ["res", "key0", "key1", "file", "some_func"], hint_file_keys=["file"],
                         deserializer=partial(default_deserialize, up_dir=tmpdir))
     node0data = list(tinymongo.TinyMongoClient(db_url0)[db][col].find(node2filter_))[0]
     assert node0data["res"] == 800
