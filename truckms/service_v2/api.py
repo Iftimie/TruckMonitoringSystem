@@ -206,8 +206,8 @@ def validate_arguments(f, args, kwargs):
     if len(files) > 1:
         raise ValueError("p2p framework does not currently support sending more files")
     if files:
-        if any(not file.closed for file in files):
-            raise ValueError("all files should be closed. I don't want to cause pain...")
+        if any(file.closed or file.mode != 'rb' for file in files):
+            raise ValueError("all files should be opened in read binary mode")
 
     lambda_callables = [v for v in kwargs.values() if isinstance(v, collections.Callable) and 'lambda' in inspect.getsource(v)]
     if len(lambda_callables) > 0:

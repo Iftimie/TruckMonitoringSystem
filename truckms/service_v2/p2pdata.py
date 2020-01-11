@@ -180,7 +180,6 @@ def fileser(handle):
 
 def filedser(path):
     handle = open(path, 'rb')
-    handle.close()
     return handle
 
 def callser(func):

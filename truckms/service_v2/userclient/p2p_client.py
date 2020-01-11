@@ -141,7 +141,7 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False):
                 nodes = [str(lru_ip) + ":" + str(lru_port)]
                 # TODO check if the item was allready sent for processing
                 p2p_insert_one(db_url, db, col, kwargs, nodes, key_interpreter, current_address_func=self_is_reachable)
-                call_remote_func(lru_ip, lru_port, db, col, f.__nanme__, kwargs['identifier'])
+                call_remote_func(lru_ip, lru_port, db, col, f.__name__, kwargs['identifier'])
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
         return wrap
     return inner_decorator
