@@ -1,5 +1,5 @@
 from truckms.service_v2.p2pdata import update_one, p2p_insert_one, create_p2p_blueprint, p2p_push_update_one, p2p_pull_update_one
-from truckms.service_v2.p2pdata import default_deserialize
+from truckms.service_v2.p2pdata import default_deserialize, get_default_key_interpreter, find
 from truckms.service_v2.api import P2PFlaskApp, self_is_reachable
 import os
 from copy import deepcopy
@@ -34,6 +34,12 @@ def test_insert_one_file(tmpdir):
 
     assert len(list(collection.find())) == 1
 
+    data = {"res": 123, "name": "asdasda", "source_code": open(__file__, 'r')}
+    update_one(db_url, db, col, data, data, upsert=True)
+    collection = tinymongo.TinyMongoClient(db_url)[db][col]
+
+    assert len(list(collection.find())) == 2
+
 
 def test_insert_one_file_binary(tmpdir):
     import tinymongo
@@ -41,7 +47,8 @@ def test_insert_one_file_binary(tmpdir):
     db, col = "mydb", "movie_statuses"
     data = {"res": 320, "name": "somename", "source_code": open(__file__, 'rb')}
 
-    update_one(db_url, db, col, data, data, upsert=True)
+    ki = get_default_key_interpreter(data)
+    update_one(db_url, db, col, data, data, ki, upsert=True)
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
 
     assert len(list(collection.find())) == 1
@@ -608,3 +615,18 @@ def test_fixate_args():
         assert False
     except:
         assert True
+
+
+def test_find(tmpdir):
+    import tinymongo
+    db_url = os.path.join(tmpdir, "mongodb")
+    db, col = "mydb", "movie_statuses"
+    data = {"res": 320, "name": "somename", "source_code": open(__file__, 'r'),
+            "some_func": lambda: 20}
+
+    ki = get_default_key_interpreter(data)
+    update_one(db_url, db, col, data, data, ki, upsert=True)
+
+    res = find(db_url, db, col, {"res": 320},  ki)
+    print(res)
+    # assert len(list(collection.find())) == 1

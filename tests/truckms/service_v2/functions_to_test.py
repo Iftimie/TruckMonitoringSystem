@@ -17,3 +17,13 @@ def complex_func(identifier, int_arg, str_arg, file_arg, func_arg: Callable, fun
     val = "{},{},{},{}".format(identifier, int_arg, str_arg, func_arg(), file_arg.name)
     ret_dict = {"val": val}
     return ret_dict
+
+
+
+def ignore_func() -> {'arg3': int}:
+    print("okok")
+
+ignore_func()
+import inspect
+params = inspect.signature(ignore_func).parameters
+print(params)

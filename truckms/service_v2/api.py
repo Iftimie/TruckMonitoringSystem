@@ -20,6 +20,11 @@ is by declaring F = TypeVar[‘F’, bound=Callable[..., Any]] then annotating a
 . Or, you may be tempted to bail and use Any instead of trying to figure out the correct signature.
 """
 
+def echo():
+    """
+    Implicit function binded(routed) to /echo path. This helps a client determine if a broker/worker/P2Papp if it still exists.
+    """
+    return make_response("I exist", 200)
 
 class P2PFlaskApp(Flask):
     """
@@ -49,14 +54,7 @@ class P2PFlaskApp(Flask):
         if local_port is None:
             local_port = find_free_port()
         self.local_port = local_port
-        self.route("/echo", methods=['GET'])(P2PFlaskApp.echo)
-
-    @staticmethod
-    def echo():
-        """
-        Implicit function binded(routed) to /echo path. This helps a client determine if a broker/worker/P2Papp if it still exists.
-        """
-        return make_response("I exist", 200)
+        self.route("/echo", methods=['GET'])(echo)
 
     def add_url_rule(self, rule, endpoint=None, view_func=None, **options):
         # Flask registers views when an application starts

@@ -16,6 +16,9 @@ logger = logging.getLogger(__name__)
 import time
 from functools import wraps
 import inspect
+import collections.abc
+import dill
+import base64
 
 
 def fixate_args(**fixed_kwargs):
@@ -163,35 +166,83 @@ def create_p2p_blueprint(up_dir, db_url, current_address_func=lambda: None):
     return p2p_blueprint
 
 
-# def insert_one(db_path, db, col, data):
-#
-#     collection = tinymongo.TinyMongoClient(db_path)[db][col]
-#     data = deepcopy(data)
-#     data["nodes"] = []
-#     collection.insert(data)
-
-def separate_io_data(data):
-    files = {k: v for k, v in data.items() if isinstance(v, io.IOBase)}
-    new_data = {k: v for k, v in data.items() if not isinstance(v, io.IOBase)}
-    for k in files:
-        new_data[k] = files[k].name
-    return files, new_data
-
-
 def validate_document(document):
     for k in document:
         if isinstance(document[k], dict):
             raise ValueError("Cannot have nested dictionaries in current implementation")
 
 
-def update_one(db_path, db, col, query, doc, upsert=False):
+def fileser(handle):
+    return handle.name
+
+
+def filedser(path):
+    handle = open(path, 'rb')
+    handle.close()
+    return handle
+
+def callser(func):
+    bytes_ = dill.dumps(func)
+    string_ = base64.b64encode(bytes_).decode('utf8')
+    return string_
+
+def calldser(data):
+    bytes = base64.b64decode(data.encode('utf8'))
+    func = dill.loads(bytes)
+    return func
+
+def get_default_key_interpreter(doc):
+    ki = {'ser': dict(),
+          'dser': dict()}
+    for k, v in doc.items():
+        if isinstance(v, io.IOBase):
+            ki['ser'][k] = fileser
+            ki['dser'][k] = filedser
+        if isinstance(v, collections.Callable):
+            ki['ser'][k] = callser
+            ki['dser'][k] = calldser
+    return ki
+
+
+def interpret_keys(d, ki, mode):
+    assert mode in ['ser', 'dser']
+    if ki is None:
+        return d
+    nd = {k:v for k, v in d.items()}
+    for k in d:
+        if k in ki[mode]:
+            nd[k] = ki[mode][k](d[k])
+    return nd
+
+
+def update(d, u):
+    for k, v in u.items():
+        if isinstance(v, collections.abc.Mapping):
+            d[k] = update(d.get(k, {}), v)
+        else:
+            d[k] = v
+    return d
+
+#https://gitlab.nsd.no/ire/python-webserver-file-submission-poc/blob/master/flask_app.py
+def update_one(db_path, db, col, query, doc, key_interpreter_dict=None, upsert=False):
     """
     This function is entry point for both insert and update.
+
+    key_interpreter is a dictionary with two keys:
+        ser: dictionary of serialization methods. contains keys in query or doc or no key at all
+        dser: (OPTIONAL HERE) dictionary of deserialization methods. contains keys in query or doc or no key at all
     """
+    if key_interpreter_dict is None:
+        key_interpreter_dict = get_default_key_interpreter(query)
+        key_interpreter_dict = update(key_interpreter_dict, get_default_key_interpreter(doc))
+
+    query = interpret_keys(query, key_interpreter_dict, mode='ser')
+    doc = interpret_keys(doc, key_interpreter_dict, mode='ser')
+
     validate_document(doc)
+    validate_document(query)
+
     collection = tinymongo.TinyMongoClient(db_path)[db][col]
-    _, query = separate_io_data(query)
-    _, doc = separate_io_data(doc)
     res = list(collection.find(query))
     doc["timestamp"] = time.time()
     if len(res) == 0 and upsert is True:
@@ -204,12 +255,26 @@ def update_one(db_path, db, col, query, doc, upsert=False):
         raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(query), str(res)))
 
 
-def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, current_address_func=lambda: None, do_upload=True):
+def find(db_path, db, col, query, key_interpreter_dict=None):
+
+    query = interpret_keys(query, key_interpreter_dict, mode='ser')
+
+    collection = list(tinymongo.TinyMongoClient(db_path)[db][col].find(query))
+    for i in range(len(collection)):
+        collection[i] = interpret_keys(collection[i], key_interpreter_dict, mode='dser')
+        # TODO
+        #  should delete keys suck as nodes, _id, timestamp?
+
+    return collection
+
+
+def p2p_insert_one(db_path, db, col, document, nodes, serializer=default_serialize, current_address_func=lambda: None, do_upload=True):
     """
     post_func is used especially for testing
     current_address_func: self_is_reachable should be called
     """
     current_addr = current_address_func()
+    data = {k:v for k, v in document.items()}
     try:
         update = data
         update["nodes"] = nodes
@@ -226,16 +291,12 @@ def p2p_insert_one(db_path, db, col, data, nodes, serializer=default_serialize, 
             data["nodes"] = nodes[:i] + nodes[i+1:]
             data["nodes"] += [current_addr] if current_addr else []
             file, json = serializer(data)
-            del data["nodes"]
             try:
                 requests.post("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json})
             except:
                 traceback.print_exc()
                 logger.info(traceback.format_exc())
                 logger.info("Unable to post p2p data")
-
-    del update["nodes"]
-    del update["current_address"]
 
 
 def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_serialize, visited_nodes=None, recursive=True):
