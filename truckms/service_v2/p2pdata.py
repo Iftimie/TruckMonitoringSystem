@@ -206,6 +206,20 @@ def get_default_key_interpreter(doc):
     return ki
 
 
+def get_key_interpreter_by_signature(func):
+    ki = {'ser': dict(),
+          'dser': dict()}
+
+    for k, v in inspect.signature(func).parameters.items():
+        if v.annotation == io.IOBase:
+            ki['ser'][k] = fileser
+            ki['dser'][k] = filedser
+        if v.annotation == collections.Callable:
+            ki['ser'][k] = callser
+            ki['dser'][k] = calldser
+    return ki
+
+
 def interpret_keys(d, ki, mode):
     assert mode in ['ser', 'dser']
     if ki is None:

@@ -3,12 +3,13 @@ from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
 from functools import wraps
 from truckms.service_v2.userclient.userclient import select_lru_worker
 from functools import partial
-from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one
+from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one, get_key_interpreter_by_signature, find
 import logging
 from truckms.service_v2.api import self_is_reachable
-from truckms.service_v2.brokerworker.p2p_brokerworker import call_remote_func
+from truckms.service_v2.brokerworker.p2p_brokerworker import call_remote_func, function_executor
 import multiprocessing
 import collections
+import inspect
 import io
 logger = logging.getLogger(__name__)
 
@@ -56,49 +57,50 @@ def decorate_update_callables(db_url, db, col, kwargs):
     return new_kwargs
 
 
-def new_func(f, keys_file_paths, db_url, db, col, **cur_kwargs):
-    """
-    new_func must not be declared inside of process_func_kwargs_decorator because it cannot be pickled
-    """
-    for k in cur_kwargs:
-        if cur_kwargs[k] == "value_for_key_is_file":
-            file_handler = open(keys_file_paths[k], 'r')
-            file_handler.close()
-            cur_kwargs[k] = file_handler
-
-    update_ = f(**cur_kwargs)
-    # TODO actually this check might not be necessary
-    if not all(isinstance(k, str) for k in update_.keys()):
-        raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
-
-    filter_ = {"identifier": cur_kwargs["identifier"]}
-    p2p_push_update_one(db_url, db, col, filter_, update_)
-
-    return update_
-
-
-def process_func_kwargs_decorator(f, kwargs, db_url, db, col):
-    """
-    File handlers cannot be serialized (although these are closed) when running the function f in a worker pool
-    """
-    new_kwargs = {k: v for k, v in kwargs.items()}
-    keys_file_paths = dict()
-
-    for k in new_kwargs:
-        if isinstance(new_kwargs[k],  io.IOBase):
-            keys_file_paths[k] = new_kwargs[k].name
-            new_kwargs[k] = "value_for_key_is_file"
-    # @wraps(f)
-    # def new_func(**cur_kwargs):
-    #     """only receives keyword arguments that are definitely not files, because these have been separated"""
-    #     for k in cur_kwargs:
-    #         if cur_kwargs[k] == "value_for_key_is_file":
-    #             file_handler = open(keys_file_paths[k], 'r')
-    #             file_handler.close()
-    #             cur_kwargs[k] = file_handler
-    #     return f(**cur_kwargs)
-    decorated_func = wraps(f)(partial(new_func, f=f, keys_file_paths=keys_file_paths, db_url=db_url, db=db, col=col))
-    return decorated_func, new_kwargs
+# def new_func(f, db_url, db, col):
+#     """
+#     new_func must not be declared inside of process_func_kwargs_decorator because it cannot be pickled
+#     """
+#
+#     for k in cur_kwargs:
+#         if cur_kwargs[k] == "value_for_key_is_file":
+#             file_handler = open(keys_file_paths[k], 'r')
+#             file_handler.close()
+#             cur_kwargs[k] = file_handler
+#
+#     update_ = f(**cur_kwargs)
+#     # TODO actually this check might not be necessary
+#     if not all(isinstance(k, str) for k in update_.keys()):
+#         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
+#
+#     filter_ = {"identifier": cur_kwargs["identifier"]}
+#     p2p_push_update_one(db_url, db, col, filter_, update_)
+#
+#     return update_
+#
+#
+# def process_func_kwargs_decorator(f, identifier, db_url, db, col):
+#     """
+#     File handlers cannot be serialized (although these are closed) when running the function f in a worker pool
+#     """
+#     # new_kwargs = {k: v for k, v in kwargs.items()}
+#     # keys_file_paths = dict()
+#     #
+#     # for k in new_kwargs:
+#     #     if isinstance(new_kwargs[k],  io.IOBase):
+#     #         keys_file_paths[k] = new_kwargs[k].name
+#     #         new_kwargs[k] = "value_for_key_is_file"
+#     # @wraps(f)
+#     # def new_func(**cur_kwargs):
+#     #     """only receives keyword arguments that are definitely not files, because these have been separated"""
+#     #     for k in cur_kwargs:
+#     #         if cur_kwargs[k] == "value_for_key_is_file":
+#     #             file_handler = open(keys_file_paths[k], 'r')
+#     #             file_handler.close()
+#     #             cur_kwargs[k] = file_handler
+#     #     return f(**cur_kwargs)
+#     decorated_func = wraps(f)(partial(new_func, f=f, identifier=identifier, db_url=db_url, db=db, col=col))
+#     return decorated_func
 
 
 def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False):
@@ -118,27 +120,28 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False):
     """
     def inner_decorator(f):
         validate_function_signature(f)
+        key_interpreter = get_key_interpreter_by_signature(f)
+
         @wraps(f)
         def wrap(*args, **kwargs):
             validate_arguments(f, args, kwargs)
-            # this mongodb_data should be always before any mofication of the kwargs
-            mongodb_data = {k: v for (k, v) in kwargs.items() if not isinstance(v, collections.Callable)}
 
             kwargs = decorate_update_callables(db_url, db, col, kwargs)
-            new_f, kwargs = process_func_kwargs_decorator(f, kwargs, db_url, db, col)
 
             lru_ip, lru_port = select_lru_worker(self.local_port)
 
             if can_do_locally_func() or lru_ip is None:
                 nodes = []
-                p2p_insert_one(db_url, db, col, mongodb_data, nodes)
-                res = self.worker_pool.apply_async(func=new_f, kwds=kwargs)
+                p2p_insert_one(db_url, db, col, kwargs, nodes, key_interpreter)
+                new_f = wraps(f)(partial(function_executor, f=f, identifier=kwargs['identifier'], db_url=db_url, db=db, col=col, key_interpreter=key_interpreter))
+                res = self.worker_pool.apply_async(func=new_f)
                 self.list_futures.append(res)
                 logger.info("Executing function locally")
             else:
                 nodes = [str(lru_ip) + ":" + str(lru_port)]
-                p2p_insert_one(db_url, db, col, mongodb_data, nodes, current_address_func=self_is_reachable)
-                call_remote_func(lru_ip, lru_port, db, col, new_f, kwargs['identifier'])
+                # TODO check if the item was allready sent for processing
+                p2p_insert_one(db_url, db, col, kwargs, nodes, key_interpreter, current_address_func=self_is_reachable)
+                call_remote_func(lru_ip, lru_port, db, col, f.__nanme__, kwargs['identifier'])
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
         return wrap
     return inner_decorator

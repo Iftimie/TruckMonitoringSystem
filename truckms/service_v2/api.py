@@ -239,5 +239,9 @@ def validate_function_signature(func):
     if not ("return" in inspect.getsource(func) and inspect.signature(func).return_annotation == dict):
         raise ValueError("Function must return something. And must be return annotated with dict")
 
+    params = [v[1] for v in list(inspect.signature(func).parameters.items())]
+    if any(p.annotation == inspect._empty for p in params):
+        raise ValueError("Function must have all arguments type annotated")
+
     # TODO in the future all formal args should have type annotations
     #  and provide serialization and deserialization methods for each

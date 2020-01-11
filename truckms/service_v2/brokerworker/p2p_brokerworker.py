@@ -10,34 +10,50 @@ import os
 from functools import wraps, partial
 from truckms.service_v2.api import validate_arguments
 from truckms.service_v2.p2pdata import p2p_route_insert_one, default_deserialize, p2p_route_pull_update_one, p2p_route_push_update_one
+from truckms.service_v2.p2pdata import get_key_interpreter_by_signature, find, p2p_push_update_one
+import inspect
 
 #  call_remote_func(lru_ip, lru_port, db, col, new_f, kwargs)
 def call_remote_func(ip, port, db, col, func_name, identifier):
-    requests.post(
+    res=requests.post(
         "http://{ip}:{port}/execute_function/{db}/{col}/{fname}/{identifier}".format(ip=ip, port=port, db=db,
                                                                                      col=col, fname=func_name,
-                                                                                     identifier=identifier))
-
-def nonlocal_wrap(f, **kwargs):
-    print("asdasd")
-    # tinimongo find identifier
-    # deserialize functions
-    pass
+                                                                                 identifier=identifier))
+    return res
 
 
-def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False, current_address_func=lambda: None):
+
+def function_executor(f, identifier, db, col, db_url, key_interpreter):
+    kwargs_ = find(db_url, db, col, {"identifier": identifier}, key_interpreter)[0]
+    kwargs = {k:kwargs_[k] for k in inspect.signature(f).parameters.keys()}
+    update_ = f(**kwargs)
+    if not all(isinstance(k, str) for k in update_.keys()):
+        raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
+    filter_ = {"identifier": identifier}
+    p2p_push_update_one(db_url, db, col, filter_, update_)
+    # TODO key interpreter might be necessary in p2p_push_update_one from the returned dictionary. This can be solved by annotation the function with {"key":"value"}
+    return update_
+
+def wtf_func():
+    return "ok"
+
+def execute_function(identifier, f, db_url, db, col, key_interpreter, can_do_locally_func, self):
+    if can_do_locally_func():
+        new_f = wraps(f)(partial(function_executor, f=f, identifier=identifier, db_url=db_url, db=db, col=col, key_interpreter=key_interpreter))
+        res = self.worker_pool.apply_async(func=new_f)
+        self.list_futures.append(res)
+
+    return make_response("ok")
+
+
+def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: True, current_address_func=lambda: None):
     updir = os.path.join(db_url, db, col)
     os.makedirs(updir, exist_ok=True)
     def inner_decorator(f):
         validate_function_signature(f)
+        key_interpreter = get_key_interpreter_by_signature(f)
 
-        wrap = wraps(f)(partial(nonlocal_wrap, f=f))
-
-        # @wraps(f)
-        # def wrap(*args, **kwargs):
-        #     # validate_arguments(args, kwargs) # argument validation is allready done in p2p_client.py
-        #     kwargs['identifier']
-        #     pass
+        execute_function_partial = wraps(f)(partial(execute_function, f=f, db_url=db_url, db=db, col=col, key_interpreter=key_interpreter, can_do_locally_func=can_do_locally_func, self=self))
 
         # self_is_reachable
         new_deserializer = partial(default_deserialize, up_dir=updir)
@@ -49,7 +65,7 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False, 
         p2p_route_pull_update_one_func = (wraps(p2p_route_pull_update_one)(partial(p2p_route_pull_update_one, db_path=db_url)))
         self.route("/pull_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_pull_update_one_func)
         self.route('/execute_function/{db}/{col}/{fname}/<identifier>'.format(db=db, col=col, fname=f.__name__),
-                   methods=['GET'])(wrap)
+                   methods=['GET'])(execute_function_partial)
 
     return inner_decorator
 
@@ -78,7 +94,7 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
     p2p_flask_app.register_blueprint(bookkeeper_bp)
 
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
-    p2p_flask_app.worker_pool = multiprocessing.Pool(1)
+    p2p_flask_app.worker_pool = multiprocessing.Pool(2)
     p2p_flask_app.list_futures = []
 
     return p2p_flask_app
