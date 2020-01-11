@@ -236,7 +236,7 @@ def validate_function_signature(func):
         raise ValueError("In this p2p framework, one argument to the function must be the identifier. "
                          "This helps for memoization and retrieving the results from a function")
 
-    if not ("return" in inspect.getsource(func) and inspect.signature(func).return_annotation == dict):
+    if not ("return" in inspect.getsource(func) and isinstance(inspect.signature(func).return_annotation, dict)):
         raise ValueError("Function must return something. And must be return annotated with dict")
 
     params = [v[1] for v in list(inspect.signature(func).parameters.items())]

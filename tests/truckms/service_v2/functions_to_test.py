@@ -20,7 +20,7 @@ def complex_func(identifier: str, int_arg: int, str_arg: str, file_arg: io.IOBas
     return ret_dict
 
 
-def complex_func2(identifier: str, int_arg: int, str_arg: str, file_arg: io.IOBase, func_arg: Callable, func_arg_ret_dict: Callable) -> dict:
+def complex_func2(identifier: str, int_arg: int, str_arg: str, file_arg: io.IOBase, func_arg: Callable, func_arg_ret_dict: Callable) -> {"val":str, "results_file": io.IOBase}:
     ret_dict = func_arg_ret_dict("func_arg_ret_dict_key", 10)
     assert ret_dict is not None
     val = "{},{},{},{}".format(identifier, int_arg, str_arg, func_arg(), file_arg.name)

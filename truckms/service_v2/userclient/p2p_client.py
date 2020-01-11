@@ -4,6 +4,7 @@ from functools import wraps
 from truckms.service_v2.userclient.userclient import select_lru_worker
 from functools import partial
 from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one, get_key_interpreter_by_signature, find
+from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize
 import logging
 from truckms.service_v2.api import self_is_reachable
 from truckms.service_v2.brokerworker.p2p_brokerworker import call_remote_func, function_executor
@@ -11,6 +12,7 @@ import multiprocessing
 import collections
 import inspect
 import io
+import os
 logger = logging.getLogger(__name__)
 
 
@@ -103,7 +105,51 @@ def decorate_update_callables(db_url, db, col, kwargs):
 #     return decorated_func
 
 
-def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False):
+def compare_dicts(cur_kwargs, db_args):
+    for k in cur_kwargs:
+        if isinstance(cur_kwargs[k], collections.Callable):
+            assert inspect.signature(cur_kwargs[k]) == inspect.signature(db_args[k])
+        elif isinstance(cur_kwargs[k], io.IOBase):
+            assert cur_kwargs[k].name == db_args[k].name
+        else:
+            assert cur_kwargs[k] == db_args[k]
+
+
+def verify_identifier(db_url, db, col, kwargs, key_interpreter_dict):
+    collection = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)
+    if collection:
+        item = collection[0]
+        try:
+            compare_dicts(kwargs, item)
+        except:
+            raise ValueError("different arguments for same identifier are not allowed")
+
+
+def identifier_seen(db_url, kwargs, db, col):
+    collection = find(db_url, db, col, {"identifier": kwargs['identifier']})
+    if collection:
+        return True
+    else:
+        return False
+
+
+def get_future(f, kwargs, db_url, db, col, key_interpreter_dict):
+    up_dir = os.path.join(db_url, db)
+    if not os.path.exists(up_dir):
+        os.mkdir(up_dir)
+    item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
+    expected_keys = inspect.signature(f).return_annotation
+    if any(k not in item for k in expected_keys):
+        hint_file_keys = [v for k, v in expected_keys if v == io.IOBase]
+        p2p_pull_update_one(db_url, db, col, {"identifier": kwargs['identifier']}, list(expected_keys.keys()),
+                            deserializer=partial(default_deserialize, up_dir=up_dir), hint_file_keys=hint_file_keys)
+        return None
+    else:
+        item = {k: item[k] for k in expected_keys}
+        return item
+
+
+def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False, limit=24):
     """
     In p2p client the register decorator will have the role of deciding if the function should be executed remotely or
     locally. It will store the input in a collection. If the node is reachable, then data will be updated automatically,
@@ -117,6 +163,7 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False):
         col: string for collection name
         can_do_locally_func: function that returns True if work can be done locally and false if it should be done remotely
             if not specified, then it means all calls should be done remotely
+        limit=hours
     """
     def inner_decorator(f):
         validate_function_signature(f)
@@ -124,6 +171,11 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False):
 
         @wraps(f)
         def wrap(*args, **kwargs):
+
+            verify_identifier(db_url, db, col, kwargs, key_interpreter)
+            if identifier_seen(db_url, kwargs, db, col):
+                return get_future(f, kwargs, db_url, db, col, key_interpreter)
+
             validate_arguments(f, args, kwargs)
 
             kwargs = decorate_update_callables(db_url, db, col, kwargs)
@@ -143,6 +195,8 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False):
                 p2p_insert_one(db_url, db, col, kwargs, nodes, key_interpreter, current_address_func=self_is_reachable)
                 call_remote_func(lru_ip, lru_port, db, col, f.__name__, kwargs['identifier'])
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
+
+            return None
         return wrap
     return inner_decorator
 
