@@ -108,7 +108,11 @@ def decorate_update_callables(db_url, db, col, kwargs):
 def compare_dicts(cur_kwargs, db_args):
     for k in cur_kwargs:
         if isinstance(cur_kwargs[k], collections.Callable):
-            assert inspect.signature(cur_kwargs[k]) == inspect.signature(db_args[k])
+            if isinstance(db_args[k], partial) and db_args[k].func.__name__ == 'new_update_func':
+                # THIS IS FOR MY STUPID CASE OF FUNCTION THAT RETURNS DICT TO INSERT IN DATABASE
+                assert inspect.signature(cur_kwargs[k]) == inspect.signature(db_args[k].keywords['func'])
+            else:
+                assert inspect.signature(cur_kwargs[k]) == inspect.signature(db_args[k])
         elif isinstance(cur_kwargs[k], io.IOBase):
             assert cur_kwargs[k].name == db_args[k].name
         else:
@@ -139,14 +143,21 @@ def get_future(f, kwargs, db_url, db, col, key_interpreter_dict):
         os.mkdir(up_dir)
     item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
     expected_keys = inspect.signature(f).return_annotation
-    if any(k not in item for k in expected_keys):
-        hint_file_keys = [v for k, v in expected_keys if v == io.IOBase]
+    if any(item[k] is None for k in expected_keys):
+        hint_file_keys = [k for k, v in expected_keys.items() if v == io.IOBase]
         p2p_pull_update_one(db_url, db, col, {"identifier": kwargs['identifier']}, list(expected_keys.keys()),
                             deserializer=partial(default_deserialize, up_dir=up_dir), hint_file_keys=hint_file_keys)
-        return None
-    else:
-        item = {k: item[k] for k in expected_keys}
-        return item
+
+    item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
+    item = {k: item[k] for k in expected_keys}
+    return item
+
+
+def add_expected_keys(f, kwargs):
+    expected_keys = inspect.signature(f).return_annotation
+    for k in expected_keys:
+        kwargs[k] = None
+    return kwargs
 
 
 def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False, limit=24):
@@ -179,6 +190,7 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False, 
             validate_arguments(f, args, kwargs)
 
             kwargs = decorate_update_callables(db_url, db, col, kwargs)
+            kwargs = add_expected_keys(f, kwargs)
 
             lru_ip, lru_port = select_lru_worker(self.local_port)
 

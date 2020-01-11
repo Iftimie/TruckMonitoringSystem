@@ -182,6 +182,11 @@ def test_interaction_with_p2p_broker(tmpdir):
         assert item['file_arg'] ==osp.join(tmpdir, db_url_remote, db, col, 'file.txt')
         assert item['func_arg_ret_dict_key'] == 10
         assert item['val'] == 'x,10,str,10'
+
+        returned_item = decorated_func(identifier="x", int_arg=10, str_arg="str", file_arg=data, func_arg=func_return_val, func_arg_ret_dict=func_return_dict)
+        assert returned_item['val'] == 'x,10,str,10'
+        assert returned_item['results_file'] == osp.join(tmpdir, db_url, db, 'file.csv')
+        pass
     except:
         traceback.print_exc()
         assert False
