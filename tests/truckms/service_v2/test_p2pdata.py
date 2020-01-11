@@ -5,6 +5,9 @@ import os
 from copy import deepcopy
 from pprint import pprint
 from functools import partial
+import collections
+import inspect
+import io
 
 
 class DummyObject:
@@ -15,7 +18,7 @@ def test_insert_one(tmpdir):
     import tinymongo
     db_url = os.path.join(tmpdir, "mongodb")
     db, col = "mydb", "movie_statuses"
-    data = {"res": 320, "name": "somename"}
+    data = {"res": 320, "name": "somename", "some_func": lambda : 100}
 
     update_one(db_url, db, col, data, data, upsert=True)
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
@@ -27,14 +30,14 @@ def test_insert_one_file(tmpdir):
     import tinymongo
     db_url = os.path.join(tmpdir, "mongodb")
     db, col = "mydb", "movie_statuses"
-    data = {"res": 320, "name": "somename", "source_code": open(__file__, 'r')}
+    data = {"res": 320, "name": "somename", "source_code": open(__file__, 'r'), "some_func": lambda : 100}
 
     update_one(db_url, db, col, data, data, upsert=True)
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
 
     assert len(list(collection.find())) == 1
 
-    data = {"res": 123, "name": "asdasda", "source_code": open(__file__, 'r')}
+    data = {"res": 123, "name": "asdasda", "source_code": open(__file__, 'r'), "some_func": lambda : 100}
     update_one(db_url, db, col, data, data, upsert=True)
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
 
@@ -45,7 +48,7 @@ def test_insert_one_file_binary(tmpdir):
     import tinymongo
     db_url = os.path.join(tmpdir, "mongodb")
     db, col = "mydb", "movie_statuses"
-    data = {"res": 320, "name": "somename", "source_code": open(__file__, 'rb')}
+    data = {"res": 320, "name": "somename", "source_code": open(__file__, 'rb'), "some_func": lambda : 100}
 
     ki = get_default_key_interpreter(data)
     update_one(db_url, db, col, data, data, ki, upsert=True)
@@ -59,7 +62,8 @@ def test_p2p_insert_one(tmpdir):
 
     db_url = os.path.join(tmpdir, "mongodb")
     db, col = "mydb", "movie_statuses"
-    data = {"res": 320, "name": "somename"}
+    data = {"res": 320, "name": "somename", "some_func": lambda : 100}
+    ki = get_default_key_interpreter(data)
 
     def post_func(url, **kwargs):
         data = dict()
@@ -79,15 +83,14 @@ def test_p2p_insert_one(tmpdir):
         remote_db_url = os.path.join(tmpdir, "remote_mongodb_{}".format(i))
         i += 1
         app = P2PFlaskApp(__name__)
-        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url)
+        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url, key_interpreter=ki)
         app.register_blueprint(p2p_bp)
         return app
 
     nodes = ["localhost:0000"]
     urls = {"http://{}/insert_one/{}/{}".format(node, db, col): create_app().test_client() for node in nodes}
 
-
-    p2p_insert_one(db_url, db, col, data, nodes, current_address_func=lambda :self_is_reachable("0000"))
+    p2p_insert_one(db_url, db, col, data, nodes, ki, current_address_func=lambda :self_is_reachable("0000"))
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
     collection = list(collection.find())
     assert len(collection) == 1
@@ -101,13 +104,24 @@ def test_p2p_insert_one(tmpdir):
         if k in ["_id", "nodes", "timestamp"]: continue
         assert collection_remote[0][k] == collection[0][k]
 
+    collection = find(db_url, db, col, {}, ki)
+    collection_remote = find(os.path.join(tmpdir, "remote_mongodb_{}".format(0)), db, col, {}, ki)
+
+    for k in collection_remote[0]:
+        if k in ["_id", "nodes", "timestamp"]: continue
+        if isinstance(collection[0][k], collections.Callable):
+            assert inspect.signature(collection[0][k]) == inspect.signature(collection_remote[0][k])
+        else:
+            assert collection_remote[0][k] == collection[0][k]
+
 
 def test_p2p_insert_one_with_files(tmpdir):
     import tinymongo
 
     db_url = os.path.join(tmpdir, "mongodb")
     db, col = "mydb", "movie_statuses"
-    data = {"res": 320, "name": "somename", "source_code_file": open(__file__, 'rb')}
+    data = {"res": 320, "name": "somename", "source_code_file": open(__file__, 'rb'), "some_func": lambda : 100}
+    ki = get_default_key_interpreter(data)
 
     def post_func(url, **kwargs):
         data = dict()
@@ -127,7 +141,7 @@ def test_p2p_insert_one_with_files(tmpdir):
         remote_db_url = os.path.join(tmpdir, "remote_mongodb_{}".format(i))
         i += 1
         app = P2PFlaskApp(__name__)
-        p2p_bp = create_p2p_blueprint(tmpdir, remote_db_url)
+        p2p_bp = create_p2p_blueprint(tmpdir, remote_db_url, ki)
         app.register_blueprint(p2p_bp)
         return app
 
@@ -135,7 +149,7 @@ def test_p2p_insert_one_with_files(tmpdir):
     urls = {"http://{}/insert_one/{}/{}".format(node, db, col): create_app().test_client() for node in nodes}
 
 
-    p2p_insert_one(db_url, db, col, data, nodes, current_address_func=lambda : self_is_reachable("0000"))
+    p2p_insert_one(db_url, db, col, data, nodes, ki, current_address_func=lambda : self_is_reachable("0000"))
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
     collection = list(collection.find())
     assert len(collection) == 1
@@ -152,13 +166,26 @@ def test_p2p_insert_one_with_files(tmpdir):
         else:
             assert collection_remote[0][k] == collection[0][k]
 
+    collection = find(db_url, db, col, {}, ki)
+    collection_remote = find(os.path.join(tmpdir, "remote_mongodb_{}".format(0)), db, col, {}, ki)
+
+    for k in collection_remote[0]:
+        if k in ["_id", "nodes", "timestamp"]: continue
+        if isinstance(collection[0][k], collections.Callable):
+            assert inspect.signature(collection[0][k]) == inspect.signature(collection_remote[0][k])
+        elif isinstance(collection[0][k], io.IOBase):
+            assert open(collection[0][k].name, 'rb').read() == open(collection_remote[0][k].name, 'rb').read()
+        else:
+            assert collection_remote[0][k] == collection[0][k]
+
 
 def test_p2p_update_one(tmpdir):
     import tinymongo
 
     db_url = os.path.join(tmpdir, "mongodb")
     db, col = "mydb", "movie_statuses"
-    data = {"res": 320, "name": "somename", "key":"value0"}
+    data = {"res": 320, "name": "somename", "key":"value0", "some_func": lambda : 100}
+    ki = get_default_key_interpreter(data)
 
     def post_func(url, **kwargs):
         data = dict()
@@ -178,7 +205,7 @@ def test_p2p_update_one(tmpdir):
         remote_db_url = os.path.join(tmpdir, "remote_mongodb_{}".format(i))
         i += 1
         app = P2PFlaskApp(__name__)
-        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url)
+        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url, key_interpreter=ki)
         app.register_blueprint(p2p_bp)
         return app
 
@@ -188,10 +215,10 @@ def test_p2p_update_one(tmpdir):
             "http://{}/push_update_one/{}/{}".format(nodes[0], db, col): client_}
 
 
-    p2p_insert_one(db_url, db, col, data, nodes, current_address_func=lambda : self_is_reachable("0000"))
+    p2p_insert_one(db_url, db, col, data, nodes, ki, current_address_func=lambda : self_is_reachable("0000"))
     new_data = deepcopy(data)
     new_data["name"] = "othername"
-    p2p_insert_one(db_url, db, col, new_data, nodes, current_address_func=lambda : self_is_reachable("0000"))
+    p2p_insert_one(db_url, db, col, new_data, nodes, ki, current_address_func=lambda : self_is_reachable("0000"))
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
     collection = list(collection.find())
     assert len(collection) == 2
@@ -218,13 +245,25 @@ def test_p2p_update_one(tmpdir):
             else:
                 assert collection_remote[0][k] == collection[0][k]
 
+    collection = find(db_url, db, col, {}, ki)
+    collection_remote = find(os.path.join(tmpdir, "remote_mongodb_{}".format(0)), db, col, {}, ki)
+
+    for k in collection_remote[0]:
+        if k in ["_id", "nodes", "timestamp"]: continue
+        if isinstance(collection[0][k], collections.Callable):
+            assert inspect.signature(collection[0][k]) == inspect.signature(collection_remote[0][k])
+        elif isinstance(collection[0][k], io.IOBase):
+            assert open(collection[0][k].name, 'rb').read() == open(collection_remote[0][k].name, 'rb').read()
+        else:
+            assert collection_remote[0][k] == collection[0][k]
 
 def test_p2p_update_one_with_files(tmpdir):
     import tinymongo
 
     db_url = os.path.join(tmpdir, "mongodb")
     db, col = "mydb", "movie_statuses"
-    data = {"res": 320, "name": "somename", "key":"value0", "source_code_file": None}
+    data = {"res": 320, "name": "somename", "key":"value0", "source_code_file": None, "some_func": lambda: 100}
+    ki = get_default_key_interpreter(data)
 
     def post_func(url, **kwargs):
         data = dict()
@@ -244,7 +283,7 @@ def test_p2p_update_one_with_files(tmpdir):
         remote_db_url = os.path.join(tmpdir, "remote_mongodb_{}".format(i))
         i += 1
         app = P2PFlaskApp(__name__)
-        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url)
+        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=remote_db_url, key_interpreter=ki)
         app.register_blueprint(p2p_bp)
         return app
 
@@ -253,11 +292,10 @@ def test_p2p_update_one_with_files(tmpdir):
     urls = {"http://{}/insert_one/{}/{}".format(nodes[0], db, col): client_,
             "http://{}/push_update_one/{}/{}".format(nodes[0], db, col): client_}
 
-
-    p2p_insert_one(db_url, db, col, data, nodes)
+    p2p_insert_one(db_url, db, col, data, nodes, ki)
     new_data = deepcopy(data)
     new_data["name"] = "othername"
-    p2p_insert_one(db_url, db, col, new_data, nodes, current_address_func=lambda : self_is_reachable("0000"))
+    p2p_insert_one(db_url, db, col, new_data, nodes, ki, current_address_func=lambda : self_is_reachable("0000"))
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
     collection = list(collection.find())
     assert len(collection) == 2
@@ -266,8 +304,9 @@ def test_p2p_update_one_with_files(tmpdir):
 
     filter = {"res": 320, "name": "othername"}
     update_value = {"key": "value1",
-                    "source_code_file": open(__file__, 'rb')}
-    p2p_push_update_one(db_url, db, col, filter, update_value)
+                    "source_code_file": open(__file__, 'rb'),
+                    "some_func": lambda x: 230}
+    p2p_push_update_one(db_url, db, col, filter, update_value, ki)
     collection = tinymongo.TinyMongoClient(db_url)[db][col]
     collection = list(collection.find())
     assert len(collection) == 2
@@ -288,6 +327,17 @@ def test_p2p_update_one_with_files(tmpdir):
             else:
                 assert collection_remote[0][k] == collection[0][k]
 
+    collection = find(db_url, db, col, {}, ki)
+    collection_remote = find(os.path.join(tmpdir, "remote_mongodb_{}".format(0)), db, col, {}, ki)
+
+    for k in collection_remote[0]:
+        if k in ["_id", "nodes", "timestamp"]: continue
+        if isinstance(collection[0][k], collections.Callable):
+            assert inspect.signature(collection[0][k]) == inspect.signature(collection_remote[0][k])
+        elif isinstance(collection[0][k], io.IOBase):
+            assert open(collection[0][k].name, 'rb').read() == open(collection_remote[0][k].name, 'rb').read()
+        else:
+            assert collection_remote[0][k] == collection[0][k]
 
 def test_p2p_link(tmpdir):
     import tinymongo
@@ -371,7 +421,9 @@ def test_p2p_link_with_files(tmpdir):
     import tinymongo
 
     db, col = "mydb", "movie_statuses"
-    node1data = {"res": 320, "name": "somename", "key": "value0"}
+    node1data = {"res": 320, "name": "somename", "key": "value0", "some_func": lambda :100}
+    ki = get_default_key_interpreter(node1data)
+
     nodes = ["0000:0000", "1111:1111", "2222:2222"]
     db_url0 = os.path.join(tmpdir, "mongodb0")
     db_url1 = os.path.join(tmpdir, "mongodb1")
@@ -391,7 +443,7 @@ def test_p2p_link_with_files(tmpdir):
 
     def create_app(db_url, current_addr_func):
         app = P2PFlaskApp(__name__)
-        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=db_url, current_address_func=current_addr_func)
+        p2p_bp = create_p2p_blueprint(up_dir=tmpdir, db_url=db_url, current_address_func=current_addr_func, key_interpreter=ki)
         app.register_blueprint(p2p_bp)
         return app
 
@@ -412,19 +464,19 @@ def test_p2p_link_with_files(tmpdir):
     # node 2 can reach node 1, but cannot be reached by any node
 
     # we insert here and remotely
-    p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111"], current_address_func=lambda:"0000:0000")
+    p2p_insert_one(db_url0, db, col, node1data, nodes=["1111:1111"], key_interpreter=ki, current_address_func=lambda:"0000:0000")
     # we update remotely the node list. assume node 1 can reach node 0
     node1filter_ = {"name": "somename"}
     node1update_data = list(tinymongo.TinyMongoClient(db_url1)[db][col].find(node1filter_))[0]
     node1update_data = {k: node1update_data[k] for k in node1update_data if k != "_id"}
     # node1update_data["nodes"].extend(["0000:0000"])
-    update_one(db_url1, db, col, node1filter_, node1update_data)
+    update_one(db_url1, db, col, node1filter_, node1update_data, key_interpreter_dict=ki)
     # the client worker will download the data and will insert it by itself
     node2update_data = deepcopy(node1update_data)
     node2filter_ = node1filter_
     node2update_data["nodes"] = ["1111:1111"]
     node2update_data["current_address"] = "2222:2222"
-    update_one(db_url2, db, col, node2filter_, node2update_data, upsert=True)
+    update_one(db_url2, db, col, node2filter_, node2update_data, ki, upsert=True)
 
 
     pprint(list(tinymongo.TinyMongoClient(db_url0)[db][col].find()))
@@ -432,7 +484,7 @@ def test_p2p_link_with_files(tmpdir):
     pprint(list(tinymongo.TinyMongoClient(db_url2)[db][col].find()))
 
     node2update_data = {"source_code_file": open(__file__, 'rb')}
-    visited_nodes = p2p_push_update_one(db_url2, db, col, node2filter_, node2update_data)
+    visited_nodes = p2p_push_update_one(db_url2, db, col, node2filter_, node2update_data,key_interpreter=ki)
     assert set(visited_nodes) == set(nodes)
     assert os.path.basename(list(tinymongo.TinyMongoClient(db_url0)[db][col].find())[0]['source_code_file']) == "test_p2pdata.py"
     assert os.path.basename(list(tinymongo.TinyMongoClient(db_url0)[db][col].find())[0]['source_code_file']) == "test_p2pdata.py"

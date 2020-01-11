@@ -46,7 +46,7 @@ def fixate_args(**fixed_kwargs):
     return inner_decorator
 
 
-def default_serialize(data) -> Tuple[dict, str]:
+def default_serialize(data, key_interpreter=None) -> Tuple[dict, str]:
     """
     data should be a dictionary
     return tuple containing a dictionary with handle for a single file and json
@@ -58,11 +58,12 @@ def default_serialize(data) -> Tuple[dict, str]:
     files_significance = {os.path.basename(v.name): k for k, v in data.items() if isinstance(v, io.IOBase)}
     new_data = {k: v for k, v in data.items() if not isinstance(v, io.IOBase)}
     new_data["files_significance"] = files_significance
+    new_data = interpret_keys(new_data, key_interpreter, mode='ser')
     json_obj = dumps(new_data)
     return files, json_obj
 
 
-def default_deserialize(files, json, up_dir):
+def default_deserialize(files, json, up_dir, key_interpreter=None):
     """
     both are dictionaries
     the files dict should contain a single handle to file
@@ -86,20 +87,21 @@ def default_deserialize(files, json, up_dir):
         data[sign] = filepath
     del data["files_significance"]
 
+    data = interpret_keys(data, key_interpreter, mode='dser')
     return data
 
 
-def p2p_route_insert_one(db_path, db, col, deserializer=default_deserialize, current_address_func=lambda: None):
+def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=default_deserialize, current_address_func=lambda: None):
     if request.files:
         filename = list(request.files.keys())[0]
         files = {secure_filename(filename): request.files[filename]}
     else:
         files = dict()
 
-    data_to_insert = deserializer(files, request.form['json'])
+    data_to_insert = deserializer(files, request.form['json'], key_interpreter=key_interpreter)
     data_to_insert["current_address"] = current_address_func()
     # collection.insert_one(data_to_insert)
-    update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
+    update_one(db_path, db, col, data_to_insert, data_to_insert, key_interpreter, upsert=True)
 
 
 # def p2p_route_insert_many(db_path, db, col, deserializer=default_deserialize, current_address_func=lambda: None):
@@ -154,10 +156,10 @@ def p2p_route_pull_update_one(db_path, db, col, serializer=default_serialize):
     return result
 
 
-def create_p2p_blueprint(up_dir, db_url, current_address_func=lambda: None):
+def create_p2p_blueprint(up_dir, db_url, key_interpreter=None, current_address_func=lambda: None):
     p2p_blueprint = P2PBlueprint("p2p_blueprint", __name__, role="storage")
     new_deserializer = partial(default_deserialize, up_dir=up_dir)
-    p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db_path=db_url, deserializer=new_deserializer, current_address_func=current_address_func)))
+    p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db_path=db_url, deserializer=new_deserializer, current_address_func=current_address_func, key_interpreter=key_interpreter)))
     p2p_blueprint.route("/insert_one/<db>/<col>", methods=['POST'])(p2p_route_insert_one_func)
     p2p_route_push_update_one_func = (wraps(p2p_route_push_update_one)(partial(p2p_route_push_update_one, db_path=db_url, deserializer=new_deserializer)))
     p2p_blueprint.route("/push_update_one/<db>/<col>", methods=['POST'])(p2p_route_push_update_one_func)
@@ -268,7 +270,7 @@ def find(db_path, db, col, query, key_interpreter_dict=None):
     return collection
 
 
-def p2p_insert_one(db_path, db, col, document, nodes, serializer=default_serialize, current_address_func=lambda: None, do_upload=True):
+def p2p_insert_one(db_path, db, col, document, nodes, key_interpreter=None, serializer=default_serialize, current_address_func=lambda: None, do_upload=True):
     """
     post_func is used especially for testing
     current_address_func: self_is_reachable should be called
@@ -280,7 +282,7 @@ def p2p_insert_one(db_path, db, col, document, nodes, serializer=default_seriali
         update["nodes"] = nodes
         update["current_address"] = current_addr
         # TODO should be insert and throw error if identifier exists
-        update_one(db_path, db, col, data, update, upsert=True)
+        update_one(db_path, db, col, data, update, key_interpreter, upsert=True)
     except ValueError as e:
         logger.info(traceback.format_exc())
         raise e
@@ -290,7 +292,7 @@ def p2p_insert_one(db_path, db, col, document, nodes, serializer=default_seriali
             # the data sent to a node will not contain in "nodes" list the pointer to that node. only to other nodes
             data["nodes"] = nodes[:i] + nodes[i+1:]
             data["nodes"] += [current_addr] if current_addr else []
-            file, json = serializer(data)
+            file, json = serializer(data, key_interpreter)
             try:
                 requests.post("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json})
             except:
@@ -299,11 +301,11 @@ def p2p_insert_one(db_path, db, col, document, nodes, serializer=default_seriali
                 logger.info("Unable to post p2p data")
 
 
-def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_serialize, visited_nodes=None, recursive=True):
+def p2p_push_update_one(db_path, db, col, filter, update, key_interpreter=None, serializer=default_serialize, visited_nodes=None, recursive=True):
     if visited_nodes is None:
         visited_nodes = []
     try:
-        update_one(db_path, db, col, filter, update, upsert=False)
+        update_one(db_path, db, col, filter, update, key_interpreter, upsert=False)
     except ValueError as e:
         logger.info(traceback.format_exc())
         raise e
@@ -321,8 +323,8 @@ def p2p_push_update_one(db_path, db, col, filter, update, serializer=default_ser
         if node in visited_nodes:
             continue
 
-        files, update_json = serializer(update)
-        _, filter_json = serializer(filter)
+        files, update_json = serializer(update, key_interpreter=key_interpreter)
+        _, filter_json = serializer(filter, key_interpreter=key_interpreter)
         visited_json = dumps(visited_nodes)
 
         try:
