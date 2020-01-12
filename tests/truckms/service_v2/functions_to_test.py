@@ -28,7 +28,7 @@ def complex_func2(identifier: str, int_arg: int, str_arg: str, file_arg: io.IOBa
         f.write("some_info")
 
     f = open(file_arg.name.replace(".txt", ".csv"), 'rb')
-    f.close()
+    # f.close() # file must not be closed
     ret_dict = {"val": val,
                 "results_file":f}
     return ret_dict

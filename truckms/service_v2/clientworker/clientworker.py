@@ -7,9 +7,10 @@ import tinymongo
 from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize, p2p_push_update_one, p2p_insert_one
 from functools import partial
 import inspect
+import traceback
 
 
-def find_response_with_work(local_port, collection, func_name):
+def find_response_with_work(local_port, db, collection, func_name):
 
     work_found = False
     res_broker_ip = None
@@ -20,7 +21,7 @@ def find_response_with_work(local_port, collection, func_name):
         for broker in brokers:
             broker_ip, broker_port = broker['ip'], broker['port']
             try:
-                res = requests.get('http://{}:{}/search_work/{}/{}'.format(broker_ip, broker_port, collection, func_name))
+                res = requests.post('http://{}:{}/search_work/{}/{}/{}'.format(broker_ip, broker_port, db, collection, func_name))
                 if res.json and 'identifier' in res.json:
                     logger.info("Found work from {}, {}".format(broker_ip, broker_port))
                     work_found = True
@@ -29,6 +30,7 @@ def find_response_with_work(local_port, collection, func_name):
                     res_json = res.json
                     break
             except:  # except connection timeout or something like that
+                traceback.print_exc()
                 pass
         if work_found is False:
             logger.info("No work found")

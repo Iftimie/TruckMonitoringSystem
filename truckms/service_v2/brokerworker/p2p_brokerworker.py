@@ -3,7 +3,7 @@ from truckms.service_v2.api import P2PFlaskApp, validate_function_signature
 from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
 from functools import partial
 import multiprocessing
-from flask import make_response
+from flask import make_response, jsonify
 import tinymongo
 import time
 import os
@@ -43,9 +43,25 @@ def execute_function(identifier, f, db_url, db, col, key_interpreter, can_do_loc
     if can_do_locally_func():
         new_f = wraps(f)(partial(function_executor, f=f, identifier=identifier, db_url=db_url, db=db, col=col, key_interpreter=key_interpreter))
         res = self.worker_pool.apply_async(func=new_f)
+        tinymongo.TinyMongoClient(db_url)[db][col].update_one({"identifier": identifier}, {"started": f.__name__})
         self.list_futures.append(res)
 
     return make_response("ok")
+
+
+def search_work(db_url, db, collection, func_name):
+
+    col = list(tinymongo.TinyMongoClient(db_url)[db][collection].find({}))
+
+    col = [item for item in col if "started" not in item or item["started"] != func_name]
+    if col:
+        col.sort(key=lambda item: item["timestamp"])  # might allready be sorted
+        item = col[0]
+        tinymongo.TinyMongoClient(db_url)[db][collection].update_one({"identifier": item["identifier"]},
+                                                                        {"started": func_name})
+        return jsonify({"identifier": item["identifier"]})
+    else:
+        return jsonify({})
 
 
 def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: True, current_address_func=lambda: None):
@@ -66,7 +82,7 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: True, c
                                                                          current_address_func=current_address_func,
                                                                          key_interpreter=key_interpreter)))
         self.route("/insert_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_insert_one_func)
-        p2p_route_push_update_one_func = (wraps(p2p_route_push_update_one)(partial(p2p_route_push_update_one, db_path=db_url, deserializer=new_deserializer)))
+        p2p_route_push_update_one_func = (wraps(p2p_route_push_update_one)(partial(p2p_route_push_update_one, db_path=db_url, db=db, col=col, deserializer=new_deserializer)))
         self.route("/push_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_push_update_one_func)
         p2p_route_pull_update_one_func = (wraps(p2p_route_pull_update_one)(partial(p2p_route_pull_update_one, db_path=db_url, db=db, col=col)))
 
@@ -74,6 +90,8 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: True, c
         self.route("/pull_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_pull_update_one_func)
         self.route('/execute_function/{db}/{col}/{fname}/<identifier>'.format(db=db, col=col, fname=f.__name__),
                    methods=['POST'])(execute_function_partial)
+        search_work_partial = (wraps(search_work))(partial(search_work, db_url=db_url, db=db, collection=col, func_name=f.__name__))
+        self.route("/search_work/{db}/{col}/{fname}".format(db=db, col=col, fname=f.__name__), methods=['POST'])(search_work_partial)
 
     return inner_decorator
 
