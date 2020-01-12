@@ -43,7 +43,7 @@ def register_p2p_func(self, db_url, db, col):
             local_data["identifier"] = res['identifier']
 
             deserializer = partial(default_deserialize, up_dir=updir)
-            p2p_insert_one(db_url, db, col, local_data, [broker_ip+":"+broker_port])
+            p2p_insert_one(db_url, db, col, local_data, [broker_ip+":"+str(broker_port)])
             p2p_pull_update_one(db_url, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys)
 
             kwargs_ = find(db_url, db, col, filter_, key_interpreter)[0]

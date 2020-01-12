@@ -12,6 +12,6 @@ if __name__ == "__main__":
     db_url = os.path.join(r"D:\tms_data\service", 'brokerworker.db')
     broker_worker_app = P2PFlaskApp(__name__, local_port=5001)
     broker_worker_app = create_p2p_brokerworker_app("discovery_ips_brokerworker.txt", broker_worker_app)
-    analyze_movie = broker_worker_app.register_p2p_func(db_url, "tms", "movie_statuses", can_do_locally_func=lambda :True)(analyze_movie)
+    analyze_movie = broker_worker_app.register_p2p_func(db_url, "tms", "movie_statuses", can_do_locally_func=lambda :False)(analyze_movie)
 
     broker_worker_app.run()

@@ -346,7 +346,11 @@ def p2p_push_update_one(db_path, db, col, filter, update, key_interpreter=None, 
                                                                                                    "visited_json": visited_json,
                                                                                                         "recursive": recursive})
             if res.status_code == 200:
-                visited_nodes = list(set(visited_nodes) | set(res.json))
+                if isinstance(res.json, collections.Callable): # from requests lib
+                    returned_json = res.json()
+                else: # is property
+                    returned_json = res.json # from Flask test client
+                visited_nodes = list(set(visited_nodes) | set(returned_json))
         except:
             traceback.print_exc()
             logger.info(traceback.format_exc())

@@ -8,6 +8,7 @@ from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize,
 from functools import partial
 import inspect
 import traceback
+import collections
 
 
 def find_response_with_work(local_port, db, collection, func_name):
@@ -22,12 +23,16 @@ def find_response_with_work(local_port, db, collection, func_name):
             broker_ip, broker_port = broker['ip'], broker['port']
             try:
                 res = requests.post('http://{}:{}/search_work/{}/{}/{}'.format(broker_ip, broker_port, db, collection, func_name))
-                if res.json and 'identifier' in res.json:
+                if isinstance(res.json, collections.Callable): # from requests lib
+                    returned_json = res.json()
+                else: # is property
+                    returned_json = res.json # from Flask test client
+                if returned_json and 'identifier' in returned_json:
                     logger.info("Found work from {}, {}".format(broker_ip, broker_port))
                     work_found = True
                     res_broker_ip = broker_ip
                     res_broker_port = broker_port
-                    res_json = res.json
+                    res_json = returned_json
                     break
             except:  # except connection timeout or something like that
                 traceback.print_exc()

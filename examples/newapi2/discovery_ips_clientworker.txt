@@ -1,0 +1,7 @@
+localhost;5001;0;Nvidia GTX 960M Intel i7;rmstn;brokerworker,storage,bookkeeper;iftimie.alexandru.florentin@gmail.com
+192.168.1.4;5001;0;Nvidia GTX 960M Intel i7;rmstn;brokerworker,storage,bookkeeper;iftimie.alexandru.florentin@gmail.com
+192.168.0.102;5002;0;Nvidia GTX 960M Intel i7;rmstn;bookkeeper;iftimie.alexandru.florentin@gmail.com
+localhost;5000;0;Nvidia GTX 960M Intel i7;rmstn;bookkeeper;iftimie.alexandru.florentin@gmail.com
+192.168.0.102;5001;0;Nvidia GTX 960M Intel i7;rmstn;bookkeeper;iftimie.alexandru.florentin@gmail.com
+192.168.0.102;5000;0;Nvidia GTX 960M Intel i7;rmstn;bookkeeper;iftimie.alexandru.florentin@gmail.com
+192.168.1.4;5000;0;Nvidia GTX 960M Intel i7;rmstn;bookkeeper;iftimie.alexandru.florentin@gmail.com

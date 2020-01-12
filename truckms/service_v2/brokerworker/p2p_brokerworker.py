@@ -64,7 +64,7 @@ def search_work(db_url, db, collection, func_name, time_limit):
         return jsonify({})
 
 
-def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: True, current_address_func=lambda: None):
+def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: True, current_address_func=lambda: None, time_limit=12):
     updir = os.path.join(db_url, db, col)
     os.makedirs(updir, exist_ok=True)
     def inner_decorator(f):
@@ -90,7 +90,7 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: True, c
         self.route("/pull_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_pull_update_one_func)
         self.route('/execute_function/{db}/{col}/{fname}/<identifier>'.format(db=db, col=col, fname=f.__name__),
                    methods=['POST'])(execute_function_partial)
-        search_work_partial = (wraps(search_work))(partial(search_work, db_url=db_url, db=db, collection=col, func_name=f.__name__))
+        search_work_partial = (wraps(search_work))(partial(search_work, db_url=db_url, db=db, collection=col, func_name=f.__name__, time_limit=time_limit))
         self.route("/search_work/{db}/{col}/{fname}".format(db=db, col=col, fname=f.__name__), methods=['POST'])(search_work_partial)
 
     return inner_decorator
