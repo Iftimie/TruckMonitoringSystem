@@ -49,11 +49,11 @@ def execute_function(identifier, f, db_url, db, col, key_interpreter, can_do_loc
     return make_response("ok")
 
 
-def search_work(db_url, db, collection, func_name):
+def search_work(db_url, db, collection, func_name, time_limit):
 
     col = list(tinymongo.TinyMongoClient(db_url)[db][collection].find({}))
 
-    col = [item for item in col if "started" not in item or item["started"] != func_name]
+    col = [item for item in col if "started" not in item or item["started"] != func_name or time.time() - item['timestamp'] > time_limit]
     if col:
         col.sort(key=lambda item: item["timestamp"])  # might allready be sorted
         item = col[0]

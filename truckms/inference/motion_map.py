@@ -180,6 +180,8 @@ def motion_expander(array_motion, kernel_size=35):
     for idx, val in enumerate(array_motion):
         if val == 1:
             for i in range(kernel_size + 1):
+                if idx+i >= len(new_array):
+                    break
                 new_array[idx+i] = 1
     return np.array(new_array)
 
