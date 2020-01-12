@@ -102,7 +102,7 @@ def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=de
     data_to_insert["current_address"] = current_address_func()
     # collection.insert_one(data_to_insert)
     update_one(db_path, db, col, data_to_insert, data_to_insert, key_interpreter, upsert=True)
-
+    return make_response("ok")
 
 # def p2p_route_insert_many(db_path, db, col, deserializer=default_deserialize, current_address_func=lambda: None):
 #     if request.files:
@@ -283,7 +283,7 @@ def find(db_path, db, col, query, key_interpreter_dict=None):
     return collection
 
 
-def p2p_insert_one(db_path, db, col, document, nodes, key_interpreter=None, serializer=default_serialize, current_address_func=lambda: None, do_upload=True):
+def p2p_insert_one(db_path, db, col, document, nodes, key_interpreter=None, serializer=default_serialize, current_address_func=lambda : None, do_upload=True):
     """
     post_func is used especially for testing
     current_address_func: self_is_reachable should be called
@@ -356,8 +356,13 @@ def p2p_push_update_one(db_path, db, col, filter, update, key_interpreter=None, 
 
 
 class WrapperSave:
-    def __init__(self, data):
-        self.bytes = data
+    def __init__(self, response):
+        if hasattr(response, "data"): # response from Flask client test
+            self.bytes = response.data
+        elif hasattr(response, "content"): # response from requests lib
+            self.bytes = response.content
+        else:
+            raise ValueError("response does not have content data")
 
     def save(self, filepath):
         with open(filepath, 'wb') as f:
@@ -412,7 +417,7 @@ def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_f
                 files = {}
                 if 'Content-Disposition' in res.headers:
                     filename = res.headers['Content-Disposition'].split("filename=")[1]
-                    files = {filename: WrapperSave(res.data)}
+                    files = {filename: WrapperSave(res)}
                 downloaded_data = deserializer(files, update_json)
                 merging_data.append(downloaded_data)
         except:

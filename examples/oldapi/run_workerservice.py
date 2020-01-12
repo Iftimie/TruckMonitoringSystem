@@ -14,7 +14,7 @@ def workermain():
 
     app = create_worker_service(up_dir, db_url, 1)
 
-    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file="discovery_ips")
+    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file="discovery_ips_client.txt")
     app.register_blueprint(bookkeeper_bp)
 
     app.run(host=host, port=port)

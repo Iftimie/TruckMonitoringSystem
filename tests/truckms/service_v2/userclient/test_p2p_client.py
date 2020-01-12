@@ -163,7 +163,7 @@ def test_interaction_with_p2p_broker(tmpdir):
     mocked_requests.post = post_func
     p2p_brokerworker.requests = mocked_requests
     p2pdata.requests = mocked_requests
-    p2p_client.self_is_reachable = lambda :None
+    p2p_client.self_is_reachable = lambda port:None
     p2p_client.select_lru_worker = lambda port:("ip", "port")
 
     try:

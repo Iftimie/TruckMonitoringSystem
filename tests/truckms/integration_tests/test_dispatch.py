@@ -24,7 +24,7 @@ def test_guiservice(tmpdir):
     broker_worker_pool = broker_app._blueprints["brokerworker_bp"].worker_pool
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=broker_app.roles,
-                                                   discovery_ips_file="discovery_ips")
+                                                   discovery_ips_file="discovery_ips_client.txt")
     broker_app.register_blueprint(bookkeeper_bp)
     broker_app_test_client = broker_app.test_client()
 
@@ -49,7 +49,7 @@ def test_guiservice(tmpdir):
     dispatch_work, _, _ = get_job_dispathcher(db_url, 1, 5000)
     uiapp, app = create_guiservice(db_url, dispatch_work_func=dispatch_work, port=port)
 
-    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file="discovery_ips")
+    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file="discovery_ips_client.txt")
     app.register_blueprint(bookkeeper_bp)
 
     client = app.test_client()

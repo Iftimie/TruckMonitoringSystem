@@ -16,7 +16,7 @@ def brokerworkermain():
 
     app = create_brokerworker_microservice(up_dir, db_url, num_workers=0)
 
-    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file= "discovery_ips")
+    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file= "discovery_ips_client.txt")
     app.register_blueprint(bookkeeper_bp)
 
     app.run(host=host, port=port)
