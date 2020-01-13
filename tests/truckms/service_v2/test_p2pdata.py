@@ -652,7 +652,7 @@ def test_p2p_pull_update_one_with_files(tmpdir):
     assert node0data["res"] == 800
     assert node0data["key0"] == "conflicting_value1"
     assert node0data["key1"] == "non_conflicting_value"
-    assert node0data["file"] == os.path.join(tmpdir, "dummy2_2__2_.txt")
+    assert node0data["file"] == os.path.join(tmpdir, "dummy2_1__2_.txt")
 
 from truckms.service_v2.p2pdata import fixate_args
 def test_fixate_args():
