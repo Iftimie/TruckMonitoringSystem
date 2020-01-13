@@ -3,13 +3,11 @@ from flask import request, jsonify, send_file, make_response
 from json import dumps, loads
 from werkzeug import secure_filename
 from truckms.service_v2.api import P2PBlueprint
-from functools import wraps, partial
-from copy import deepcopy
+from functools import partial
 import logging
 import io
 import traceback
 import tinymongo
-from truckms.service_v2.api import self_is_reachable
 import os
 from typing import Tuple
 logger = logging.getLogger(__name__)
@@ -19,6 +17,14 @@ import inspect
 import collections.abc
 import dill
 import base64
+
+
+class TinyMongoClientClean(tinymongo.TinyMongoClient):
+    def __init__(self, foldername=u"tinydb"):
+        # super(TinyMongoClientClean, self).__init__(foldername)
+        self._foldername = foldername
+        if not os.path.exists(foldername):
+            os.mkdir(foldername)
 
 
 def fixate_args(**fixed_kwargs):
@@ -45,6 +51,35 @@ def fixate_args(**fixed_kwargs):
         return wrap
     return inner_decorator
 
+import tempfile
+import zipfile
+
+
+def zip_files(files):
+    # TODO fix the temporary archive
+    directory = os.path.dirname(list(files.keys())[0])
+    zip_path = os.path.join(directory, "archive.ZIP")
+    zf = zipfile.ZipFile(zip_path, "w")
+    for k, v in files.items():
+        zf.write(v.name, os.path.basename(v.name))
+    zf.close()
+    return {"archive.ZIP": open(zip_path, 'rb')}
+
+
+def unzip_files(file, up_dir):
+    new_paths = dict()
+    zf = zipfile.ZipFile(file, 'r')
+    for original_filename in zf.namelist():
+        filepath = os.path.join(up_dir, original_filename)
+        i = 1
+        while os.path.exists(filepath):
+            filename, file_extension = os.path.splitext(filepath)
+            filepath = filename + "_{}_".format(i) + file_extension
+            i += 1
+        zf.extract(original_filename, filepath)
+        new_paths[original_filename] = filepath
+    return new_paths
+
 
 def default_serialize(data, key_interpreter=None) -> Tuple[dict, str]:
     """
@@ -60,6 +95,8 @@ def default_serialize(data, key_interpreter=None) -> Tuple[dict, str]:
     new_data["files_significance"] = files_significance
     new_data = interpret_keys(new_data, key_interpreter, mode='ser')
     json_obj = dumps(new_data)
+    if len(files) >= 2:
+        files = zip_files(files)
     return files, json_obj
 
 
@@ -76,15 +113,23 @@ def default_deserialize(files, json, up_dir, key_interpreter=None):
     if listkeys:
         original_filename = listkeys[0]
         filepath = os.path.join(up_dir, original_filename)
-        original_filepath = filepath
-        i = 1
-        while os.path.exists(filepath):
-            filename, file_extension = os.path.splitext(original_filepath)
-            filepath = filename + "_{}_".format(i) + file_extension
-            i += 1
-        files[original_filename].save(filepath)
-        sign = data["files_significance"][original_filename]
-        data[sign] = filepath
+        if "archive.ZIP" in original_filename:
+            files[original_filename].save(filepath)
+            files = unzip_files(filepath, up_dir)
+            for k, v in files.items():
+                sign = data['files_significance'][k]
+                data[sign] = v
+            os.remove(filepath)
+        else:
+            original_filepath = filepath
+            i = 1
+            while os.path.exists(filepath):
+                filename, file_extension = os.path.splitext(original_filepath)
+                filepath = filename + "_{}_".format(i) + file_extension
+                i += 1
+            files[original_filename].save(filepath)
+            sign = data["files_significance"][original_filename]
+            data[sign] = filepath
     del data["files_significance"]
 
     data = interpret_keys(data, key_interpreter, mode='dser')
@@ -134,15 +179,18 @@ def p2p_route_pull_update_one(db_path, db, col, serializer=default_serialize):
     req_keys = loads(request.form['req_keys_json'])
     filter_data = loads(request.form['filter_json'])
     hint_file_keys = loads(request.form['hint_file_keys_json'])
-    required_list = list(tinymongo.TinyMongoClient(db_path)[db][col].find(filter_data))
-    assert len(required_list) == 1
+    required_list = list(TinyMongoClientClean(db_path)[db][col].find(filter_data))
+    if not required_list:
+        return make_response("filter" + str(filter_data) + "resulted in empty collection")
     required_data = required_list[0]
     data_to_send = {}
     for k in req_keys:
         if k not in hint_file_keys:
             data_to_send[k] = required_data[k]
         else:
-            data_to_send[k] = open(required_data[k])
+            data_to_send[k] = open(required_data[k]) if required_data[k] is not None else None
+
+    # TODO in case data is not ready yet, it will crash. fix this so that the log is not polluted with exceptions
     files, json = serializer(data_to_send)
     if files:
         k = list(files.keys())[0]
@@ -152,7 +200,6 @@ def p2p_route_pull_update_one(db_path, db, col, serializer=default_serialize):
         result = make_response("")
         # result = send_file(__file__, as_attachment=True)
         result.headers['update_json'] = json
-
     return result
 
 
@@ -257,7 +304,7 @@ def update_one(db_path, db, col, query, doc, key_interpreter_dict=None, upsert=F
     validate_document(doc)
     validate_document(query)
 
-    collection = tinymongo.TinyMongoClient(db_path)[db][col]
+    collection = TinyMongoClientClean(db_path)[db][col]
     res = list(collection.find(query))
     doc["timestamp"] = time.time()
     if len(res) == 0 and upsert is True:
@@ -274,7 +321,7 @@ def find(db_path, db, col, query, key_interpreter_dict=None):
 
     query = interpret_keys(query, key_interpreter_dict, mode='ser')
 
-    collection = list(tinymongo.TinyMongoClient(db_path)[db][col].find(query))
+    collection = list(TinyMongoClientClean(db_path)[db][col].find(query))
     for i in range(len(collection)):
         collection[i] = interpret_keys(collection[i], key_interpreter_dict, mode='dser')
         # TODO
@@ -323,7 +370,7 @@ def p2p_push_update_one(db_path, db, col, filter, update, key_interpreter=None, 
         logger.info(traceback.format_exc())
         raise e
 
-    collection = tinymongo.TinyMongoClient(db_path)[db][col]
+    collection = TinyMongoClientClean(db_path)[db][col]
     res = list(collection.find(filter))
     if len(res) != 1:
         raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(filter), str(res)))
@@ -394,7 +441,7 @@ def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_f
 
     req_keys = list(set(req_keys) | set(["timestamp"]))
 
-    collection = tinymongo.TinyMongoClient(db_path)[db][col]
+    collection = TinyMongoClientClean(db_path)[db][col]
     collection_res = list(collection.find(filter))
     if len(collection_res) != 1:
         raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(filter), str(collection_res)))
@@ -424,6 +471,8 @@ def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_f
                     files = {filename: WrapperSave(res)}
                 downloaded_data = deserializer(files, update_json)
                 merging_data.append(downloaded_data)
+            else:
+                logger.info(res.content)
         except:
             traceback.print_exc()
             logger.info(traceback.format_exc())

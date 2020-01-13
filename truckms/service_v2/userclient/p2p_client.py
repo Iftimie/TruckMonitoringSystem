@@ -13,6 +13,7 @@ import collections
 import inspect
 import io
 import os
+import time
 logger = logging.getLogger(__name__)
 
 
@@ -119,7 +120,7 @@ def compare_dicts(cur_kwargs, db_args):
             assert cur_kwargs[k] == db_args[k]
 
 
-def verify_identifier(db_url, db, col, kwargs, key_interpreter_dict):
+def verify_kwargs(db_url, db, col, kwargs, key_interpreter_dict):
     collection = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)
     if collection:
         item = collection[0]
@@ -136,8 +137,7 @@ def identifier_seen(db_url, kwargs, db, col):
     else:
         return False
 
-
-def get_future(f, kwargs, db_url, db, col, key_interpreter_dict):
+def get_remote_future(f, kwargs, db_url, db, col, key_interpreter_dict):
     up_dir = os.path.join(db_url, db)
     if not os.path.exists(up_dir):
         os.mkdir(up_dir)
@@ -153,11 +153,40 @@ def get_future(f, kwargs, db_url, db, col, key_interpreter_dict):
     return item
 
 
+def get_local_future(f, kwargs, db_url, db, col, key_interpreter_dict):
+    expected_keys = inspect.signature(f).return_annotation
+    item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
+    item = {k:v for k, v in item.items() if k in expected_keys}
+    return item
+
+
+class Future:
+
+    def __init__(self, get_future_func):
+        self.get_future_func = get_future_func
+
+    def get(self):
+        item = self.get_future_func()
+        while any(item[k] is None for k in item):
+            item = self.get_future_func()
+            time.sleep(4)
+            logger.info("Not done yet " + str(item))
+        return item
+
+
 def add_expected_keys(f, kwargs):
     expected_keys = inspect.signature(f).return_annotation
     for k in expected_keys:
         kwargs[k] = None
     return kwargs
+
+
+def create_future(f, kwargs, db_url, db, col, key_interpreter):
+    item = find(db_url, db, col, {"identifier": kwargs['identifier']})[0]
+    if item['nodes']:
+        return Future(partial(get_remote_future, f, kwargs, db_url, db, col, key_interpreter))
+    else:
+        return Future(partial(get_local_future, f, kwargs, db_url, db, col, key_interpreter))
 
 
 def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False, limit=24):
@@ -183,9 +212,10 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False, 
         @wraps(f)
         def wrap(*args, **kwargs):
 
-            verify_identifier(db_url, db, col, kwargs, key_interpreter)
+            verify_kwargs(db_url, db, col, kwargs, key_interpreter)
             if identifier_seen(db_url, kwargs, db, col):
-                return get_future(f, kwargs, db_url, db, col, key_interpreter)
+                logger.info("Returning precomputed output")
+                return create_future(f, kwargs, db_url, db, col, key_interpreter)
 
             validate_arguments(f, args, kwargs)
 
@@ -199,7 +229,6 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False, 
                 p2p_insert_one(db_url, db, col, kwargs, nodes, key_interpreter)
                 new_f = wraps(f)(partial(function_executor, f=f, identifier=kwargs['identifier'], db_url=db_url, db=db, col=col, key_interpreter=key_interpreter))
                 res = self.worker_pool.apply_async(func=new_f)
-                self.list_futures.append(res)
                 logger.info("Executing function locally")
             else:
                 nodes = [str(lru_ip) + ":" + str(lru_port)]
@@ -207,8 +236,7 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False, 
                 p2p_insert_one(db_url, db, col, kwargs, nodes, key_interpreter, current_address_func=partial(self_is_reachable, self.local_port))
                 call_remote_func(lru_ip, lru_port, db, col, f.__name__, kwargs['identifier'])
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
-
-            return None
+            return create_future(f, kwargs, db_url, db, col, key_interpreter)
         return wrap
     return inner_decorator
 
@@ -229,7 +257,7 @@ def create_p2p_client_app(discovery_ips_file=None, p2p_flask_app=None):
     p2p_flask_app.register_blueprint(bookkeeper_bp)
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(1)
-    p2p_flask_app.list_futures = []
+    # p2p_flask_app.list_futures = []
 
     return p2p_flask_app
 

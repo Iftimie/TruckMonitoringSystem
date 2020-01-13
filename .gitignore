@@ -7,9 +7,11 @@ truckms.egg-info/
 examples/up_dir/
 *.webm
 *.mp4
+*.ZIP
 out.png
 *.sqlite
-tests/truckms/service/data/cut.csv
+tests/truckms/service/data/cut_results.avi
+tests/truckms/service/worker/dummy.csv
 tests/truckms/service/dummy_filename.csv
 tests/truckms/service/worker/dummy.csv
 truckms/service_v2/db.montydb/

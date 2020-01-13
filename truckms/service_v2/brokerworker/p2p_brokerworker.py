@@ -1,19 +1,17 @@
 import requests
 from truckms.service_v2.api import P2PFlaskApp, validate_function_signature
 from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
-from functools import partial
 import multiprocessing
 from flask import make_response, jsonify
 import tinymongo
 import time
 import os
 from functools import wraps, partial
-from truckms.service_v2.api import validate_arguments
 from truckms.service_v2.p2pdata import p2p_route_insert_one, default_deserialize, p2p_route_pull_update_one, p2p_route_push_update_one
-from truckms.service_v2.p2pdata import get_key_interpreter_by_signature, find, p2p_push_update_one
+from truckms.service_v2.p2pdata import get_key_interpreter_by_signature, find, p2p_push_update_one, TinyMongoClientClean
 import inspect
 
-#  call_remote_func(lru_ip, lru_port, db, col, new_f, kwargs)
+
 def call_remote_func(ip, port, db, col, func_name, identifier):
     res = requests.post(
         "http://{ip}:{port}/execute_function/{db}/{col}/{fname}/{identifier}".format(ip=ip, port=port, db=db,
@@ -43,7 +41,7 @@ def execute_function(identifier, f, db_url, db, col, key_interpreter, can_do_loc
     if can_do_locally_func():
         new_f = wraps(f)(partial(function_executor, f=f, identifier=identifier, db_url=db_url, db=db, col=col, key_interpreter=key_interpreter))
         res = self.worker_pool.apply_async(func=new_f)
-        tinymongo.TinyMongoClient(db_url)[db][col].update_one({"identifier": identifier}, {"started": f.__name__})
+        TinyMongoClientClean(db_url)[db][col].update_one({"identifier": identifier}, {"started": f.__name__})
         self.list_futures.append(res)
 
     return make_response("ok")
@@ -51,13 +49,13 @@ def execute_function(identifier, f, db_url, db, col, key_interpreter, can_do_loc
 
 def search_work(db_url, db, collection, func_name, time_limit):
 
-    col = list(tinymongo.TinyMongoClient(db_url)[db][collection].find({}))
+    col = list(TinyMongoClientClean(db_url)[db][collection].find({}))
 
     col = [item for item in col if "started" not in item or item["started"] != func_name or time.time() - item['timestamp'] > time_limit]
     if col:
         col.sort(key=lambda item: item["timestamp"])  # might allready be sorted
         item = col[0]
-        tinymongo.TinyMongoClient(db_url)[db][collection].update_one({"identifier": item["identifier"]},
+        TinyMongoClientClean(db_url)[db][collection].update_one({"identifier": item["identifier"]},
                                                                         {"started": func_name})
         return jsonify({"identifier": item["identifier"]})
     else:
@@ -95,11 +93,12 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: True, c
 
     return inner_decorator
 
+
 def heartbeat(db_url, db="tms"):
     """
     Pottential vulnerability from flooding here
     """
-    collection = tinymongo.TinyMongoClient(db_url)[db]["broker_heartbeats"]
+    collection = TinyMongoClientClean(db_url)[db]["broker_heartbeats"]
     collection.insert_one({"time_of_heartbeat": time.time()})
     return make_response("Thank god you are alive", 200)
 
@@ -122,5 +121,6 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(2)
     p2p_flask_app.list_futures = []
+    # TODO I need to create a time regular func for those requests that are old in order to execute them in broker
 
     return p2p_flask_app

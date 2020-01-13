@@ -570,7 +570,7 @@ def test_p2p_pull_update_one_with_files(tmpdir):
 
     db, col = "mydb", "movie_statuses"
     node1data = {"res": 320, "name": "somename", "key0": "value0", "key1": "value1",
-                 "file": None, "some_func": lambda: 100}
+                 "file": None, "file2":None, "some_func": lambda: 100}
     ki = get_default_key_interpreter(node1data)
 
     nodes = ["0000:0000", "1111:1111", "2222:2222"]
@@ -626,7 +626,10 @@ def test_p2p_pull_update_one_with_files(tmpdir):
     node1update_data["key0"] = "conflicting_value0"
     with open(os.path.join(tmpdir, "dummy1.txt"), 'w') as f:
         f.write("dummy1")
-    node1update_data["file"] = os.path.join(tmpdir, "dummy2.txt")
+    with open(os.path.join(tmpdir, "dummy2.txt"), 'w') as f:
+        f.write("dummy2")
+    node1update_data["file"] = os.path.join(tmpdir, "dummy1.txt")
+    node1update_data["file2"] = os.path.join(tmpdir, "dummy2.txt")
     update_one(db_url1, db, col, node1filter_, node1update_data)
     # the client worker will download the data and will insert it by itself
     node2filter_ = node1filter_
@@ -636,19 +639,20 @@ def test_p2p_pull_update_one_with_files(tmpdir):
     node2update_data["key1"] = "non_conflicting_value"
     node2update_data["key0"] = "conflicting_value1"
     node2update_data["file"] = os.path.join(tmpdir, "dummy2.txt")
+    node2update_data["file2"] = os.path.join(tmpdir, "dummy1.txt")
     update_one(db_url2, db, col, node2filter_, node2update_data)
 
     pprint(list(tinymongo.TinyMongoClient(db_url0)[db][col].find()))
     pprint(list(tinymongo.TinyMongoClient(db_url1)[db][col].find()))
     pprint(list(tinymongo.TinyMongoClient(db_url2)[db][col].find()))
 
-    p2p_pull_update_one(db_url0, db, col, node1filter_, ["res", "key0", "key1", "file", "some_func"], hint_file_keys=["file"],
+    p2p_pull_update_one(db_url0, db, col, node1filter_, ["res", "key0", "key1", "file", "file2", "some_func"], hint_file_keys=["file", "file2"],
                         deserializer=partial(default_deserialize, up_dir=tmpdir))
     node0data = list(tinymongo.TinyMongoClient(db_url0)[db][col].find(node2filter_))[0]
     assert node0data["res"] == 800
     assert node0data["key0"] == "conflicting_value1"
     assert node0data["key1"] == "non_conflicting_value"
-    assert node0data["file"] == os.path.join(tmpdir, "dummy2_2_.txt")
+    assert node0data["file"] == os.path.join(tmpdir, "dummy2_2__2_.txt")
 
 from truckms.service_v2.p2pdata import fixate_args
 def test_fixate_args():

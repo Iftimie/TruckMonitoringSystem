@@ -5,6 +5,7 @@ from collections import Callable
 from typing import Iterable
 from functools import partial
 import os
+from truckms.evaluation.comparison import compare_multiple_dataframes
 from truckms.api import PredictionDatapoint
 import io
 
@@ -30,21 +31,17 @@ def progress_hook(curidx, endidx) -> dict:
 def analyze_movie(identifier: str, video_handle: io.IOBase,
                   select_frame_inds_func: Callable,
                   progress_hook: Callable,
-                  filter_pred_detections_generator: Callable) -> {"results": io.IOBase}:
+                  filter_pred_detections_generator: Callable) -> {"results": io.IOBase, "video_results": io.IOBase}:
     """
-    Attention!!! if the movie is short or too fast and skip  is too big, then it may result with no detections
-    #TODO think about this
-
     Args:
-        video_path: path to a file on the local disk
-        max_operating_res: the resolution used for analyzing the video file. The lower the resolution, the earlier it
-            will finish but with less accuracy
-        skip: number of frames to skip. the higher the number, the earlier the function will finish
+        identifier: identifier parameter to be compliant with the p2p framework
+        video_handle: file object for the movie to be analyzed.
         progress_hook: function that is called with two integer arguments. the first one represents the current frame index
-            the second represents the final index. the function should not return anything. The hook will actually get
-            called once every 5% is done of the total work
+            the second represents the final index.
+        filter_pred_detections_generator: filtering generator that receives an iterable of predictions and yields the
+            filtered predictions
     Return:
-          path to results file
+          dictionary containing path to the .csv file and to .mp4 file
     """
     model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=320))
 
@@ -70,4 +67,9 @@ def analyze_movie(identifier: str, video_handle: io.IOBase,
         size = get_video_file_size(video_file) - 1
         progress_hook(size, size)
 
-    return {"results": open(destination, 'rb')}
+    visual_destination = os.path.splitext(video_file)[0]+'_results.avi'
+    compare_multiple_dataframes(video_file,
+                                visual_destination,
+                                df)
+    return {"results": open(destination, 'rb'),
+            "video_results": open(visual_destination, 'rb')}

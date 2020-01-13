@@ -67,7 +67,6 @@ def compare_multiple_dataframes(video_path, destination, *dataframes):
     frame = np.concatenate((*images,), axis=1)
     with create_avi(destination, frame) as append_fn:
         for fdp_list in pairsg:
-            print(fdp_list)
             assert all(fdp.frame_id == fdp_list[0].frame_id for fdp in fdp_list)
             images = [fdp.image for fdp in fdp_list]
             frame = np.concatenate((*images,), axis=1)

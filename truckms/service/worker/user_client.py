@@ -72,10 +72,10 @@ def select_lru_worker(local_port):
             if response.status_code == 200:
                 break
             else:
-                res1.pop(0)
+                raise ValueError
         except:
+            logger.info("worker unavailable {}:{}".format(res1[0]['ip'], res1[0]['port']))
             res1.pop(0)
-            logger.info(traceback.format_exc())
 
     if len(res1) == 0:
         logger.info("No worker or broker available")
