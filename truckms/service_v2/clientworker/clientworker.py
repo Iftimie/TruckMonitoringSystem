@@ -35,7 +35,7 @@ def find_response_with_work(local_port, db, collection, func_name):
                     res_json = returned_json
                     break
             except:  # except connection timeout or something like that
-                traceback.print_exc()
+                logger.info("broker unavailable {}:{}".format(broker_ip, broker_port))
                 pass
         if work_found is False:
             logger.info("No work found")

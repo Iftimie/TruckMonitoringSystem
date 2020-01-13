@@ -76,8 +76,9 @@ def unzip_files(file, up_dir):
             filename, file_extension = os.path.splitext(filepath)
             filepath = filename + "_{}_".format(i) + file_extension
             i += 1
-        zf.extract(original_filename, filepath)
-        new_paths[original_filename] = filepath
+        # FIXME in order to stop it creating directories instead of files
+        new_paths[original_filename] = zf.extract(original_filename, filepath)
+    zf.close()
     return new_paths
 
 
@@ -188,7 +189,7 @@ def p2p_route_pull_update_one(db_path, db, col, serializer=default_serialize):
         if k not in hint_file_keys:
             data_to_send[k] = required_data[k]
         else:
-            data_to_send[k] = open(required_data[k]) if required_data[k] is not None else None
+            data_to_send[k] = open(required_data[k], 'rb') if required_data[k] is not None else None
 
     # TODO in case data is not ready yet, it will crash. fix this so that the log is not polluted with exceptions
     files, json = serializer(data_to_send)

@@ -29,6 +29,7 @@ def function_executor(f, identifier, db, col, db_url, key_interpreter):
         if isinstance(kwargs[k], partial) and kwargs[k].func.__name__ == 'new_update_func':
             kwargs[k].keywords['db_url'] = db_url
     update_ = f(**kwargs)
+    update_['finished'] = True
     if not all(isinstance(k, str) for k in update_.keys()):
         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
     filter_ = {"identifier": identifier}
@@ -51,7 +52,14 @@ def search_work(db_url, db, collection, func_name, time_limit):
 
     col = list(TinyMongoClientClean(db_url)[db][collection].find({}))
 
-    col = [item for item in col if "started" not in item or item["started"] != func_name or time.time() - item['timestamp'] > time_limit]
+    col = list(filter(lambda item: "finished" not in item, col))
+    col1 = filter(lambda item: "started" not in item, col)
+    col2 = filter(lambda item: "started" in item and item['started'] != func_name, col)
+    col3 = filter(lambda item: "started" in item and item['started'] == func_name and (time.time() - item['timestamp']) > time_limit * 3600, col)
+
+    col = list(col1) + list(col2) + list(col3)
+    # list(col) + list(col2)
+    # TODO fix this. it returns items that have finished
     if col:
         col.sort(key=lambda item: item["timestamp"])  # might allready be sorted
         item = col[0]

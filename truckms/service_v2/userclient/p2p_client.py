@@ -23,6 +23,7 @@ def new_update_func(*args, identifier, db_url, db, col, func, **kwargs):
     """
     filter_ = {"identifier": identifier}
     update_ = func(*args, **kwargs)
+    update_['finished'] = True
     # TODO actually this check might not be necessary
     if not all(isinstance(k, str) for k in update_.keys()):
         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(func.__name__))

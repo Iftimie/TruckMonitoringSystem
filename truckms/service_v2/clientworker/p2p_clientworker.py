@@ -43,7 +43,7 @@ def register_p2p_func(self, db_url, db, col):
             local_data["identifier"] = res['identifier']
 
             deserializer = partial(default_deserialize, up_dir=updir)
-            p2p_insert_one(db_url, db, col, local_data, [broker_ip+":"+str(broker_port)])
+            p2p_insert_one(db_url, db, col, local_data, [broker_ip+":"+str(broker_port)], do_upload=False)
             p2p_pull_update_one(db_url, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys)
 
             kwargs_ = find(db_url, db, col, filter_, key_interpreter)[0]
@@ -54,6 +54,7 @@ def register_p2p_func(self, db_url, db, col):
                     kwargs[k].keywords['db_url'] = db_url
 
             update_ = f(**kwargs)
+            update_['finished'] = True
             if not all(isinstance(k, str) for k in update_.keys()):
                 raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
             for k, v in update_.items():

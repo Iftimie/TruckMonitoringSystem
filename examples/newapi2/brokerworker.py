@@ -10,6 +10,6 @@ if __name__ == "__main__":
     analyze_movie = broker_worker_app.register_p2p_func(os.path.join(r"D:\tms_data\service", 'brokerworker.db'),
                                                         "tms",
                                                         "movie_statuses",
-                                                        can_do_locally_func=lambda :True,
+                                                        can_do_locally_func=lambda :False,
                                                         time_limit=12)(analyze_movie)
     broker_worker_app.run(host='0.0.0.0')
