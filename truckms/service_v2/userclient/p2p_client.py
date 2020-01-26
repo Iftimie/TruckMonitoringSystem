@@ -190,7 +190,7 @@ def create_future(f, kwargs, db_url, db, col, key_interpreter):
         return Future(partial(get_local_future, f, kwargs, db_url, db, col, key_interpreter))
 
 
-def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False, limit=24):
+def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False, limit=24):
     """
     In p2p client the register decorator will have the role of deciding if the function should be executed remotely or
     locally. It will store the input in a collection. If the node is reachable, then data will be updated automatically,
@@ -206,9 +206,17 @@ def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: False, 
             if not specified, then it means all calls should be done remotely
         limit=hours
     """
+
+    db_url = cache_path
+    db = "p2p"
+
     def inner_decorator(f):
         validate_function_signature(f)
         key_interpreter = get_key_interpreter_by_signature(f)
+
+        col = f.__name__
+        updir = os.path.join(cache_path, db, col)
+        os.makedirs(updir, exist_ok=True)
 
         @wraps(f)
         def wrap(*args, **kwargs):

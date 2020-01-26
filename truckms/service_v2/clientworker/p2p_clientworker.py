@@ -18,14 +18,19 @@ from truckms.service_v2.userclient.p2p_client import decorate_update_callables
 logger = logging.getLogger(__name__)
 
 
-def register_p2p_func(self, db_url, db, col):
-    updir = os.path.join(db_url, db, col)
-    os.makedirs(updir, exist_ok=True)
+def register_p2p_func(self, cache_path):
+    db_url = cache_path
+    db = "p2p"
 
     def inner_decorator(f):
 
         validate_function_signature(f)
         key_interpreter = get_key_interpreter_by_signature(f)
+
+        col = f.__name__
+        updir = os.path.join(cache_path, db, col)
+        os.makedirs(updir, exist_ok=True)
+
         param_keys = list(inspect.signature(f).parameters.keys())
         key_return = list(inspect.signature(f).return_annotation.keys())
         hint_returned_file_keys = [k for k, v in inspect.signature(f).return_annotation.items() if v == io.IOBase]

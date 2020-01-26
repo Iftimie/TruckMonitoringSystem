@@ -6,6 +6,7 @@ import os
 from truckms.service_v2.api import P2PFlaskApp
 import time
 import threading
+import shutil
 
 
 def fun1(app):
@@ -15,9 +16,13 @@ def fun1(app):
 if __name__ == "__main__":
     client_app = create_p2p_client_app("discovery_ips_client.txt",
                                        P2PFlaskApp(__name__, local_port=5000))
-    analyze_movie = client_app.register_p2p_func(os.path.join(r"D:\tms_data\service", 'client.db'),
-                                                 "tms",
-                                                 "movie_statuses",
+    path = '/home/achellaris/projects_data/TruckMonitoringSystem/service/client.db'
+
+    if True:
+        if os.path.exists(path):
+            shutil.rmtree(path)
+
+    analyze_movie = client_app.register_p2p_func(path,
                                                  can_do_locally_func=lambda :False)(analyze_movie)
 
     threading.Thread(target=fun1, args=(client_app,)).start()

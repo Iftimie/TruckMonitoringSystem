@@ -70,12 +70,17 @@ def search_work(db_url, db, collection, func_name, time_limit):
         return jsonify({})
 
 
-def register_p2p_func(self, db_url, db, col, can_do_locally_func=lambda: True, current_address_func=lambda: None, time_limit=12):
-    updir = os.path.join(db_url, db, col)
-    os.makedirs(updir, exist_ok=True)
+def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, current_address_func=lambda: None, time_limit=12):
+    db_url = cache_path
+    db = "p2p"
+
     def inner_decorator(f):
         validate_function_signature(f)
         key_interpreter = get_key_interpreter_by_signature(f)
+
+        col = f.__name__
+        updir = os.path.join(cache_path, db, col)
+        os.makedirs(updir, exist_ok=True)
 
         execute_function_partial = wraps(f)(partial(execute_function, f=f, db_url=db_url, db=db, col=col, key_interpreter=key_interpreter, can_do_locally_func=can_do_locally_func, self=self))
 
