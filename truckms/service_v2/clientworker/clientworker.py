@@ -13,33 +13,35 @@ import collections
 
 def find_response_with_work(local_port, db, collection, func_name):
 
-    work_found = False
     res_broker_ip = None
     res_broker_port = None
     res_json = dict()
-    while work_found is False:
-        brokers = get_available_brokers(local_port=local_port)
-        for broker in brokers:
-            broker_ip, broker_port = broker['ip'], broker['port']
-            try:
-                res = requests.post('http://{}:{}/search_work/{}/{}/{}'.format(broker_ip, broker_port, db, collection, func_name))
-                if isinstance(res.json, collections.Callable): # from requests lib
-                    returned_json = res.json()
-                else: # is property
-                    returned_json = res.json # from Flask test client
-                if returned_json and 'identifier' in returned_json:
-                    logger.info("Found work from {}, {}".format(broker_ip, broker_port))
-                    work_found = True
-                    res_broker_ip = broker_ip
-                    res_broker_port = broker_port
-                    res_json = returned_json
-                    break
-            except:  # except connection timeout or something like that
-                logger.info("broker unavailable {}:{}".format(broker_ip, broker_port))
-                pass
-        if work_found is False:
-            logger.info("No work found")
-        time.sleep(1)
+
+    brokers = get_available_brokers(local_port=local_port)
+
+    if not brokers:
+        logger.info("No broker found")
+
+    for broker in brokers:
+        broker_ip, broker_port = broker['ip'], broker['port']
+        try:
+            res = requests.post('http://{}:{}/search_work/{}/{}/{}'.format(broker_ip, broker_port, db, collection, func_name), timeout=5)
+            if isinstance(res.json, collections.Callable): # from requests lib
+                returned_json = res.json()
+            else: # is property
+                returned_json = res.json # from Flask test client
+            if returned_json and 'identifier' in returned_json:
+                logger.info("Found work from {}, {}".format(broker_ip, broker_port))
+                res_broker_ip = broker_ip
+                res_broker_port = broker_port
+                res_json = returned_json
+                break
+        except:  # except connection timeout or something like that
+            logger.info("broker unavailable {}:{}".format(broker_ip, broker_port))
+            pass
+
+    if res_broker_ip is None:
+        logger.info("No work found")
 
     # TODO it may be possible that res allready contains broker ip and port?
     return res_json, res_broker_ip, res_broker_port

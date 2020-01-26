@@ -122,6 +122,7 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
     if p2p_flask_app is None:
         p2p_flask_app = P2PFlaskApp(__name__)
 
+    p2p_flask_app.roles.append("brokerworker")
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
                                                    discovery_ips_file=discovery_ips_file)
     p2p_flask_app.register_blueprint(bookkeeper_bp)

@@ -34,6 +34,8 @@ def register_p2p_func(self, db_url, db, col):
         @wraps(f)
         def wrap(*agrs, **kwargs):
             res, broker_ip, broker_port = find_response_with_work(self.local_port, db, col, f.__name__)
+            if broker_ip is None:
+                return
 
             filter_ = {"identifier": res['identifier']}
 

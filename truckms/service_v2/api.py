@@ -92,6 +92,7 @@ class P2PFlaskApp(Flask):
         Registers a callable that is called every self.time_interval seconds.
         The callable will not receive any arguments. If arguments are needed, make it a partial function or a class with
         __call__ implemented.
+        The functions should not have infinite loops, or if there are blocking functions a timeout should be used
         """
         self._time_regular_funcs.append(f)
 
