@@ -81,7 +81,17 @@ class P2PFlaskApp(Flask):
     # TODO I should also implement the shutdown method that will close the time_regular_thread
 
     @staticmethod
-    def _time_regular(list_funcs, time_interval):
+    def _time_regular(list_funcs, time_interval, local_port):
+        # while the app is not alive it
+        while True:
+            try:
+                response = requests.get('http://{}:{}/echo'.format('localhost', local_port))
+                if response.status_code == 200:
+                    break
+            except:
+                logger.info("App not ready")
+
+        # infinite loop will not start until the app is online
         while True:
             for f in list_funcs:
                 f()
@@ -105,7 +115,7 @@ class P2PFlaskApp(Flask):
         kwargs['port'] = self.local_port
 
         self._time_regular_thread = threading.Thread(target=P2PFlaskApp._time_regular,
-                                                     args=(self._time_regular_funcs, self._time_interval))
+                                                     args=(self._time_regular_funcs, self._time_interval, self.local_port))
         self._time_regular_thread.start()
         super(P2PFlaskApp, self).run(*args, **kwargs)
 
