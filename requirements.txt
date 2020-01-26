@@ -1,6 +1,7 @@
 -f https://download.pytorch.org/whl/torch_stable.html
 torch==1.3.0+cpu
 torchvision==0.4.1+cpu
+wheel
 opencv-contrib-python
 opencv-python
 matplotlib
@@ -10,21 +11,15 @@ pandas==0.24.2
 typing
 youtube_dl
 flask
-sklearn
 pillow
 Flask-Bootstrap4
 pytest
-progressbar
 tqdm
 Cython
 pytest-mock
 mock
-gputil
-eel
 flaskwebgui
-sqlalchemy
 requests
 netifaces
-tinymongo
 requests-toolbelt
 typing-extensions
