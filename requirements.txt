@@ -11,7 +11,7 @@ pandas==0.24.2
 typing
 youtube_dl
 flask
-pillow==6.1
+pillow==6.2.0
 Flask-Bootstrap4
 pytest
 tqdm
