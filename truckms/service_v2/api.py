@@ -63,6 +63,7 @@ class P2PFlaskApp(Flask):
         self._blueprints = {}
         self._time_regular_funcs = []
         self._time_regular_thread = None
+        self._stop_thread = False
         self._time_interval = 10
         if local_port is None:
             local_port = find_free_port()
@@ -94,18 +95,22 @@ class P2PFlaskApp(Flask):
     # TODO I should also implement the shutdown method that will close the time_regular_thread
 
     @staticmethod
-    def _time_regular(list_funcs, time_interval, local_port):
+    def _time_regular(list_funcs, time_interval, local_port, stop_thread):
         # while the app is not alive it
-        while True:
+        count = 0
+        max_trials = 10
+        while count < max_trials:
             try:
                 response = requests.get('http://{}:{}/echo'.format('localhost', local_port))
                 if response.status_code == 200:
                     break
             except:
                 logger.info("App not ready")
+            time.sleep(1)
+            count+=1
 
         # infinite loop will not start until the app is online
-        while True:
+        while not stop_thread():
             for f in list_funcs:
                 f()
             time.sleep(time_interval)
@@ -119,6 +124,17 @@ class P2PFlaskApp(Flask):
         """
         self._time_regular_funcs.append(f)
 
+    def start_time_regular_thread(self):
+        self._time_regular_thread = threading.Thread(target=P2PFlaskApp._time_regular,
+                                                    args=(
+                                                    self._time_regular_funcs, self._time_interval, self.local_port,
+                                                    lambda :self._stop_thread))
+        self._time_regular_thread.start()
+
+    def stop_time_regular_thread(self):
+        self._stop_thread = True
+        self._time_regular_thread.join()
+
     def run(self, *args, **kwargs):
         if len(args) > 0:
             raise ValueError("Specify arguments by keyword arguments")
@@ -126,10 +142,7 @@ class P2PFlaskApp(Flask):
             raise ValueError("port argument does not need to be specified as it either specified in constructor or generated randomly")
 
         kwargs['port'] = self.local_port
-
-        self._time_regular_thread = threading.Thread(target=P2PFlaskApp._time_regular,
-                                                     args=(self._time_regular_funcs, self._time_interval, self.local_port))
-        self._time_regular_thread.start()
+        self.start_time_regular_thread()
         super(P2PFlaskApp, self).run(*args, **kwargs)
 
 

@@ -18,6 +18,7 @@ import time
 import threading
 import deprecated
 import inspect
+import requests
 logger = logging.getLogger(__name__)
 
 
@@ -168,17 +169,16 @@ def get_remote_future(f, kwargs, db_url, db, col, key_interpreter_dict):
         os.mkdir(up_dir)
     item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
     expected_keys = inspect.signature(f).return_annotation
+    expected_keys_list = list(expected_keys.keys())
+    expected_keys_list.append("progress")
     if any(item[k] is None for k in expected_keys):
         hint_file_keys = [k for k, v in expected_keys.items() if v == io.IOBase]
-
-        expected_keys_list = list(expected_keys.keys())
-        expected_keys_list.append("progress")
 
         p2p_pull_update_one(db_url, db, col, {"identifier": kwargs['identifier']}, expected_keys_list,
                             deserializer=partial(default_deserialize, up_dir=up_dir), hint_file_keys=hint_file_keys)
 
     item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
-    item = {k: item[k] for k in expected_keys}
+    item = {k: item[k] for k in expected_keys_list}
     return item
 
 
@@ -210,6 +210,7 @@ def add_expected_keys(f, kwargs):
     expected_keys = inspect.signature(f).return_annotation
     for k in expected_keys:
         kwargs[k] = None
+    kwargs['progress'] = 0
     return kwargs
 
 
@@ -287,14 +288,32 @@ class ServerThread(threading.Thread):
     def __init__(self, app):
         threading.Thread.__init__(self)
         self.srv = make_server('0.0.0.0', app.local_port, app)
+        self.app = app
         self.ctx = app.app_context()
         self.ctx.push()
 
     def run(self):
+        self.app.start_time_regular_thread()
         self.srv.serve_forever()
 
     def shutdown(self):
+        self.app.stop_time_regular_thread()
         self.srv.shutdown()
+
+
+def wait_for_discovery(local_port):
+    """
+    Try at most max_trials times to connect to p2p network or until the list of node si not empty
+    """
+    max_trials = 3
+    count = 0
+    while count < max_trials:
+        logger.info("Waiting for nodes")
+        res = requests.get('http://localhost:{}/node_states'.format(local_port)).json()  # will get the data defined above
+        if len(res) != 0:
+            break
+        count+=1
+        time.sleep(5)
 
 
 def create_p2p_client_app(discovery_ips_file=None, p2p_flask_app=None):
@@ -318,6 +337,7 @@ def create_p2p_client_app(discovery_ips_file=None, p2p_flask_app=None):
     p2p_flask_app.background_thread = ServerThread(p2p_flask_app)
     p2p_flask_app.background_thread.start()
     wait_until_online(p2p_flask_app.local_port)
+    wait_for_discovery(p2p_flask_app.local_port)
 
     return p2p_flask_app
 

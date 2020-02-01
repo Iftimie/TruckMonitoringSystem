@@ -1,5 +1,5 @@
 from truckms.service_v2.brokerworker.p2p_brokerworker import create_p2p_brokerworker_app
-from examples.newapi2.function import analyze_movie, progress_hook
+from examples.newapi2.function import analyze_movie
 import os
 from truckms.service_v2.api import P2PFlaskApp
 import shutil
@@ -14,6 +14,6 @@ if __name__ == "__main__":
         if os.path.exists(path):
             shutil.rmtree(path)
 
-    analyze_movie = broker_worker_app.register_p2p_func(path, can_do_locally_func=lambda :False,
+    analyze_movie = broker_worker_app.register_p2p_func(path, can_do_locally_func=lambda :True,
                                                         time_limit=12)(analyze_movie)
     broker_worker_app.run(host='0.0.0.0')

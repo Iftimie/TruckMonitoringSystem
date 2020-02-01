@@ -10,6 +10,8 @@ from functools import wraps, partial
 from truckms.service_v2.p2pdata import p2p_route_insert_one, default_deserialize, p2p_route_pull_update_one, p2p_route_push_update_one
 from truckms.service_v2.p2pdata import get_key_interpreter_by_signature, find, p2p_push_update_one, TinyMongoClientClean
 import inspect
+import logging
+logger = logging.getLogger(__name__)
 
 
 def call_remote_func(ip, port, db, col, func_name, identifier):
@@ -25,9 +27,10 @@ def function_executor(f, identifier, db, col, db_url, key_interpreter):
     kwargs = {k:kwargs_[k] for k in inspect.signature(f).parameters.keys()}
 
     #### THIS IS SOME CRAZY SHIT HACK THAT MAKES ME THINK THAT ITS BEETER THE DECORATED FUNCTION TO JUST ACCESS A FUNCTION
-    for k in kwargs:
-        if isinstance(kwargs[k], partial) and kwargs[k].func.__name__ == 'new_update_func':
-            kwargs[k].keywords['db_url'] = db_url
+    # for k in kwargs:
+    #     if isinstance(kwargs[k], partial) and kwargs[k].func.__name__ == 'new_update_func':
+    #         kwargs[k].keywords['db_url'] = db_url
+    logger.info("Executing function: " + f.__name__)
     update_ = f(**kwargs)
     update_['finished'] = True
     if not all(isinstance(k, str) for k in update_.keys()):
