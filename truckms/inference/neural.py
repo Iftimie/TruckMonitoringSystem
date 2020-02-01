@@ -12,6 +12,7 @@ import math
 from typing import Iterable
 
 try:
+    # check if device is allready globally set
     device
 except NameError:
     device = 'cuda' if torch.cuda.is_available() else "cpu"
@@ -32,7 +33,7 @@ def create_model(conf_thr=0.5, max_operating_res=800):
 
 def create_model_efficient(model_creation_func=create_model):
     """
-    Fuses batchnorm layers and applies ReLu activation inplace
+    Fuses batchnorm layers and applies ReLu activation inplace. Results in a bit faster model
     """
     model = model_creation_func().to('cpu')
     modules_to_fuse = get_modules_to_fuse(model)
@@ -44,7 +45,7 @@ def create_model_efficient(model_creation_func=create_model):
     return model
 
 
-def iterable2batch(fdp_iterable: FrameDatapoint, batch_size=5, cdevice=device):
+def iterable2batch(fdp_iterable: Iterable[FrameDatapoint], batch_size=5, cdevice=device):
     """
     Transforms an iterable of FrameDatapoint into BatchedFrameDatapoint
 
@@ -57,16 +58,21 @@ def iterable2batch(fdp_iterable: FrameDatapoint, batch_size=5, cdevice=device):
     """
     batch = []
     batch_ids = []
+    batch_reason = []
     for idx, fdp in enumerate(fdp_iterable):
         image = fdp.image
         id_ = fdp.frame_id
+        reason = fdp.reason
+
         batch.append(torch.from_numpy(image.transpose((2, 0, 1)).astype(np.float32)).to(cdevice) / 255.0)
         batch_ids.append(id_)
+        batch_reason.append(reason)
         if len(batch) == batch_size:
-            yield BatchedFrameDatapoint(batch, batch_ids)
+            yield BatchedFrameDatapoint(batch, batch_ids, batch_reason)
             batch.clear()
             batch_ids.clear()
-    yield BatchedFrameDatapoint(batch, batch_ids)
+            batch_reason.clear()
+    yield BatchedFrameDatapoint(batch, batch_ids, batch_reason)
 
 
 def compute(fdp_iterable: Iterable[FrameDatapoint], model, filter_classes=None, batch_size=5, cdevice=device)\
@@ -96,7 +102,7 @@ def compute(fdp_iterable: Iterable[FrameDatapoint], model, filter_classes=None, 
 
             # tensor to numpy
             batch_pred = [{key: pred[key].cpu().numpy() for key in pred} for pred in model(bfdp.batch_images)]
-            for pred, frame_id in zip(batch_pred, bfdp.batch_frames_ids):
+            for pred, frame_id, reason in zip(batch_pred, bfdp.batch_frames_ids, bfdp.batch_reason):
                 valid_inds = reduce(np.logical_or,
                                     (pred['labels'] == model_class_names.index(lbl) for lbl in filter_classes),
                                     np.zeros(pred['labels'].shape, dtype=bool))
@@ -106,7 +112,7 @@ def compute(fdp_iterable: Iterable[FrameDatapoint], model, filter_classes=None, 
                     'labels': pred['labels'][valid_inds],
                     'obj_id': np.array([np.nan] * np.sum(valid_inds))
                 }
-                yield PredictionDatapoint(to_yield_pred, frame_id)
+                yield PredictionDatapoint(to_yield_pred, frame_id, reason)
 
 
 def pred_iter_to_pandas(pdp_iterable):
@@ -123,6 +129,7 @@ def pred_iter_to_pandas(pdp_iterable):
     for pdp in pdp_iterable:
         prediction = pdp.pred
         frame_id = pdp.frame_id
+        reason = pdp.reason
         for box, label, score, obj_id in zip(prediction['boxes'], prediction['labels'], prediction['scores'],
                                              prediction['obj_id']):
             x1, y1, x2, y2 = box
@@ -130,18 +137,20 @@ def pred_iter_to_pandas(pdp_iterable):
                          'x1': x1, 'y1': y1, 'x2': x2, 'y2': y2,
                          'score': score,
                          'label': model_class_names[label],
-                         'obj_id': obj_id}
+                         'obj_id': obj_id,
+                         "reason": reason}
             list_dict.append(datapoint)
         if len(prediction['boxes']) == 0:
             list_dict.append({'img_id': frame_id,
                               'x1': np.nan, 'y1': np.nan, 'x2': np.nan, 'y2': np.nan,
                               'score': np.nan,
                               'label': np.nan,
-                              'obj_id': np.nan})
+                              'obj_id': np.nan,
+                              "reason": reason})
     return pd.DataFrame(data=list_dict)
 
 
-def pandas_to_pred_iter(data_frame) -> PredictionDatapoint:
+def pandas_to_pred_iter(data_frame) -> Iterable[PredictionDatapoint]:
     """
     Generator that yields PredictionDatapoint from a pandas dataframe
 
@@ -155,6 +164,7 @@ def pandas_to_pred_iter(data_frame) -> PredictionDatapoint:
 
     list_boxes, list_scores, list_labels, list_obj_id = [], [], [], []
     frame_id = list_dict[0]['img_id']
+    string_keys = ['label', 'reason']
 
     for datapoint in list_dict:
         img_id = datapoint['img_id']
@@ -163,10 +173,10 @@ def pandas_to_pred_iter(data_frame) -> PredictionDatapoint:
                           'scores': np.array(list_scores),
                           'labels': np.array(list_labels),
                           'obj_id': np.array(list_obj_id)}
-            yield PredictionDatapoint(prediction, frame_id)
+            yield PredictionDatapoint(prediction, frame_id, reason=datapoint.get('reason', None))
             frame_id = img_id
             list_boxes, list_scores, list_labels, list_obj_id = [], [], [], []
-        if not any(math.isnan(datapoint[key]) for key in datapoint if key != 'label')\
+        if not any(math.isnan(datapoint[key]) for key in datapoint if key not in string_keys)\
                 and not any(math.isnan(datapoint[k]) for k in datapoint if k != 'obj_id' and not isinstance(datapoint[k], str)):
             list_boxes.append([datapoint['x1'], datapoint['y1'], datapoint['x2'], datapoint['y2']])
             list_scores.append(datapoint['score'])
@@ -180,7 +190,7 @@ def pandas_to_pred_iter(data_frame) -> PredictionDatapoint:
     yield PredictionDatapoint(prediction, frame_id)
 
 
-def plot_detections(fdp_iterable: FrameDatapoint, pdp_iterable: PredictionDatapoint) -> FrameDatapoint:
+def plot_detections(fdp_iterable: FrameDatapoint, pdp_iterable: PredictionDatapoint) -> Iterable[FrameDatapoint]:
     """
     Plots over the imtages the deections. The number of images should match the number of predictions
 
@@ -196,9 +206,7 @@ def plot_detections(fdp_iterable: FrameDatapoint, pdp_iterable: PredictionDatapo
     def plots_gen():
         for fdp, pdp in zip(fdp_iterable, pdp_iterable):
             assert fdp.frame_id == pdp.frame_id
-            plotted_image = plot_over_image(fdp.image, pdp.pred)
+            plotted_image = plot_over_image(fdp.image, pdp.pred, fdp.frame_id, pdp.reason)
             yield FrameDatapoint(plotted_image, pdp.frame_id)
 
     return plots_gen()
-
-

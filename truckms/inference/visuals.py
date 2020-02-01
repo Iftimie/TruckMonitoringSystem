@@ -17,7 +17,7 @@ for i in range(len(model_class_names)):
 opencv_colors = [[i * 255 for i in color] for color in colors]
 
 
-def plot_over_image(image, pred):
+def plot_over_image(image, pred, index=None, reason=""):
     """
     Plots the predicted bounding boxes onto an image
 
@@ -38,7 +38,9 @@ def plot_over_image(image, pred):
         string_to_show = "%s %.2f %d" % (cls_name, score, obj_id)
         image = cv2.rectangle(image, (x1, y1), (x2, y2), color=color)
         image = cv2.putText(image, string_to_show, (x1, y1), cv2.FONT_HERSHEY_SIMPLEX, 0.3, color)
-
+    image = cv2.putText(image, "reason {}".format(reason), (20, 50), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255))
+    if index is not None:
+        image = cv2.putText(image, "index {}".format(index), (20, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.3, (255, 255, 255))
     return image
 
 

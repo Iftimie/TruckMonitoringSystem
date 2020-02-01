@@ -1,0 +1,1 @@
+localhost;5001;0;Nvidia GTX 960M Intel i7;rmstn;brokerworker,bookkeeper;iftimie.alexandru.florentin@gmail.com

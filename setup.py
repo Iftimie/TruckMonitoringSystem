@@ -22,7 +22,7 @@ setuptools.setup(
         'flask',
         'sklearn',
         'numpy',
-        'pandas',
+        'pandas==0.24.2',
         'typing',
         'youtube_dl',
         'Flask-Bootstrap4',
@@ -34,7 +34,8 @@ setuptools.setup(
         'mock',
         'gputil',
         'sqlalchemy',
-        'netifaces'
+        'netifaces',
+        'typing-extensions'
       ],
 
     keywords=['object', 'detection', 'truck']

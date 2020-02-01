@@ -1,4 +1,3 @@
-from truckms.inference.probability_density import estimate_next_frame_ids
 from truckms.inference.neural import pred_iter_to_pandas
 from truckms.api import PredictionDatapoint, model_class_names
 import matplotlib.pyplot as plt
@@ -29,7 +28,9 @@ def test_estimate_next_frame_ids():
             yield dp
 
     dummy_df = pred_iter_to_pandas(pdp_iterable=dummy_generator())
-    dummy_df = dummy_df.dropna()
+    cols = list(dummy_df.columns)
+    cols.remove("reason")
+    dummy_df = dummy_df.dropna(subset=cols)
     plt.hist(dummy_df['img_id'], range=(0, frame_num_24_hours))
     # plt.show()
 

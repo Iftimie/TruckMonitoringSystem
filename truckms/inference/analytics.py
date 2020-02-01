@@ -176,6 +176,9 @@ class Detection:
 
 
 def detections_list2_dict_numpy(all_boxes):
+    """
+    Transforms a list of detections to a dictionary. Necessary for wrapping it into a prediction datapoint
+    """
     boxes, scores, labels, ids_ = [], [], [], []
     for item in all_boxes:
         boxes.append(item.box)
@@ -194,7 +197,7 @@ def dict_numpy2detections_list(pred):
     return detections
 
 
-def pipeline(pred, tracker_list, id_incrementer, max_age=4, min_hits=3):
+def pipeline(pred, tracker_list, id_incrementer, max_age=4, min_hits=2):
     """
         Pipeline function for detection and tracking
 
@@ -293,7 +296,7 @@ def filter_pred_detections(pdp_iterable: Iterable[PredictionDatapoint]) -> Itera
     id_incrementer = 0
     for pdp in pdp_iterable:
         filtered_pred, tracker_list, id_incrementer = pipeline(pdp.pred, tracker_list, id_incrementer=id_incrementer)
-        yield PredictionDatapoint(filtered_pred, pdp.frame_id)
+        yield PredictionDatapoint(filtered_pred, pdp.frame_id, pdp.reason)
 
 
 def get_important_frames(df, labels_to_consider=None):

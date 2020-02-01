@@ -72,10 +72,10 @@ def select_lru_worker(local_port):
             if response.status_code == 200:
                 break
             else:
-                res1.pop(0)
+                raise ValueError
         except:
+            logger.info("worker unavailable {}:{}".format(res1[0]['ip'], res1[0]['port']))
             res1.pop(0)
-            logger.info(traceback.format_exc())
 
     if len(res1) == 0:
         logger.info("No worker or broker available")
@@ -105,9 +105,7 @@ def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port
 
     def dispatch_work(video_path):
         lru_ip, lru_port = select_lru_worker(local_port)
-        #delete this
-        # def evaluate_workload():
-        #     return False
+
         if evaluate_workload() or lru_ip is None:
             # do not remove this. this is useful. we don't want to upload in broker (waste time and storage when we want to process locally
             res = worker_pool.apply_async(func=analyze_and_updatedb, args=(db_url, video_path, analysis_func))

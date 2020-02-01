@@ -1,22 +1,22 @@
-def brokermain():
-    from truckms.service.worker.broker import create_broker_microservice
+def brokerworkermain():
+    from truckms.service_v2.brokerworker.brokerworker import create_brokerworker_microservice
     from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
     import os
 
     up_dir = "/data1/workspaces/aiftimie/tms/worker_updir"
-    up_dir = r"D:\tms_data\broker\up_dir"  # home
     up_dir = r"D:\tms_data\node_dirs\broker\up_dir"  # work
-    db_url = 'sqlite:///' + os.path.join(up_dir, 'database.sqlite')
+    db_url = os.path.join(up_dir, 'tinymongo.db')
     remove_db = True
-    if remove_db and os.path.exists(db_url.replace('sqlite:///', '')):
-        os.remove(db_url.replace('sqlite:///', ''))
+    if remove_db and os.path.exists(os.path.join(db_url, 'tms.json')):
+        os.remove(os.path.join(db_url, 'tms.json'))
+        os.rmdir(db_url)
 
     port = 5001
     host = "0.0.0.0"
 
-    app = create_broker_microservice(up_dir, db_url)
+    app = create_brokerworker_microservice(up_dir, db_url, num_workers=0)
 
-    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file= "discovery_ips")
+    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=port, app_roles=app.roles, discovery_ips_file= "discovery_ips_client.txt")
     app.register_blueprint(bookkeeper_bp)
 
     app.run(host=host, port=port)
@@ -33,4 +33,4 @@ if __name__ == '__main__':
                             logging.FileHandler('log.txt'),
                             logging.StreamHandler(sys.stdout)
                         ])
-    brokermain()
+    brokerworkermain()

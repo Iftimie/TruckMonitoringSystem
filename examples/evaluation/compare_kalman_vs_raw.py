@@ -1,12 +1,11 @@
-from truckms.inference.neural import create_model, compute, pred_iter_to_pandas, pandas_to_pred_iter, plot_detections
+from truckms.evaluation.comparison import compare_multiple_dataframes
+from truckms.inference.neural import create_model, compute, pred_iter_to_pandas, pandas_to_pred_iter
 from truckms.inference.analytics import filter_pred_detections
 from truckms.inference.utils import framedatapoint_generator
-from truckms.inference.utils import create_avi
-from itertools import tee
 import os
 import pandas as pd
-import numpy as np
 import os.path as osp
+
 
 def get_raw_df_from_movie(movie_path, model):
     g1 = framedatapoint_generator(movie_path, skip=0, max_frames=200)
@@ -21,20 +20,6 @@ def get_tracked_df_from_df(df):
     return filtered_df
 
 
-def compare_two_dataframes(video_path, df1, df2, destination):
-    g = framedatapoint_generator(video_path=video_path, skip=0)
-    fdpg1, fdpg2 = tee(g)
-    gdf1 = pandas_to_pred_iter(df1)
-    gdf2 = pandas_to_pred_iter(df2)
-    pairg = zip(plot_detections(fdpg1, gdf1), plot_detections(fdpg2, gdf2))
-    fdp1, fdp2 = next(pairg)
-    frame = np.concatenate((fdp1.image, fdp2.image), axis=1)
-    with create_avi(destination, frame) as append_fn:
-        for fdp1, fdp2 in pairg:
-            frame = np.concatenate((fdp1.image, fdp2.image), axis=1)
-            append_fn(frame)
-
-
 def compare_raw_vs_filtered(video_file):
     model = create_model()
     if not os.path.exists("df_raw.csv"):
@@ -43,12 +28,18 @@ def compare_raw_vs_filtered(video_file):
     else:
         df_raw = pd.read_csv("df_raw.csv")
     df_fil = get_tracked_df_from_df(df_raw)
-    compare_two_dataframes(video_file, df_raw, df_fil, destination=video_file.replace(':', '_').replace('\\', '_'))
+    compare_multiple_dataframes(video_file, video_file.replace(':', '_').replace('\\', '_'), df_raw, df_fil)
 
 
 def main():
+    """
+    This comparison will compare the results between a pipeline with no filtering (raw detections) and a pipeline with
+    kalman filtering and kuhn-munkres(hungarian) algorithm for pair matching.
+    """
+    # run script download_experimental_data.bat before running this script in order to have the video
     video_file = osp.join(osp.dirname(__file__),'..', '4K Traffic camera video - free download now!-MNn9qKG2UFI.webm')
     compare_raw_vs_filtered(video_file)
+
 
 if __name__ == "__main__":
     main()

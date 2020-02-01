@@ -1,1 +1,8 @@
 git+https://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI
+sklearn
+progressbar
+gputil
+eel
+sqlalchemy
+tinymongo
+

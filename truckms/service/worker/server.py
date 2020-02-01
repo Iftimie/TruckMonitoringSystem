@@ -1,6 +1,6 @@
 from truckms.inference.neural import create_model, pred_iter_to_pandas, compute
 from truckms.inference.neural import create_model_efficient
-from truckms.inference.utils import framedatapoint_generator, get_video_file_size
+from truckms.inference.utils import framedatapoint_generator, get_video_file_size, framedatapoint_generator_by_frame_ids2
 from truckms.inference.analytics import filter_pred_detections
 import os
 from truckms.service.model import create_session, VideoStatuses, HeartBeats
@@ -36,7 +36,9 @@ def generator_hook(video_path, pdp_iter: Iterable[PredictionDatapoint], progress
         yield pdp
 
 
-def analyze_movie(video_path, max_operating_res, skip=0, progress_hook: Callable[[int, int], None] = None):
+def analyze_movie(video_path, max_operating_res=320, skip=0, progress_hook: Callable[[int, int], None] = None,
+                  select_frame_inds_func=lambda video_path:None,
+                  filter_pred_detections_generator=filter_pred_detections):
     """
     Attention!!! if the movie is short or too fast and skip  is too big, then it may result with no detections
     #TODO think about this
@@ -53,10 +55,16 @@ def analyze_movie(video_path, max_operating_res, skip=0, progress_hook: Callable
           path to results file
     """
     model = create_model_efficient(model_creation_func=partial(create_model, max_operating_res=max_operating_res))
-    image_gen = framedatapoint_generator(video_path, skip=skip)
+
+    frame_ids = select_frame_inds_func(video_path)
+    if frame_ids is None:
+        image_gen = framedatapoint_generator(video_path, skip=skip, reason=None)
+    else:
+        image_gen = framedatapoint_generator_by_frame_ids2(video_path, frame_ids, reason="motionmap")
+
     # TODO set batchsize by the available VRAM
-    pred_gen = compute(image_gen, model=model, batch_size=25)
-    filtered_pred = filter_pred_detections(pred_gen)
+    pred_gen = compute(image_gen, model=model, batch_size=5)
+    filtered_pred = filter_pred_detections_generator(pred_gen)
     if progress_hook is not None:
         filtered_pred = generator_hook(video_path, filtered_pred, progress_hook)
     df = pred_iter_to_pandas(filtered_pred)

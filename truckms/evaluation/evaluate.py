@@ -343,7 +343,6 @@ def compute_iou_det_ann_df(ann_df, det_df, ann_lbl_col, det_lbl_col, iou_tr=0.3)
     return res
 
 
-
 def compute_stats(joined_with_iou_df, ann_df, det_df):
     """
     Computes the following main statistics: recall (Detection rate), precision, false positive rate(FPR). Also attaches

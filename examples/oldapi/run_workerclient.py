@@ -17,7 +17,7 @@ def workerclientmain():
     port = 5002
     host = "0.0.0.0"
 
-    app = create_bookkeeper_service(local_port=port, discovery_ips_file="discovery_ips")
+    app = create_bookkeeper_service(local_port=port, discovery_ips_file="discovery_ips_client.txt")
     app.register_time_regular_func(partial(do_work, up_dir, db_url, port))
 
     app.run(host=host, port=port)
