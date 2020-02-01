@@ -2,9 +2,12 @@ from mock import Mock
 from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize
 from functools import partial
 from pprint import pprint
+import pytest
+
 class DummyObject:
     pass
 
+@pytest.mark.skip(reason="Deprecated")
 def test_guiservice(tmpdir):
     from truckms.service_v2.userclient.userclient import create_guiservice, get_job_dispathcher
     from truckms.service_v2.userclient import userclient

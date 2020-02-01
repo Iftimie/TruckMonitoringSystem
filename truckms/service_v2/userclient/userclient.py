@@ -62,7 +62,7 @@ def analyze_and_updatedb(video_identifier: str, db_url: str, analysis_func: Anal
 
         video_path = list(tinymongo.TinyMongoClient(db_url)["tms"]["movie_statuses"].find(filter_))[0]['video_path']
         # to do refactor this. this should not look like this
-        destination = analysis_func(video_path, p_hook=progress_hook)
+        destination = analysis_func(video_path, progress_hook=progress_hook)
         update_ = {"results": open(destination, 'rb')}
         p2p_push_update_one(db_url, "tms", "movie_statuses", filter_, update_)
         logger.info("Finished processing file")

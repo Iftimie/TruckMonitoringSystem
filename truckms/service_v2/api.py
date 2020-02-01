@@ -10,6 +10,7 @@ import collections
 import inspect
 import socket
 from contextlib import closing
+from deprecated import deprecated
 
 
 """
@@ -203,6 +204,16 @@ def self_is_reachable(local_port):
         return None
 
 
+from functools import wraps
+def ignore_decorator(f):
+    @wraps(f)
+    def wrap(*args, **kwargs):
+        warn("Function call to " + f.__name__ + " is ignored")
+        return
+    return wrap
+
+
+@deprecated(reason="P2P RPC will not implement progress update in this way")
 def find_update_callables(kwargs):
     callables = [(k, v) for k, v in kwargs.items() if isinstance(v, collections.Callable)]
     update_callables = list(filter(
@@ -212,6 +223,17 @@ def find_update_callables(kwargs):
     return update_callables
 
 
+@ignore_decorator
+@deprecated(reason="P2P RPC will not implement progress update in this way")
+def validate_update_callables(kwargs):
+    update_callables = find_update_callables(kwargs)
+    if len(update_callables) > 1:
+        raise ValueError("Only one function that has return_annotation with dict and has return keyword is accepted")
+    warn(
+        "If function returns a dictionary in order to update a document in collection, then annotate it with '-> dict'"
+        "If found return value and dict return annotation. The returned value will be used to update the document in collection")
+
+
 def validate_arguments(f, args, kwargs):
     if len(args) != 0:
         raise ValueError("All arguments to a function in this p2p framework need to be specified keyword arguments")
@@ -219,8 +241,8 @@ def validate_arguments(f, args, kwargs):
         raise ValueError("In this p2p framework, identifier must be passed as keyword argument. "
                          "This helps for memoization and retrieving the results from a function")
     for v in kwargs.values():
-        if any(isinstance(v, T) for T in [dict, tuple, list]):
-            raise ValueError("Currently, for simplicity only integers, floats, strings and a single file are allowed as "
+        if not any(isinstance(v, T) for T in [int, float, bool, io.IOBase, str]):
+            raise ValueError("Currently, for simplicity only integers, floats, strings, bools, files are allowed as "
                              "arguments")
     if "value_for_key_is_file" in kwargs.values():
         raise ValueError("'value_for_key_is_file' string is a reserved value in this p2p framework. It helps "
@@ -236,21 +258,15 @@ def validate_arguments(f, args, kwargs):
     if len(lambda_callables) > 0:
         raise ValueError("Lambda functions are not allowed because these are local functions and cannot be pickled")
 
-    update_callables = find_update_callables(kwargs)
-    if len(update_callables) > 1:
-        raise ValueError("Only one function that has return_annotation with dict and has return keyword is accepted")
-    warn(
-        "If function returns a dictionary in order to update a document in collection, then annotate it with '-> dict'"
-        "If found return value and dict return annotation. The returned value will be used to update the document in collection")
+    # this line of code should be removed
+    validate_update_callables(kwargs)
 
-    # check that callables have been apriori declared with annotation Callable in order
-    # to avoid storing them in the database
+    # check that every value passed in this function has the same type as the one declared in function annotation
     f_param_sign = inspect.signature(f).parameters
     for k, v in kwargs.items():
-        if not isinstance(v, collections.Callable): continue
-        f_param_k = f_param_sign[k]
-        if f_param_k.annotation != collections.Callable:
-            raise ValueError("{k} must be annotated with Callable in order be capable of decoding the function code from the database")
+        f_param_k_annotation = f_param_sign[k].annotation
+        if not isinstance(v, f_param_k_annotation):
+            raise ValueError("class of value {v} for argument {k} is not the same as the annotation {f_param_k_annotation}")
 
 
 def validate_function_signature(func):

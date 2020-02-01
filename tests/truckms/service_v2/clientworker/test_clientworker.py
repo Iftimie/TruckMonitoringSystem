@@ -13,9 +13,9 @@ def test_find_response_with_work():
     clientworker.get_available_brokers = lambda local_port: [{"ip": "dummy_ip", "port": "dummy_port"}]
     response = DummyObject()
     response.json = {"identifier": "dummyid"}
-    clientworker.requests.get = lambda url: response
+    clientworker.requests.post = lambda url, timeout: response
 
-    res_json, res_broker_ip, res_broker_port = find_response_with_work("local_port", "dummy_col", "dummy_func")
+    res_json, res_broker_ip, res_broker_port = find_response_with_work("local_port", "dummy_col", "dummy_func", "dummy_name")
     assert res_json == {"identifier": "dummyid"}
     assert res_broker_ip == "dummy_ip"
     assert res_broker_port == "dummy_port"

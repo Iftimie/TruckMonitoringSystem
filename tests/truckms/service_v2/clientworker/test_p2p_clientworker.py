@@ -5,25 +5,30 @@ from truckms.service_v2.p2pdata import find
 from tests.truckms.service_v2.functions_to_test import complex_func2, func_return_val, func_return_dict
 import os.path as osp
 import traceback
+import pytest
 
 
 class DummyObject:
     pass
 
 
+@pytest.mark.xfail(reason="complex_func2 has Callables as arguments, which for security reasons will not be implemented now")
 def test_create_p2p_clientworker_app(tmpdir):
     file_path = osp.join(tmpdir, "file.txt")
     with open(file_path, "w") as f:
         f.write("data")
 
-    db_url, db, col = osp.join(tmpdir, "dburl"), "db", "col"
+    db_url = osp.join(tmpdir, "dburl")
+    db = "p2p"
+    col = complex_func2.__name__
+
     db_url_remote = osp.join(tmpdir, "dburl_remote")
     db_url_client_worker = osp.join(tmpdir, "db_url_client_worker")
     app = create_p2p_client_app()
-    decorated_func = app.register_p2p_func(db_url, db, col, can_do_locally_func=lambda: False)(complex_func2)
+    decorated_func = app.register_p2p_func(db_url, can_do_locally_func=lambda: False)(complex_func2)
 
     broker_app = create_p2p_brokerworker_app()
-    broker_app.register_p2p_func(db_url_remote, db, col, can_do_locally_func=lambda: False)(complex_func2)
+    broker_app.register_p2p_func(db_url_remote, can_do_locally_func=lambda: False)(complex_func2)
 
     def post_func(url, **kwargs):
         data = dict()
@@ -45,7 +50,7 @@ def test_create_p2p_clientworker_app(tmpdir):
     p2pdata.requests = mocked_requests
     p2p_client.self_is_reachable = lambda: None
     p2p_client.select_lru_worker = lambda port: ("ip", "port")
-    clientworker.get_available_brokers = lambda local_port: [{"ip":"ip", "port":"port"}]
+    clientworker.get_available_brokers = lambda local_port: [{"ip": "ip", "port": "port"}]
     clientworker.requests = mocked_requests
 
     try:
@@ -80,3 +85,5 @@ def test_create_p2p_clientworker_app(tmpdir):
     except:
         traceback.print_exc()
         assert False
+    finally:
+        app.background_thread.shutdown()

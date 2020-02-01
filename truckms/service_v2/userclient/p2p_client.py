@@ -252,8 +252,20 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False, limit
     return inner_decorator
 
 
-def thread_func(app):
-    app.run(host='0.0.0.0')
+from werkzeug.serving import make_server
+class ServerThread(threading.Thread):
+
+    def __init__(self, app):
+        threading.Thread.__init__(self)
+        self.srv = make_server('0.0.0.0', app.local_port, app)
+        self.ctx = app.app_context()
+        self.ctx.push()
+
+    def run(self):
+        self.srv.serve_forever()
+
+    def shutdown(self):
+        self.srv.shutdown()
 
 
 def create_p2p_client_app(discovery_ips_file=None, p2p_flask_app=None):
@@ -274,7 +286,8 @@ def create_p2p_client_app(discovery_ips_file=None, p2p_flask_app=None):
     p2p_flask_app.worker_pool = multiprocessing.Pool(1)
     # p2p_flask_app.list_futures = []
 
-    threading.Thread(target=thread_func, args=(p2p_flask_app,)).start()
+    p2p_flask_app.background_thread = ServerThread(p2p_flask_app)
+    p2p_flask_app.background_thread.start()
     wait_until_online(p2p_flask_app.local_port)
 
     return p2p_flask_app

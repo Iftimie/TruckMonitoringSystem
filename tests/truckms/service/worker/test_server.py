@@ -7,6 +7,7 @@ from truckms.service import worker
 from truckms.service.model import create_session
 from truckms.service.model import VideoStatuses
 from functools import partial
+import pytest
 
 
 class PickableMock(Mock):
@@ -44,7 +45,7 @@ def test_create_worker_blueprint(tmpdir):
     assert results[0].file_path == os.path.join(up_dir, 'dummy.avi')
     assert results[0].results_path == "dummy.csv"
 
-
+@pytest.mark.skip(reason="Takes too long")
 def test_analyze_and_updatedb(tmpdir):
     db_url = 'sqlite:///' + os.path.join(tmpdir.strpath, "database.sqlite")
     test_video_path = osp.join(osp.dirname(__file__), '..', '..', 'service', 'data', 'cut.mkv')
