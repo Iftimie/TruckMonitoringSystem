@@ -26,6 +26,18 @@ def echo():
     """
     return make_response("I exist", 200)
 
+
+def wait_until_online(local_port):
+    # while the app is not alive yet
+    while True:
+        try:
+            response = requests.get('http://{}:{}/echo'.format('localhost', local_port))
+            if response.status_code == 200:
+                break
+        except:
+            logger.info("App not ready")
+
+
 class P2PFlaskApp(Flask):
     """
     Flask derived class for P2P applications. In this framework, the P2P app can have different roles. Not all nodes in

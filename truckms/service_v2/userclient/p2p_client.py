@@ -13,7 +13,9 @@ import collections
 import inspect
 import io
 import os
+from truckms.service_v2.api import wait_until_online
 import time
+import threading
 logger = logging.getLogger(__name__)
 
 
@@ -250,6 +252,10 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False, limit
     return inner_decorator
 
 
+def thread_func(app):
+    app.run(host='0.0.0.0')
+
+
 def create_p2p_client_app(discovery_ips_file=None, p2p_flask_app=None):
     """
     Returns a Flask derived object with additional features
@@ -267,6 +273,9 @@ def create_p2p_client_app(discovery_ips_file=None, p2p_flask_app=None):
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(1)
     # p2p_flask_app.list_futures = []
+
+    threading.Thread(target=thread_func, args=(p2p_flask_app,)).start()
+    wait_until_online(p2p_flask_app.local_port)
 
     return p2p_flask_app
 

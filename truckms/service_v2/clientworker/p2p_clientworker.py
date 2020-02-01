@@ -37,7 +37,7 @@ def register_p2p_func(self, cache_path):
         hint_args_file_keys = [k for k, v in inspect.signature(f).parameters.items() if v.annotation == io.IOBase]
 
         @wraps(f)
-        def wrap(*agrs, **kwargs):
+        def wrap():
             res, broker_ip, broker_port = find_response_with_work(self.local_port, db, col, f.__name__)
             if broker_ip is None:
                 return

@@ -4,13 +4,9 @@ from truckms.inference.analytics import filter_pred_detections
 from truckms.inference.motion_map import movement_frames_indexes
 import os
 from truckms.service_v2.api import P2PFlaskApp
-import time
-import threading
+
 import shutil
 
-
-def fun1(app):
-    app.run(host='0.0.0.0')
 
 
 if __name__ == "__main__":
@@ -24,9 +20,6 @@ if __name__ == "__main__":
 
     analyze_movie = client_app.register_p2p_func(path,
                                                  can_do_locally_func=lambda :False)(analyze_movie)
-
-    threading.Thread(target=fun1, args=(client_app,)).start()
-    time.sleep(5)  # add event here instead of sleep
 
     res = analyze_movie(identifier="example1",
                         video_handle=open(os.path.join(os.path.dirname(__file__), '..', '..', 'tests', 'truckms', 'service', 'data', 'cut.mkv'), 'rb'),
