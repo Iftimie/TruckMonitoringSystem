@@ -14,6 +14,7 @@ import inspect
 import io
 import os
 from truckms.service_v2.clientworker.clientworker import find_response_with_work
+from truckms.service_v2.brokerworker.p2p_brokerworker import function_executor
 from truckms.service_v2.userclient.p2p_client import decorate_update_callables
 logger = logging.getLogger(__name__)
 
@@ -53,21 +54,22 @@ def register_p2p_func(self, cache_path):
             p2p_insert_one(db_url, db, col, local_data, [broker_ip+":"+str(broker_port)], do_upload=False)
             p2p_pull_update_one(db_url, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys)
 
-            kwargs_ = find(db_url, db, col, filter_, key_interpreter)[0]
-            kwargs = {k: kwargs_[k] for k in inspect.signature(f).parameters.keys()}
-            #### THIS IS SOME CRAZY SHIT HACK THAT MAKES ME THINK THAT ITS BEETER THE DECORATED FUNCTION TO JUST ACCESS A FUNCTION
-            for k in kwargs:
-                if isinstance(kwargs[k], partial) and kwargs[k].func.__name__ == 'new_update_func':
-                    kwargs[k].keywords['db_url'] = db_url
-
-            update_ = f(**kwargs)
-            update_['finished'] = True
-            if not all(isinstance(k, str) for k in update_.keys()):
-                raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
-            for k, v in update_.items():
-                if isinstance(v, io.IOBase) and v.closed is True:
-                    raise ValueError("Files returned must be opened")
-            p2p_push_update_one(db_url, db, col, filter_, update_, key_interpreter)
+            update_ = function_executor(f, res['identifier'], db, col, db_url, key_interpreter)
+            # kwargs_ = find(db_url, db, col, filter_, key_interpreter)[0]
+            # kwargs = {k: kwargs_[k] for k in inspect.signature(f).parameters.keys()}
+            # #### THIS IS SOME CRAZY SHIT HACK THAT MAKES ME THINK THAT ITS BEETER THE DECORATED FUNCTION TO JUST ACCESS A FUNCTION
+            # # for k in kwargs:
+            # #     if isinstance(kwargs[k], partial) and kwargs[k].func.__name__ == 'new_update_func':
+            # #         kwargs[k].keywords['db_url'] = db_url
+            #
+            # update_ = f(**kwargs)
+            # update_['finished'] = True
+            # if not all(isinstance(k, str) for k in update_.keys()):
+            #     raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
+            # for k, v in update_.items():
+            #     if isinstance(v, io.IOBase) and v.closed is True:
+            #         raise ValueError("Files returned must be opened")
+            # p2p_push_update_one(db_url, db, col, filter_, update_, key_interpreter)
 
         return wrap
 
