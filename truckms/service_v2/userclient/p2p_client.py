@@ -16,9 +16,28 @@ import os
 from truckms.service_v2.api import wait_until_online
 import time
 import threading
+import deprecated
+import inspect
 logger = logging.getLogger(__name__)
 
 
+def p2p_progress_hook(curidx, endidx):
+    necessary_args = ['db', 'col', 'identifier', 'db_url']
+    actual_args = dict()
+    frame_infos = inspect.stack()[:]
+    for frame in frame_infos:
+        if frame.function == function_executor.__name__:
+            f_locals = frame.frame.f_locals
+            actual_args = {k:f_locals[k] for k in necessary_args}
+            break
+
+    update_ = {"progress": curidx/endidx * 100}
+    filter_ = {"identifier": actual_args['identifier']}
+    p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_)
+
+
+
+@deprecated.deprecated(reason="this is just a bad design")
 def new_update_func(*args, identifier, db_url, db, col, func, **kwargs):
     """
     new_func must not be declared inside of decorate_p2p_update because it cannot be pickled
@@ -34,6 +53,7 @@ def new_update_func(*args, identifier, db_url, db, col, func, **kwargs):
     return update_
 
 
+@deprecated.deprecated(reason="this is just a bad design")
 def decorate_p2p_update(db_url, db, col, identifier, func):
     """
     Decorates a function that returns a dictionary. This dictionary will be stored in the collection.
@@ -51,6 +71,7 @@ def decorate_p2p_update(db_url, db, col, identifier, func):
     return decorated_func
 
 
+@deprecated.deprecated(reason="this is just a bad design")
 def decorate_update_callables(db_url, db, col, kwargs):
     """
     For all functions that return a dictionary and are annotated with -> dict, will decorate them to store the returned
@@ -140,6 +161,7 @@ def identifier_seen(db_url, kwargs, db, col):
     else:
         return False
 
+
 def get_remote_future(f, kwargs, db_url, db, col, key_interpreter_dict):
     up_dir = os.path.join(db_url, db)
     if not os.path.exists(up_dir):
@@ -148,7 +170,11 @@ def get_remote_future(f, kwargs, db_url, db, col, key_interpreter_dict):
     expected_keys = inspect.signature(f).return_annotation
     if any(item[k] is None for k in expected_keys):
         hint_file_keys = [k for k, v in expected_keys.items() if v == io.IOBase]
-        p2p_pull_update_one(db_url, db, col, {"identifier": kwargs['identifier']}, list(expected_keys.keys()),
+
+        expected_keys_list = list(expected_keys.keys())
+        expected_keys_list.append("progress")
+
+        p2p_pull_update_one(db_url, db, col, {"identifier": kwargs['identifier']}, expected_keys_list,
                             deserializer=partial(default_deserialize, up_dir=up_dir), hint_file_keys=hint_file_keys)
 
     item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
@@ -158,8 +184,11 @@ def get_remote_future(f, kwargs, db_url, db, col, key_interpreter_dict):
 
 def get_local_future(f, kwargs, db_url, db, col, key_interpreter_dict):
     expected_keys = inspect.signature(f).return_annotation
+    expected_keys_list = list(expected_keys.keys())
+    expected_keys_list.append("progress")
+
     item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
-    item = {k:v for k, v in item.items() if k in expected_keys}
+    item = {k:v for k, v in item.items() if k in expected_keys_list}
     return item
 
 
@@ -230,7 +259,7 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False, limit
 
             validate_arguments(f, args, kwargs)
 
-            kwargs = decorate_update_callables(db_url, db, col, kwargs)
+            # kwargs = decorate_update_callables(db_url, db, col, kwargs)
             kwargs = add_expected_keys(f, kwargs)
 
             lru_ip, lru_port = select_lru_worker(self.local_port)

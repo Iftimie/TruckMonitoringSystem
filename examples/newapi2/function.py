@@ -8,6 +8,9 @@ import os
 from truckms.evaluation.comparison import compare_multiple_dataframes
 from truckms.api import PredictionDatapoint
 import io
+from truckms.inference.analytics import filter_pred_detections
+from truckms.inference.motion_map import movement_frames_indexes
+from truckms.service_v2.userclient.p2p_client import p2p_progress_hook
 
 
 def generator_hook(video_path, pdp_iter: Iterable[PredictionDatapoint], progress_hook: Callable) -> Iterable[
@@ -24,22 +27,13 @@ def generator_hook(video_path, pdp_iter: Iterable[PredictionDatapoint], progress
         yield pdp
 
 
-def progress_hook(curidx, endidx) -> dict:
-    return {"progress": curidx/endidx * 100}
-
-
-def analyze_movie(identifier: str, video_handle: io.IOBase,
-                  select_frame_inds_func: Callable,
-                  progress_hook: Callable,
-                  filter_pred_detections_generator: Callable) -> {"results": io.IOBase, "video_results": io.IOBase}:
+def analyze_movie(identifier: str, video_handle: io.IOBase) -> {"results": io.IOBase, "video_results": io.IOBase}:
     """
     Args:
         identifier: identifier parameter to be compliant with the p2p framework
         video_handle: file object for the movie to be analyzed.
         progress_hook: function that is called with two integer arguments. the first one represents the current frame index
             the second represents the final index.
-        filter_pred_detections_generator: filtering generator that receives an iterable of predictions and yields the
-            filtered predictions
     Return:
           dictionary containing path to the .csv file and to .mp4 file
     """
@@ -47,7 +41,7 @@ def analyze_movie(identifier: str, video_handle: io.IOBase,
 
     video_handle.close()
     video_file = video_handle.name
-    frame_ids = select_frame_inds_func(video_file)
+    frame_ids = movement_frames_indexes(video_file)
     if frame_ids is None:
         image_gen = framedatapoint_generator(video_file, skip=0, reason=None)
     else:
@@ -55,17 +49,17 @@ def analyze_movie(identifier: str, video_handle: io.IOBase,
 
     # TODO set batchsize by the available VRAM
     pred_gen = compute(image_gen, model=model, batch_size=5)
-    filtered_pred = filter_pred_detections_generator(pred_gen)
-    if progress_hook is not None:
-        filtered_pred = generator_hook(video_file, filtered_pred, progress_hook)
+    filtered_pred = filter_pred_detections(pred_gen)
+    if p2p_progress_hook is not None:
+        filtered_pred = generator_hook(video_file, filtered_pred, p2p_progress_hook)
     df = pred_iter_to_pandas(filtered_pred)
     destination = os.path.splitext(video_file)[0]+'.csv'
     df.to_csv(destination)
-    if progress_hook is not None:
+    if p2p_progress_hook is not None:
         # call one more time the hook. this is just for clean ending of the processing. it may happen in case where the
         # skip is 5 that the final index is not reached, and in percentage it will look like 99.9% finished
         size = get_video_file_size(video_file) - 1
-        progress_hook(size, size)
+        p2p_progress_hook(size, size)
 
     visual_destination = os.path.splitext(video_file)[0]+'_results.avi'
     compare_multiple_dataframes(video_file,
