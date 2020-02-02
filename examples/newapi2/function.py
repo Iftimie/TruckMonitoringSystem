@@ -26,6 +26,11 @@ def generator_hook(video_path, pdp_iter: Iterable[PredictionDatapoint], progress
             progress_hook(pdp.frame_id, size)
         yield pdp
 
+"""
+For implementing callables in a safe way:
+https://docs.python.org/2/library/pdb.html
+https://blog.magrathealabs.com/filesystem-events-monitoring-with-python-9f5329b651c3
+"""
 
 def analyze_movie(identifier: str, video_handle: io.IOBase) -> {"results": io.IOBase, "video_results": io.IOBase}:
     """

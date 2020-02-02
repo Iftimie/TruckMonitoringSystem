@@ -82,7 +82,7 @@ def unzip_files(file, up_dir):
     return new_paths
 
 
-def default_serialize(data, key_interpreter=None) -> Tuple[dict, str]:
+def serialize_doc_for_net(data) -> Tuple[dict, str]:
     """
     data should be a dictionary
     return tuple containing a dictionary with handle for a single file and json
@@ -94,14 +94,14 @@ def default_serialize(data, key_interpreter=None) -> Tuple[dict, str]:
     files_significance = {os.path.basename(v.name): k for k, v in data.items() if isinstance(v, io.IOBase)}
     new_data = {k: v for k, v in data.items() if not isinstance(v, io.IOBase)}
     new_data["files_significance"] = files_significance
-    new_data = interpret_keys(new_data, key_interpreter, mode='ser')
+    new_data = serialize_doc_for_db(new_data)
     json_obj = dumps(new_data)
     if len(files) >= 2:
         files = zip_files(files)
     return files, json_obj
 
 
-def default_deserialize(files, json, up_dir, key_interpreter=None):
+def deserialize_doc_from_net(files, json, up_dir, key_interpreter=None):
     """
     both are dictionaries
     the files dict should contain a single handle to file
@@ -133,11 +133,11 @@ def default_deserialize(files, json, up_dir, key_interpreter=None):
             data[sign] = filepath
     del data["files_significance"]
 
-    data = interpret_keys(data, key_interpreter, mode='dser')
+    data = deserialize_doc_from_db(data, key_interpreter)
     return data
 
 
-def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=default_deserialize, current_address_func=lambda: None):
+def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=deserialize_doc_from_net, current_address_func=lambda: None):
     if request.files:
         filename = list(request.files.keys())[0]
         files = {secure_filename(filename): request.files[filename]}
@@ -147,7 +147,7 @@ def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=de
     data_to_insert = deserializer(files, request.form['json'], key_interpreter=key_interpreter)
     data_to_insert["current_address"] = current_address_func()
     # collection.insert_one(data_to_insert)
-    update_one(db_path, db, col, data_to_insert, data_to_insert, key_interpreter, upsert=True)
+    update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
     return make_response("ok")
 
 # def p2p_route_insert_many(db_path, db, col, deserializer=default_deserialize, current_address_func=lambda: None):
@@ -160,7 +160,7 @@ def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=de
 #     update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
 
 
-def p2p_route_push_update_one(db_path, db, col, deserializer=default_deserialize):
+def p2p_route_push_update_one(db_path, db, col, deserializer=deserialize_doc_from_net):
     if request.files:
         filename = list(request.files.keys())[0]
         files = {secure_filename(filename): request.files[filename]}
@@ -176,7 +176,7 @@ def p2p_route_push_update_one(db_path, db, col, deserializer=default_deserialize
     return jsonify(visited_nodes)
 
 
-def p2p_route_pull_update_one(db_path, db, col, serializer=default_serialize):
+def p2p_route_pull_update_one(db_path, db, col, serializer=serialize_doc_for_net):
     req_keys = loads(request.form['req_keys_json'])
     filter_data = loads(request.form['filter_json'])
     hint_file_keys = loads(request.form['hint_file_keys_json'])
@@ -206,7 +206,7 @@ def p2p_route_pull_update_one(db_path, db, col, serializer=default_serialize):
 
 def create_p2p_blueprint(up_dir, db_url, key_interpreter=None, current_address_func=lambda: None):
     p2p_blueprint = P2PBlueprint("p2p_blueprint", __name__, role="storage")
-    new_deserializer = partial(default_deserialize, up_dir=up_dir)
+    new_deserializer = partial(deserialize_doc_from_net, up_dir=up_dir)
     p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db_path=db_url, deserializer=new_deserializer, current_address_func=current_address_func, key_interpreter=key_interpreter)))
     p2p_blueprint.route("/insert_one/<db>/<col>", methods=['POST'])(p2p_route_insert_one_func)
     p2p_route_push_update_one_func = (wraps(p2p_route_push_update_one)(partial(p2p_route_push_update_one, db_path=db_url, deserializer=new_deserializer)))
@@ -222,85 +222,17 @@ def validate_document(document):
             raise ValueError("Cannot have nested dictionaries in current implementation")
 
 
-def fileser(handle):
-    return handle.name
-
-
-def filedser(path):
-    handle = open(path, 'rb')
-    return handle
-
-def callser(func):
-    bytes_ = dill.dumps(func)
-    string_ = base64.b64encode(bytes_).decode('utf8')
-    return string_
-
-def calldser(data):
-    bytes = base64.b64decode(data.encode('utf8'))
-    func = dill.loads(bytes)
-    return func
-
-def get_default_key_interpreter(doc):
-    ki = {'ser': dict(),
-          'dser': dict()}
-    for k, v in doc.items():
-        if isinstance(v, io.IOBase):
-            ki['ser'][k] = fileser
-            ki['dser'][k] = filedser
-        if isinstance(v, collections.Callable):
-            ki['ser'][k] = callser
-            ki['dser'][k] = calldser
-    return ki
-
-
-def get_key_interpreter_by_signature(func):
-    ki = {'ser': dict(),
-          'dser': dict()}
-
-    for k, v in inspect.signature(func).parameters.items():
-        if v.annotation == io.IOBase:
-            ki['ser'][k] = fileser
-            ki['dser'][k] = filedser
-        if v.annotation == collections.Callable:
-            ki['ser'][k] = callser
-            ki['dser'][k] = calldser
-    return ki
-
-
-def interpret_keys(d, ki, mode):
-    assert mode in ['ser', 'dser']
-    if ki is None:
-        return d
-    nd = {k:v for k, v in d.items()}
-    for k in d:
-        if k in ki[mode]:
-            nd[k] = ki[mode][k](d[k])
-    return nd
-
-
-def update(d, u):
-    for k, v in u.items():
-        if isinstance(v, collections.abc.Mapping):
-            d[k] = update(d.get(k, {}), v)
-        else:
-            d[k] = v
-    return d
+from truckms.service_v2.registry_args import serialize_doc_for_db
+from truckms.service_v2.registry_args import deserialize_doc_from_db
 
 #https://gitlab.nsd.no/ire/python-webserver-file-submission-poc/blob/master/flask_app.py
-def update_one(db_path, db, col, query, doc, key_interpreter_dict=None, upsert=False):
+def update_one(db_path, db, col, query, doc, upsert=False):
     """
     This function is entry point for both insert and update.
-
-    key_interpreter is a dictionary with two keys:
-        ser: dictionary of serialization methods. contains keys in query or doc or no key at all
-        dser: (OPTIONAL HERE) dictionary of deserialization methods. contains keys in query or doc or no key at all
     """
-    if key_interpreter_dict is None:
-        key_interpreter_dict = get_default_key_interpreter(query)
-        key_interpreter_dict = update(key_interpreter_dict, get_default_key_interpreter(doc))
 
-    query = interpret_keys(query, key_interpreter_dict, mode='ser')
-    doc = interpret_keys(doc, key_interpreter_dict, mode='ser')
+    query = serialize_doc_for_db(query)
+    doc = serialize_doc_for_db(doc)
 
     validate_document(doc)
     validate_document(query)
@@ -320,18 +252,17 @@ def update_one(db_path, db, col, query, doc, key_interpreter_dict=None, upsert=F
 
 def find(db_path, db, col, query, key_interpreter_dict=None):
 
-    query = interpret_keys(query, key_interpreter_dict, mode='ser')
+    query = serialize_doc_for_db(query)
 
     collection = list(TinyMongoClientClean(db_path)[db][col].find(query))
     for i in range(len(collection)):
-        collection[i] = interpret_keys(collection[i], key_interpreter_dict, mode='dser')
-        # TODO
-        #  should delete keys suck as nodes, _id, timestamp?
+        collection[i] = deserialize_doc_from_db(collection[i], key_interpreter_dict)
+        # TODO should delete keys such as nodes, _id, timestamp?
 
     return collection
 
 
-def p2p_insert_one(db_path, db, col, document, nodes, key_interpreter=None, serializer=default_serialize, current_address_func=lambda : None, do_upload=True):
+def p2p_insert_one(db_path, db, col, document, nodes, serializer=serialize_doc_for_net, current_address_func=lambda : None, do_upload=True):
     """
     post_func is used especially for testing
     current_address_func: self_is_reachable should be called
@@ -343,7 +274,7 @@ def p2p_insert_one(db_path, db, col, document, nodes, key_interpreter=None, seri
         update["nodes"] = nodes
         update["current_address"] = current_addr
         # TODO should be insert and throw error if identifier exists
-        update_one(db_path, db, col, data, update, key_interpreter, upsert=True)
+        update_one(db_path, db, col, data, update, upsert=True)
     except ValueError as e:
         logger.info(traceback.format_exc())
         raise e
@@ -353,7 +284,7 @@ def p2p_insert_one(db_path, db, col, document, nodes, key_interpreter=None, seri
             # the data sent to a node will not contain in "nodes" list the pointer to that node. only to other nodes
             data["nodes"] = nodes[:i] + nodes[i+1:]
             data["nodes"] += [current_addr] if current_addr else []
-            file, json = serializer(data, key_interpreter)
+            file, json = serializer(data)
             try:
                 requests.post("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json})
             except:
@@ -362,11 +293,11 @@ def p2p_insert_one(db_path, db, col, document, nodes, key_interpreter=None, seri
                 logger.info("Unable to post p2p data")
 
 
-def p2p_push_update_one(db_path, db, col, filter, update, key_interpreter=None, serializer=default_serialize, visited_nodes=None, recursive=True):
+def p2p_push_update_one(db_path, db, col, filter, update,  serializer=serialize_doc_for_net, visited_nodes=None, recursive=True):
     if visited_nodes is None:
         visited_nodes = []
     try:
-        update_one(db_path, db, col, filter, update, key_interpreter, upsert=False)
+        update_one(db_path, db, col, filter, update, upsert=False)
     except ValueError as e:
         logger.info(traceback.format_exc())
         raise e
@@ -384,8 +315,8 @@ def p2p_push_update_one(db_path, db, col, filter, update, key_interpreter=None, 
         if node in visited_nodes:
             continue
 
-        files, update_json = serializer(update, key_interpreter=key_interpreter)
-        _, filter_json = serializer(filter, key_interpreter=key_interpreter)
+        files, update_json = serializer(update)
+        _, filter_json = serializer(filter)
         visited_json = dumps(visited_nodes)
 
         try:

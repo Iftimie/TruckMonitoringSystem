@@ -4,7 +4,7 @@ from functools import wraps
 from truckms.service_v2.userclient.userclient import select_lru_worker
 from functools import partial
 from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one, get_key_interpreter_by_signature, find
-from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize
+from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net
 import logging
 from truckms.service_v2.api import self_is_reachable
 from truckms.service_v2.brokerworker.p2p_brokerworker import call_remote_func, function_executor
@@ -50,7 +50,7 @@ def register_p2p_func(self, cache_path):
             local_data.update({k: None for k in key_return})
             local_data["identifier"] = res['identifier']
 
-            deserializer = partial(default_deserialize, up_dir=updir)
+            deserializer = partial(deserialize_doc_from_net, up_dir=updir)
             p2p_insert_one(db_url, db, col, local_data, [broker_ip+":"+str(broker_port)], do_upload=False)
             p2p_pull_update_one(db_url, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys)
 

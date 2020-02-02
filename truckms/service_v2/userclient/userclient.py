@@ -10,7 +10,7 @@ from truckms.service.worker.user_client import get_available_nodes
 from threading import Thread
 from functools import partial
 import tinymongo
-from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize, p2p_push_update_one, p2p_insert_one
+from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net, p2p_push_update_one, p2p_insert_one
 import multiprocessing
 from truckms.service.worker.server import analyze_movie
 from truckms.service.worker.user_client import select_lru_worker, evaluate_workload
@@ -172,7 +172,7 @@ def create_guiservice(db_url: str, dispatch_work_func: callable, port: int) -> T
             up_dir = osp.dirname(item["video_path"])
             if item["results"] is None:
                 p2p_pull_update_one(db_url, "tms", "movie_statuses", {"identifier": item['identifier']},
-                                    req_keys=["results", "progress"], hint_file_keys=["results"], deserializer=partial(default_deserialize, up_dir=up_dir))
+                                    req_keys=["results", "progress"], hint_file_keys=["results"], deserializer=partial(deserialize_doc_from_net, up_dir=up_dir))
 
         # VideoStatuses.remove_dead_requests(session)
         # TODO call remove_dead_requests or insteand of removing, just restart them

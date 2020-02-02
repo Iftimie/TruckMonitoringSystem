@@ -24,3 +24,4 @@ netifaces
 requests-toolbelt
 typing-extensions
 dill
+multipledispatch

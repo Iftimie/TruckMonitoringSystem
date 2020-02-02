@@ -1,5 +1,5 @@
 from mock import Mock
-from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize
+from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net
 from functools import partial
 from pprint import pprint
 import pytest
@@ -68,7 +68,7 @@ def test_guiservice(tmpdir):
     assert item_on_user['results'] is None
     p2p_pull_update_one(db_url, "tms", "movie_statuses", {"identifier": item_on_user['identifier']},
                         req_keys=["results", "progress"], hint_file_keys=["results"],
-                        deserializer=partial(default_deserialize, up_dir=tmpdir))
+                        deserializer=partial(deserialize_doc_from_net, up_dir=tmpdir))
     item_on_user = list(tinymongo.TinyMongoClient(db_url)["tms"]["movie_statuses"].find())[0]
     assert item_on_user['results'] is not None
     pprint(item_on_user)

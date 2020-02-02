@@ -4,7 +4,7 @@ from functools import wraps
 from truckms.service_v2.userclient.userclient import select_lru_worker
 from functools import partial
 from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one, get_key_interpreter_by_signature, find
-from truckms.service_v2.p2pdata import p2p_pull_update_one, default_deserialize
+from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net
 import logging
 from truckms.service_v2.api import self_is_reachable
 from truckms.service_v2.brokerworker.p2p_brokerworker import call_remote_func, function_executor
@@ -130,28 +130,14 @@ def decorate_update_callables(db_url, db, col, kwargs):
 #     decorated_func = wraps(f)(partial(new_func, f=f, identifier=identifier, db_url=db_url, db=db, col=col))
 #     return decorated_func
 
-
-def compare_dicts(cur_kwargs, db_args):
-    for k in cur_kwargs:
-        if isinstance(cur_kwargs[k], collections.Callable):
-            if isinstance(db_args[k], partial) and db_args[k].func.__name__ == 'new_update_func':
-                # THIS IS FOR MY STUPID CASE OF FUNCTION THAT RETURNS DICT TO INSERT IN DATABASE
-                assert inspect.signature(cur_kwargs[k]) == inspect.signature(db_args[k].keywords['func'])
-            else:
-                assert inspect.signature(cur_kwargs[k]) == inspect.signature(db_args[k])
-        elif isinstance(cur_kwargs[k], io.IOBase):
-            assert cur_kwargs[k].name == db_args[k].name
-        else:
-            assert cur_kwargs[k] == db_args[k]
+from truckms.service_v2.registry_args import kicomp
 
 
 def verify_kwargs(db_url, db, col, kwargs, key_interpreter_dict):
     collection = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)
     if collection:
         item = collection[0]
-        try:
-            compare_dicts(kwargs, item)
-        except:
+        if not all(kicomp(kwargs[k]) == kicomp(item[k]) for k in kwargs):
             raise ValueError("different arguments for same identifier are not allowed")
 
 
@@ -175,7 +161,7 @@ def get_remote_future(f, kwargs, db_url, db, col, key_interpreter_dict):
         hint_file_keys = [k for k, v in expected_keys.items() if v == io.IOBase]
 
         p2p_pull_update_one(db_url, db, col, {"identifier": kwargs['identifier']}, expected_keys_list,
-                            deserializer=partial(default_deserialize, up_dir=up_dir), hint_file_keys=hint_file_keys)
+                            deserializer=partial(deserialize_doc_from_net, up_dir=up_dir), hint_file_keys=hint_file_keys)
 
     item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
     item = {k: item[k] for k in expected_keys_list}
@@ -222,7 +208,7 @@ def create_future(f, kwargs, db_url, db, col, key_interpreter):
         return Future(partial(get_local_future, f, kwargs, db_url, db, col, key_interpreter))
 
 
-def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False, limit=24):
+def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
     """
     In p2p client the register decorator will have the role of deciding if the function should be executed remotely or
     locally. It will store the input in a collection. If the node is reachable, then data will be updated automatically,

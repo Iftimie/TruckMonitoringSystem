@@ -7,7 +7,7 @@ import tinymongo
 import time
 import os
 from functools import wraps, partial
-from truckms.service_v2.p2pdata import p2p_route_insert_one, default_deserialize, p2p_route_pull_update_one, p2p_route_push_update_one
+from truckms.service_v2.p2pdata import p2p_route_insert_one, deserialize_doc_from_net, p2p_route_pull_update_one, p2p_route_push_update_one
 from truckms.service_v2.p2pdata import get_key_interpreter_by_signature, find, p2p_push_update_one, TinyMongoClientClean
 import inspect
 import logging
@@ -88,7 +88,7 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, curren
         execute_function_partial = wraps(f)(partial(execute_function, f=f, db_url=db_url, db=db, col=col, key_interpreter=key_interpreter, can_do_locally_func=can_do_locally_func, self=self))
 
         # self_is_reachable
-        new_deserializer = partial(default_deserialize, up_dir=updir)
+        new_deserializer = partial(deserialize_doc_from_net, up_dir=updir)
 
         # these functions below make more sense in p2p_data.py
         p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db=db, col=col, db_path=db_url,
