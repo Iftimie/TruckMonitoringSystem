@@ -6,6 +6,12 @@ from multipledispatch import dispatch
 import dill
 import base64
 from warnings import warn
+import binascii
+import os
+import varint
+import mmh3
+import struct
+
 
 """
 Get comparable from value (especially important for Callable and IOBase)
@@ -156,3 +162,52 @@ def get_class_dictionary_from_doc(doc):
 def get_class_dictionary_from_func(func):
     doc = inspect.signature(func).parameters
     return {k: v.annotation for k, v in doc.items()}
+
+
+SAMPLE_THRESHOLD = 128 * 1024
+SAMPLE_SIZE = 16 * 1024
+def hashfileobject(f, sample_threshhold=SAMPLE_THRESHOLD, sample_size=SAMPLE_SIZE, hexdigest=False):
+    #get file size from file object
+    f.seek(0, os.SEEK_END)
+    size = f.tell()
+    f.seek(0, os.SEEK_SET)
+
+    if size < sample_threshhold or sample_size < 1:
+        data = f.read()
+    else:
+        data = f.read(sample_size)
+        f.seek(size//2)
+        data += f.read(sample_size)
+        f.seek(-sample_size, os.SEEK_END)
+        data += f.read(sample_size)
+
+    hash_tmp = mmh3.hash_bytes(data)
+    hash_ = hash_tmp[7::-1] + hash_tmp[16:7:-1]
+    enc_size = varint.encode(size)
+    digest = enc_size + hash_[len(enc_size):]
+
+    f.seek(0, os.SEEK_SET)
+
+    return binascii.hexlify(digest).decode() if hexdigest else digest
+
+
+bytes_hasher = {int: lambda value: mmh3.hash_bytes(struct.pack("i", value)),
+                float: lambda value: mmh3.hash_bytes(struct.pack("f", value)),
+                str: lambda value: mmh3.hash_bytes(bytes(value, encoding="utf-8")),
+                IOBase: lambda handle: hashfileobject(handle),
+                Callable: lambda func: mmh3.hash_bytes(dill.dumps(func)),
+                List[str]: lambda lstr: mmh3.hash_bytes(b''.join([bytes(v, encoding="utf-8") for v in lstr])),
+                List[int]: lambda lint: mmh3.hash_bytes(b''.join([struct.pack("i", v) for v in lint])),
+                List[float]: lambda lfloat: mmh3.hash_bytes(b''.join([struct.pack("f", v) for v in lfloat])),
+                List: lambda value: mmh3.hash_bytes(b''),
+                type(None): lambda value: mmh3.hash_bytes(b''),
+                Dict: lambda value: mmh3.hash_bytes(b''),
+                Dict[str, str]: lambda value: mmh3.hash_bytes(b''.join([struct.pack("i", k+v) for k, v in value.items()]))}
+
+
+def hash_kwargs(doc):
+    acc = b''
+    for k in sorted(doc.keys()):
+        v = doc[k]
+        acc += bytes_hasher[cls_finder(v)](v)
+    return mmh3.hash_bytes(acc)

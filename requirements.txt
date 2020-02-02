@@ -25,3 +25,5 @@ requests-toolbelt
 typing-extensions
 dill
 multipledispatch
+varint
+mmh3
