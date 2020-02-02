@@ -3,8 +3,9 @@ from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
 from functools import wraps
 from truckms.service_v2.userclient.userclient import select_lru_worker
 from functools import partial
-from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one, get_key_interpreter_by_signature, find
+from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one, find
 from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net
+from truckms.service_v2.registry_args import get_class_dictionary_from_func
 import logging
 from truckms.service_v2.api import self_is_reachable
 from truckms.service_v2.brokerworker.p2p_brokerworker import call_remote_func, function_executor
@@ -36,99 +37,6 @@ def p2p_progress_hook(curidx, endidx):
     filter_ = {"identifier": actual_args['identifier']}
     p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_)
 
-
-
-@deprecated.deprecated(reason="this is just a bad design")
-def new_update_func(*args, identifier, db_url, db, col, func, **kwargs):
-    """
-    new_func must not be declared inside of decorate_p2p_update because it cannot be pickled
-    """
-    filter_ = {"identifier": identifier}
-    update_ = func(*args, **kwargs)
-    update_['finished'] = True
-    # TODO actually this check might not be necessary
-    if not all(isinstance(k, str) for k in update_.keys()):
-        raise ValueError("All keys in the returned dictionary must be strings in func {}".format(func.__name__))
-    assert 'identifier' not in update_
-    p2p_push_update_one(db_url, db, col, filter_, update_)
-    return update_
-
-
-@deprecated.deprecated(reason="this is just a bad design")
-def decorate_p2p_update(db_url, db, col, identifier, func):
-    """
-    Decorates a function that returns a dictionary. This dictionary will be stored in the collection.
-    """
-
-    # @wraps(func)
-    # def decorated_func(*args, **kwargs):
-    #     filter_ = {"identifier": identifier}
-    #     update_ = func(*args, **kwargs)
-    #     assert 'identifier' not in update_
-    #     p2p_push_update_one(db_url, db, col, filter_, update_)
-    #     return update_
-    decorated_func = wraps(func)(partial(new_update_func, identifier=identifier, db_url=db_url, db=db, col=col, func=func))
-
-    return decorated_func
-
-
-@deprecated.deprecated(reason="this is just a bad design")
-def decorate_update_callables(db_url, db, col, kwargs):
-    """
-    For all functions that return a dictionary and are annotated with -> dict, will decorate them to store the returned
-    dictionary into a collection
-    """
-    new_kwargs = {k: v for k, v in kwargs.items()}
-    update_callables = find_update_callables(new_kwargs)
-    for k, c in update_callables.items():
-        new_kwargs[k] = decorate_p2p_update(db_url, db, col, identifier=new_kwargs['identifier'], func=c)
-    return new_kwargs
-
-
-# def new_func(f, db_url, db, col):
-#     """
-#     new_func must not be declared inside of process_func_kwargs_decorator because it cannot be pickled
-#     """
-#
-#     for k in cur_kwargs:
-#         if cur_kwargs[k] == "value_for_key_is_file":
-#             file_handler = open(keys_file_paths[k], 'r')
-#             file_handler.close()
-#             cur_kwargs[k] = file_handler
-#
-#     update_ = f(**cur_kwargs)
-#     # TODO actually this check might not be necessary
-#     if not all(isinstance(k, str) for k in update_.keys()):
-#         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
-#
-#     filter_ = {"identifier": cur_kwargs["identifier"]}
-#     p2p_push_update_one(db_url, db, col, filter_, update_)
-#
-#     return update_
-#
-#
-# def process_func_kwargs_decorator(f, identifier, db_url, db, col):
-#     """
-#     File handlers cannot be serialized (although these are closed) when running the function f in a worker pool
-#     """
-#     # new_kwargs = {k: v for k, v in kwargs.items()}
-#     # keys_file_paths = dict()
-#     #
-#     # for k in new_kwargs:
-#     #     if isinstance(new_kwargs[k],  io.IOBase):
-#     #         keys_file_paths[k] = new_kwargs[k].name
-#     #         new_kwargs[k] = "value_for_key_is_file"
-#     # @wraps(f)
-#     # def new_func(**cur_kwargs):
-#     #     """only receives keyword arguments that are definitely not files, because these have been separated"""
-#     #     for k in cur_kwargs:
-#     #         if cur_kwargs[k] == "value_for_key_is_file":
-#     #             file_handler = open(keys_file_paths[k], 'r')
-#     #             file_handler.close()
-#     #             cur_kwargs[k] = file_handler
-#     #     return f(**cur_kwargs)
-#     decorated_func = wraps(f)(partial(new_func, f=f, identifier=identifier, db_url=db_url, db=db, col=col))
-#     return decorated_func
 
 from truckms.service_v2.registry_args import kicomp
 
@@ -230,7 +138,7 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
 
     def inner_decorator(f):
         validate_function_signature(f)
-        key_interpreter = get_key_interpreter_by_signature(f)
+        key_interpreter = get_class_dictionary_from_func(f)
 
         col = f.__name__
         updir = os.path.join(cache_path, db, col)

@@ -8,7 +8,8 @@ import time
 import os
 from functools import wraps, partial
 from truckms.service_v2.p2pdata import p2p_route_insert_one, deserialize_doc_from_net, p2p_route_pull_update_one, p2p_route_push_update_one
-from truckms.service_v2.p2pdata import get_key_interpreter_by_signature, find, p2p_push_update_one, TinyMongoClientClean
+from truckms.service_v2.p2pdata import find, p2p_push_update_one, TinyMongoClientClean
+from truckms.service_v2.registry_args import get_class_dictionary_from_func
 import inspect
 import logging
 logger = logging.getLogger(__name__)
@@ -79,7 +80,7 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, curren
 
     def inner_decorator(f):
         validate_function_signature(f)
-        key_interpreter = get_key_interpreter_by_signature(f)
+        key_interpreter = get_class_dictionary_from_func(f)
 
         col = f.__name__
         updir = os.path.join(cache_path, db, col)

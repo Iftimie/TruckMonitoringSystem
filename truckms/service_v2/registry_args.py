@@ -151,3 +151,8 @@ def deserialize_doc_from_db(doc, clsd):
 
 def get_class_dictionary_from_doc(doc):
     return {k: cls_finder(v) for k, v in doc.items()}
+
+
+def get_class_dictionary_from_func(func):
+    doc = inspect.signature(func).parameters
+    return {k: v for k, v in doc.items()}
