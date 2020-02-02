@@ -4,7 +4,7 @@ from functools import wraps
 from truckms.service_v2.userclient.userclient import select_lru_worker
 from functools import partial
 from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one,  find
-from truckms.service_v2.registry_args import get_class_dictionary_from_doc
+from truckms.service_v2.registry_args import get_class_dictionary_from_func
 from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net
 import logging
 from truckms.service_v2.api import self_is_reachable
@@ -26,7 +26,7 @@ def register_p2p_func(self, cache_path):
     def inner_decorator(f):
 
         validate_function_signature(f)
-        key_interpreter = get_class_dictionary_from_doc(f)
+        key_interpreter = get_class_dictionary_from_func(f)
 
         col = f.__name__
         updir = os.path.join(cache_path, db, col)

@@ -155,4 +155,4 @@ def get_class_dictionary_from_doc(doc):
 
 def get_class_dictionary_from_func(func):
     doc = inspect.signature(func).parameters
-    return {k: v for k, v in doc.items()}
+    return {k: v.annotation for k, v in doc.items()}

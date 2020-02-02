@@ -161,14 +161,14 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
 
             if can_do_locally_func() or lru_ip is None:
                 nodes = []
-                p2p_insert_one(db_url, db, col, kwargs, nodes, key_interpreter)
+                p2p_insert_one(db_url, db, col, kwargs, nodes)
                 new_f = wraps(f)(partial(function_executor, f=f, identifier=kwargs['identifier'], db_url=db_url, db=db, col=col, key_interpreter=key_interpreter))
                 res = self.worker_pool.apply_async(func=new_f)
                 logger.info("Executing function locally")
             else:
                 nodes = [str(lru_ip) + ":" + str(lru_port)]
                 # TODO check if the item was allready sent for processing
-                p2p_insert_one(db_url, db, col, kwargs, nodes, key_interpreter, current_address_func=partial(self_is_reachable, self.local_port))
+                p2p_insert_one(db_url, db, col, kwargs, nodes, current_address_func=partial(self_is_reachable, self.local_port))
                 call_remote_func(lru_ip, lru_port, db, col, f.__name__, kwargs['identifier'])
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
             return create_future(f, kwargs, db_url, db, col, key_interpreter)
