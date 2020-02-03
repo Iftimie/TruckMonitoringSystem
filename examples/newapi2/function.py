@@ -32,10 +32,9 @@ https://docs.python.org/2/library/pdb.html
 https://blog.magrathealabs.com/filesystem-events-monitoring-with-python-9f5329b651c3
 """
 
-def analyze_movie(identifier: str, video_handle: io.IOBase) -> {"results": io.IOBase, "video_results": io.IOBase}:
+def analyze_movie(video_handle: io.IOBase) -> {"results": io.IOBase, "video_results": io.IOBase}:
     """
     Args:
-        identifier: identifier parameter to be compliant with the p2p framework
         video_handle: file object for the movie to be analyzed.
         progress_hook: function that is called with two integer arguments. the first one represents the current frame index
             the second represents the final index.

@@ -207,14 +207,21 @@ def self_is_reachable(local_port):
     externalipres = requests.get('http://checkip.dyndns.org/')
     part = externalipres.content.decode('utf-8').split(": ")[1]
     ip_ = part.split("<")[0]
+
+    # LAN ip state
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    LAN_ip_ = s.getsockname()[0]
+    s.close()
+
     try:
         echo_response = requests.get('http://{}:{}/echo'.format(ip_, local_port), timeout=2)
         if echo_response.status_code == 200:
-            return "{}:{}".format(ip_, local_port)
+            return ["{}:{}".format(ip_, local_port), "{}:{}".format(LAN_ip_, local_port)]
         else:
-            return None
+            return ["{}:{}".format(LAN_ip_, local_port)]
     except:
-        return None
+        return ["{}:{}".format(LAN_ip_, local_port)]
 
 
 from functools import wraps
@@ -271,9 +278,6 @@ def validate_arguments(f, args, kwargs):
     if len(lambda_callables) > 0:
         raise ValueError("Lambda functions are not allowed because these are local functions and cannot be pickled")
 
-    # this line of code should be removed
-    validate_update_callables(kwargs)
-
     # check that every value passed in this function has the same type as the one declared in function annotation
     f_param_sign = inspect.signature(f).parameters
     for k, v in kwargs.items():
@@ -284,9 +288,8 @@ def validate_arguments(f, args, kwargs):
 
 def validate_function_signature(func):
     formal_args = list(inspect.signature(func).parameters.keys())
-    if "identifier" not in formal_args:
-        raise ValueError("In this p2p framework, one argument to the function must be the identifier. "
-                         "This helps for memoization and retrieving the results from a function")
+    if "identifier" in formal_args:
+        raise ValueError("identifier is a restricted keyword argument in this p2p framework")
 
     if not ("return" in inspect.getsource(func) and isinstance(inspect.signature(func).return_annotation, dict)):
         raise ValueError("Function must return something. And must be return annotated with dict")
@@ -297,3 +300,4 @@ def validate_function_signature(func):
 
     # TODO in the future all formal args should have type annotations
     #  and provide serialization and deserialization methods for each
+

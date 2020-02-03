@@ -263,7 +263,7 @@ def find(db_path, db, col, query, key_interpreter_dict=None):
 def p2p_insert_one(db_path, db, col, document, nodes, serializer=serialize_doc_for_net, current_address_func=lambda : None, do_upload=True):
     """
     post_func is used especially for testing
-    current_address_func: self_is_reachable should be called
+    current_address_func: self_is_reachable should be called or actually a function that returns the current address
     """
     current_addr = current_address_func()
     data = {k:v for k, v in document.items()}
@@ -281,7 +281,7 @@ def p2p_insert_one(db_path, db, col, document, nodes, serializer=serialize_doc_f
         for i, node in enumerate(nodes):
             # the data sent to a node will not contain in "nodes" list the pointer to that node. only to other nodes
             data["nodes"] = nodes[:i] + nodes[i+1:]
-            data["nodes"] += [current_addr] if current_addr else []
+            data["nodes"] += current_addr
             file, json = serializer(data)
             try:
                 requests.post("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json})

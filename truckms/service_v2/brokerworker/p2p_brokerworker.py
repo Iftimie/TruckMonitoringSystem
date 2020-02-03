@@ -23,14 +23,21 @@ def call_remote_func(ip, port, db, col, func_name, identifier):
     return res
 
 
+def check_remote_identifier(ip, port, db, col, func_name, identifier):
+    res = requests.get(
+        "http://{ip}:{port}/identifier_available/{db}/{col}/{fname}/{identifier}".format(ip=ip, port=port, db=db,
+                                                                                     col=col, fname=func_name,
+                                                                                 identifier=identifier), files={},data={})
+    if res.status_code == 200:
+        return True
+    else:
+        return False
+
+
 def function_executor(f, identifier, db, col, db_url, key_interpreter):
     kwargs_ = find(db_url, db, col, {"identifier": identifier}, key_interpreter)[0]
     kwargs = {k:kwargs_[k] for k in inspect.signature(f).parameters.keys()}
 
-    #### THIS IS SOME CRAZY SHIT HACK THAT MAKES ME THINK THAT ITS BEETER THE DECORATED FUNCTION TO JUST ACCESS A FUNCTION
-    # for k in kwargs:
-    #     if isinstance(kwargs[k], partial) and kwargs[k].func.__name__ == 'new_update_func':
-    #         kwargs[k].keywords['db_url'] = db_url
     logger.info("Executing function: " + f.__name__)
     update_ = f(**kwargs)
     update_['finished'] = True
@@ -74,6 +81,14 @@ def search_work(db_url, db, collection, func_name, time_limit):
         return jsonify({})
 
 
+def identifier_available(db_path, db, col, identifier):
+    collection = find(db_path, db, col, {"identifier": identifier})
+    if len(collection) == 0:
+        return make_response("yes", 200)
+    else:
+        return make_response("no", 404)
+
+
 def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, current_address_func=lambda: None, time_limit=12):
     db_url = cache_path
     db = "p2p"
@@ -107,6 +122,9 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, curren
                    methods=['POST'])(execute_function_partial)
         search_work_partial = (wraps(search_work))(partial(search_work, db_url=db_url, db=db, collection=col, func_name=f.__name__, time_limit=time_limit))
         self.route("/search_work/{db}/{col}/{fname}".format(db=db, col=col, fname=f.__name__), methods=['POST'])(search_work_partial)
+
+        identifier_available_partial = (wraps(identifier_available))(partial(identifier_available, db_path=db_url, db=db, col=col))
+        self.route("/identifier_available/{db}/{col}//{fname}/<identifier>".format(db=db, col=col, fname=f.__name__), methods=['POST'])(identifier_available_partial)
 
     return inner_decorator
 

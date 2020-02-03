@@ -41,20 +41,7 @@ def p2p_progress_hook(curidx, endidx):
 from truckms.service_v2.registry_args import kicomp
 
 
-def verify_kwargs(db_url, db, col, kwargs, key_interpreter_dict):
-    collection = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)
-    if collection:
-        item = collection[0]
-        if not all(kicomp(kwargs[k]) == kicomp(item[k]) for k in kwargs):
-            raise ValueError("different arguments for same identifier are not allowed")
 
-
-def identifier_seen(db_url, kwargs, db, col):
-    collection = find(db_url, db, col, {"identifier": kwargs['identifier']})
-    if collection:
-        return True
-    else:
-        return False
 
 
 def get_remote_future(f, kwargs, db_url, db, col, key_interpreter_dict):
@@ -68,7 +55,7 @@ def get_remote_future(f, kwargs, db_url, db, col, key_interpreter_dict):
     if any(item[k] is None for k in expected_keys):
         hint_file_keys = [k for k, v in expected_keys.items() if v == io.IOBase]
 
-        p2p_pull_update_one(db_url, db, col, {"identifier": kwargs['identifier']}, expected_keys_list,
+        p2p_pull_update_one(db_url, db, col, {"identifier": kwargs['remote_identifier']}, expected_keys_list,
                             deserializer=partial(deserialize_doc_from_net, up_dir=up_dir), hint_file_keys=hint_file_keys)
 
     item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
@@ -88,34 +75,107 @@ def get_local_future(f, kwargs, db_url, db, col, key_interpreter_dict):
 
 class Future:
 
-    def __init__(self, get_future_func):
+    def __init__(self, get_future_func, max_waiting_time=3600*24):
         self.get_future_func = get_future_func
+        self.max_waiting_time = max_waiting_time
 
     def get(self):
         item = self.get_future_func()
+        count_time = 0
+        wait_time = 4
         while any(item[k] is None for k in item):
             item = self.get_future_func()
-            time.sleep(4)
+            time.sleep(wait_time)
+            count_time += wait_time
+            if count_time > self.max_waiting_time:
+                raise ValueError("Waiting time exceeded")
             logger.info("Not done yet " + str(item))
         return item
 
 
-def add_expected_keys(f, kwargs):
+def get_expected_keys(f):
     expected_keys = inspect.signature(f).return_annotation
-    for k in expected_keys:
-        kwargs[k] = None
-    kwargs['progress'] = 0
-    return kwargs
+    expected_keys = {k:None for k in expected_keys}
+    expected_keys['progress'] = 0
+    return expected_keys
 
 
 def create_future(f, kwargs, db_url, db, col, key_interpreter):
     item = find(db_url, db, col, {"identifier": kwargs['identifier']})[0]
-    if item['nodes']:
+    if item['nodes'] or 'remote_identifier' in item:
         return Future(partial(get_remote_future, f, kwargs, db_url, db, col, key_interpreter))
     else:
         return Future(partial(get_local_future, f, kwargs, db_url, db, col, key_interpreter))
 
 
+# def verify_kwargs(db_url, db, col, kwargs, key_interpreter_dict):
+#     collection = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)
+#     if collection:
+#         item = collection[0]
+#         if not all(kicomp(kwargs[k]) == kicomp(item[k]) for k in kwargs):
+#             raise ValueError("different arguments for same identifier are not allowed")
+
+
+def identifier_seen(db_url, kwargs, db, col, expected_keys, time_limit=24):
+    collection = find(db_url, db, col, {"identifier": kwargs['identifier']})
+
+    if collection:
+        assert len(collection) == 1
+        item = collection[0]
+        if (time.time() - item['timestamp']) > time_limit * 3600 and any(item[k] is None for k in expected_keys):
+            # TODO the entry should actually be deleted instead of letting it be overwritten
+            #  for elegancy
+            logger.info("Time limit exceeded for item with identifier: "+item['identifier'])
+            return False
+        else:
+            return True
+    else:
+        return False
+
+from truckms.service_v2.registry_args import hash_kwargs
+from truckms.service_v2.registry_args import kicomp
+from truckms.service_v2.p2pdata import find
+def create_identifier(db_url, db, col, kwargs, key_interpreter_dict):
+    identifier = hash_kwargs({k:v for k, v in kwargs.items() if k in key_interpreter_dict})
+    identifier_original = identifier  # deepcopy
+
+    count = 1
+    while True:
+        collection = find(db_url, db, col, {"identifier": identifier}, key_interpreter_dict)
+        if len(collection) == 0:
+            # we found an identifier that is not in DB
+            return identifier
+        elif len(collection) != 1:
+            # we should find only one doc that has the same hash
+            raise ValueError("Multiple documents for a hash")
+        elif all(kicomp(kwargs[k]) == kicomp(item[k]) for item in collection for k in kwargs):
+            # we found exactly 1 doc with the same hash and we must check that it has the same arguments
+            return identifier
+        else:
+            # we found different arguments that produce the same hash so we must modify the hash determinastically
+            identifier = identifier_original + str(count)
+            count += 1
+            if count > 100:
+                raise ValueError("Too many hash collisions. Change the hash function")
+
+
+from truckms.service_v2.brokerworker.p2p_brokerworker import check_remote_identifier
+def create_remote_identifier(local_identifier, check_remote_identifier_args):
+    original_local_identifier = local_identifier
+    args = {k: v for k, v in original_local_identifier}
+    count = 1
+    while True:
+        args['identifier'] = local_identifier
+        if check_remote_identifier(**check_remote_identifier_args):
+            return local_identifier
+        else:
+            local_identifier = original_local_identifier + str(count)
+            count += 1
+            if count > 100:
+                raise ValueError("Too many hash collisions. Change the hash function")
+
+
+from truckms.service_v2.p2pdata import update_one
 def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
     """
     In p2p client the register decorator will have the role of deciding if the function should be executed remotely or
@@ -147,15 +207,14 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
         @wraps(f)
         def wrap(*args, **kwargs):
 
-            verify_kwargs(db_url, db, col, kwargs, key_interpreter)
-            if identifier_seen(db_url, kwargs, db, col):
-                logger.info("Returning precomputed output")
+            kwargs['identifier'] = create_identifier(db_url, db, col, kwargs, key_interpreter)
+            expected_keys = get_expected_keys(f)
+            if identifier_seen(db_url, kwargs, db, col, expected_keys):
+                logger.info("Returning future that may already be precomputed")
                 return create_future(f, kwargs, db_url, db, col, key_interpreter)
 
             validate_arguments(f, args, kwargs)
-
-            # kwargs = decorate_update_callables(db_url, db, col, kwargs)
-            kwargs = add_expected_keys(f, kwargs)
+            kwargs.update(expected_keys)
 
             lru_ip, lru_port = select_lru_worker(self.local_port)
 
@@ -169,7 +228,9 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
                 nodes = [str(lru_ip) + ":" + str(lru_port)]
                 # TODO check if the item was allready sent for processing
                 p2p_insert_one(db_url, db, col, kwargs, nodes, current_address_func=partial(self_is_reachable, self.local_port))
-                call_remote_func(lru_ip, lru_port, db, col, f.__name__, kwargs['identifier'])
+                remote_identifier = create_remote_identifier(kwargs['identifier'], {"ip": lru_ip, "port": lru_port, "db": db, "col": col, "func_name": f.__name__})
+                update_one(db_url, db, col, kwargs['identifier'], {"remote_identifier": remote_identifier}, upsert=False)
+                call_remote_func(lru_ip, lru_port, db, col, f.__name__, remote_identifier)
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
             return create_future(f, kwargs, db_url, db, col, key_interpreter)
         return wrap

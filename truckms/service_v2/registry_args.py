@@ -37,6 +37,7 @@ def kicomp(value):
     return inspect.signature(value)
 
 
+# TODO to compare contents create a Class that implements __==__ and received another object of same instance
 @dispatch(IOBase)
 def kicomp(value):
     return value.name
@@ -210,4 +211,4 @@ def hash_kwargs(doc):
     for k in sorted(doc.keys()):
         v = doc[k]
         acc += bytes_hasher[cls_finder(v)](v)
-    return mmh3.hash_bytes(acc)
+    return mmh3.hash_bytes(acc).decode("utf-8")
