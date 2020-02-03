@@ -146,7 +146,6 @@ def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=de
 
     data_to_insert = deserializer(files, request.form['json'], key_interpreter=key_interpreter)
     data_to_insert["current_address"] = current_address_func()
-    # collection.insert_one(data_to_insert)
     update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
     return make_response("ok")
 
@@ -170,7 +169,6 @@ def p2p_route_push_update_one(db_path, db, col, deserializer=deserialize_doc_fro
     filter_data = deserializer({}, request.form['filter_json'])
     visited_nodes = loads(request.form['visited_json'])
     recursive = request.form["recursive"]
-    # update_one(db_path, db, col, filter_data, update_data, upsert=False)
     if recursive:
         visited_nodes = p2p_push_update_one(db_path, db, col, filter_data, update_data, visited_nodes=visited_nodes)
     return jsonify(visited_nodes)
