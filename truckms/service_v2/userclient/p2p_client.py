@@ -23,20 +23,35 @@ import requests
 logger = logging.getLogger(__name__)
 
 
-def p2p_progress_hook(curidx, endidx):
+def find_required_args():
     necessary_args = ['db', 'col', 'identifier', 'db_url']
     actual_args = dict()
     frame_infos = inspect.stack()[:]
     for frame in frame_infos:
         if frame.function == function_executor.__name__:
             f_locals = frame.frame.f_locals
-            actual_args = {k:f_locals[k] for k in necessary_args}
+            actual_args = {k: f_locals[k] for k in necessary_args}
             break
+    return actual_args
 
+
+def p2p_progress_hook(curidx, endidx):
+
+    actual_args = find_required_args()
     update_ = {"progress": curidx/endidx * 100}
     filter_ = {"identifier": actual_args['identifier']}
     p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_)
 
+
+def p2p_dictionary_update(update_dictionary):
+    """
+    Arbitrary dictionaries can be passed in order to update the database.
+    Some keyworks are not allowed such as identifier, timestamp, nodes etc (TODO complete the list of forbidden args)
+    """
+    assert all(key not in update_dictionary for key in ["nodes", "timestamp", "identifier", "id_", "remote_identifier"])
+    actual_args = find_required_args()
+    filter_ = {"identifier": actual_args['identifier']}
+    p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_dictionary)
 
 from truckms.service_v2.registry_args import kicomp
 
