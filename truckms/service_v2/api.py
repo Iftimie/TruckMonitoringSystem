@@ -292,8 +292,12 @@ def validate_function_signature(func):
     if "identifier" in formal_args:
         raise ValueError("identifier is a restricted keyword argument in this p2p framework")
 
-    if not ("return" in inspect.getsource(func) and isinstance(inspect.signature(func).return_annotation, dict)):
+    return_anno = inspect.signature(func).return_annotation
+    if not ("return" in inspect.getsource(func) and isinstance(return_anno, dict)):
         raise ValueError("Function must return something. And must be return annotated with dict")
+
+    forbidden_return_dtypes = [collections.Callable, dict, list]
+    assert all(v not in forbidden_return_dtypes for v in return_anno.values())
 
     params = [v[1] for v in list(inspect.signature(func).parameters.items())]
     if any(p.annotation == inspect._empty for p in params):
