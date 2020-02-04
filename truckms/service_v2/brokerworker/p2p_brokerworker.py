@@ -28,10 +28,12 @@ def check_remote_identifier(ip, port, db, col, func_name, identifier):
         "http://{ip}:{port}/identifier_available/{db}/{col}/{fname}/{identifier}".format(ip=ip, port=port, db=db,
                                                                                      col=col, fname=func_name,
                                                                                  identifier=identifier), files={},data={})
-    if res.status_code == 200:
+    if res.status_code == 200 and res.content == b'yes':
         return True
-    else:
+    elif res.status_code == 404 and res.content == b'no':
         return False
+    else:
+        raise ValueError("Problem")
 
 
 def function_executor(f, identifier, db, col, db_url, key_interpreter):
@@ -124,7 +126,7 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, curren
         self.route("/search_work/{db}/{col}/{fname}".format(db=db, col=col, fname=f.__name__), methods=['POST'])(search_work_partial)
 
         identifier_available_partial = (wraps(identifier_available))(partial(identifier_available, db_path=db_url, db=db, col=col))
-        self.route("/identifier_available/{db}/{col}//{fname}/<identifier>".format(db=db, col=col, fname=f.__name__), methods=['POST'])(identifier_available_partial)
+        self.route("/identifier_available/{db}/{col}/{fname}/<identifier>".format(db=db, col=col, fname=f.__name__), methods=['GET'])(identifier_available_partial)
 
     return inner_decorator
 

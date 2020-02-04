@@ -257,8 +257,8 @@ def validate_update_callables(kwargs):
 def validate_arguments(f, args, kwargs):
     if len(args) != 0:
         raise ValueError("All arguments to a function in this p2p framework need to be specified keyword arguments")
-    if "identifier" not in kwargs:
-        raise ValueError("In this p2p framework, identifier must be passed as keyword argument. "
+    if "identifier" in kwargs:
+        raise ValueError("In this p2p framework, identifier is a reserved keyword argument "
                          "This helps for memoization and retrieving the results from a function")
     for v in kwargs.values():
         if not any(isinstance(v, T) for T in [int, float, bool, io.IOBase, str]):
@@ -280,6 +280,7 @@ def validate_arguments(f, args, kwargs):
 
     # check that every value passed in this function has the same type as the one declared in function annotation
     f_param_sign = inspect.signature(f).parameters
+    assert set(f_param_sign.keys()) == set(kwargs.keys())
     for k, v in kwargs.items():
         f_param_k_annotation = f_param_sign[k].annotation
         if not isinstance(v, f_param_k_annotation):

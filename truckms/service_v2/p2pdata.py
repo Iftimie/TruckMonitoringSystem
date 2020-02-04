@@ -181,6 +181,11 @@ def p2p_route_pull_update_one(db_path, db, col, serializer=serialize_doc_for_net
     required_list = list(TinyMongoClientClean(db_path)[db][col].find(filter_data))
     if not required_list:
         return make_response("filter" + str(filter_data) + "resulted in empty collection")
+    # TODO there is a case when filter from client contains both local and remote identifiers, and also both identifiers can be seen here
+    #  as 2 different items in collections because both were inserted at different times. In this case error should be returned and the user
+    #  should resubmit the work with different arguments (thus different hash)
+    #  also, old requests should be deleted in order to minimize the posibility of these events
+    assert len(required_list) == 1
     required_data = required_list[0]
     data_to_send = {}
     for k in req_keys:

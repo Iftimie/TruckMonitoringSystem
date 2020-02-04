@@ -137,9 +137,17 @@ db_decoder = {int: lambda value: value,
 
 
 def serialize_doc_for_db(doc):
+    """
+    A special case arrived when using '$or' in filter and the doc is actually a list
+    For example a filter could be:
+    {"$or":[{"filter_key1": "value2"},{"filter_key2": "value2"}]}
+    """
     serialized_doc = dict()
     for k, v in doc.items():
-        serialized_doc[k] = db_encoder[cls_finder(v)](v)
+        if isinstance(v, list) and all(isinstance(item, dict) for item in v):
+            serialized_doc[k] = [serialize_doc_for_db(item) for item in v]
+        else:
+            serialized_doc[k] = db_encoder[cls_finder(v)](v)
     return serialized_doc
 
 
@@ -211,4 +219,5 @@ def hash_kwargs(doc):
     for k in sorted(doc.keys()):
         v = doc[k]
         acc += bytes_hasher[cls_finder(v)](v)
-    return mmh3.hash_bytes(acc).decode("utf-8")
+    hash_ = mmh3.hash_bytes(acc)
+    return binascii.hexlify(hash_).decode()

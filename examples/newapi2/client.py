@@ -19,8 +19,7 @@ if __name__ == "__main__":
     analyze_movie = client_app.register_p2p_func(path,
                                                  can_do_locally_func=lambda :False)(analyze_movie)
 
-    res = analyze_movie(identifier="example1",
-                        video_handle=open(os.path.join(os.path.dirname(__file__), '..', '..', 'tests', 'truckms', 'service', 'data', 'cut.mkv'), 'rb'))
+    res = analyze_movie(video_handle=open(os.path.join(os.path.dirname(__file__), '..', '..', 'tests', 'truckms', 'service', 'data', 'cut.mkv'), 'rb'))
 
     print(res.get())
 

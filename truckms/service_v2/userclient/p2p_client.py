@@ -44,31 +44,32 @@ from truckms.service_v2.registry_args import kicomp
 
 
 
-def get_remote_future(f, kwargs, db_url, db, col, key_interpreter_dict):
+def get_remote_future(f, identifier, db_url, db, col, key_interpreter_dict):
     up_dir = os.path.join(db_url, db)
     if not os.path.exists(up_dir):
         os.mkdir(up_dir)
-    item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
+    item = find(db_url, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
     expected_keys = inspect.signature(f).return_annotation
     expected_keys_list = list(expected_keys.keys())
     expected_keys_list.append("progress")
     if any(item[k] is None for k in expected_keys):
         hint_file_keys = [k for k, v in expected_keys.items() if v == io.IOBase]
 
-        p2p_pull_update_one(db_url, db, col, {"identifier": kwargs['remote_identifier']}, expected_keys_list,
+        search_filter = {"$or": [{"identifier": identifier}, {"identifier": item['remote_identifier']}]}
+        p2p_pull_update_one(db_url, db, col, search_filter, expected_keys_list,
                             deserializer=partial(deserialize_doc_from_net, up_dir=up_dir), hint_file_keys=hint_file_keys)
 
-    item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
+    item = find(db_url, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
     item = {k: item[k] for k in expected_keys_list}
     return item
 
 
-def get_local_future(f, kwargs, db_url, db, col, key_interpreter_dict):
+def get_local_future(f, identifier, db_url, db, col, key_interpreter_dict):
     expected_keys = inspect.signature(f).return_annotation
     expected_keys_list = list(expected_keys.keys())
     expected_keys_list.append("progress")
 
-    item = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)[0]
+    item = find(db_url, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
     item = {k:v for k, v in item.items() if k in expected_keys_list}
     return item
 
@@ -100,12 +101,12 @@ def get_expected_keys(f):
     return expected_keys
 
 
-def create_future(f, kwargs, db_url, db, col, key_interpreter):
-    item = find(db_url, db, col, {"identifier": kwargs['identifier']})[0]
+def create_future(f, identifier, db_url, db, col, key_interpreter):
+    item = find(db_url, db, col, {"identifier": identifier})[0]
     if item['nodes'] or 'remote_identifier' in item:
-        return Future(partial(get_remote_future, f, kwargs, db_url, db, col, key_interpreter))
+        return Future(partial(get_remote_future, f, identifier, db_url, db, col, key_interpreter))
     else:
-        return Future(partial(get_local_future, f, kwargs, db_url, db, col, key_interpreter))
+        return Future(partial(get_local_future, f, identifier, db_url, db, col, key_interpreter))
 
 
 # def verify_kwargs(db_url, db, col, kwargs, key_interpreter_dict):
@@ -116,8 +117,8 @@ def create_future(f, kwargs, db_url, db, col, key_interpreter):
 #             raise ValueError("different arguments for same identifier are not allowed")
 
 
-def identifier_seen(db_url, kwargs, db, col, expected_keys, time_limit=24):
-    collection = find(db_url, db, col, {"identifier": kwargs['identifier']})
+def identifier_seen(db_url, identifier, db, col, expected_keys, time_limit=24):
+    collection = find(db_url, db, col, {"identifier": identifier})
 
     if collection:
         assert len(collection) == 1
@@ -162,11 +163,11 @@ def create_identifier(db_url, db, col, kwargs, key_interpreter_dict):
 from truckms.service_v2.brokerworker.p2p_brokerworker import check_remote_identifier
 def create_remote_identifier(local_identifier, check_remote_identifier_args):
     original_local_identifier = local_identifier
-    args = {k: v for k, v in original_local_identifier}
+    args = {k: v for k, v in check_remote_identifier_args.items()}
     count = 1
     while True:
         args['identifier'] = local_identifier
-        if check_remote_identifier(**check_remote_identifier_args):
+        if check_remote_identifier(**args):
             return local_identifier
         else:
             local_identifier = original_local_identifier + str(count)
@@ -207,14 +208,15 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
         @wraps(f)
         def wrap(*args, **kwargs):
 
-            kwargs['identifier'] = create_identifier(db_url, db, col, kwargs, key_interpreter)
+            identifier = create_identifier(db_url, db, col, kwargs, key_interpreter)
             expected_keys = get_expected_keys(f)
-            if identifier_seen(db_url, kwargs, db, col, expected_keys):
+            if identifier_seen(db_url, identifier, db, col, expected_keys):
                 logger.info("Returning future that may already be precomputed")
-                return create_future(f, kwargs, db_url, db, col, key_interpreter)
+                return create_future(f, identifier, db_url, db, col, key_interpreter)
 
             validate_arguments(f, args, kwargs)
             kwargs.update(expected_keys)
+            kwargs['identifier'] = identifier
 
             lru_ip, lru_port = select_lru_worker(self.local_port)
 
@@ -227,12 +229,14 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
             else:
                 nodes = [str(lru_ip) + ":" + str(lru_port)]
                 # TODO check if the item was allready sent for processing
-                p2p_insert_one(db_url, db, col, kwargs, nodes, current_address_func=partial(self_is_reachable, self.local_port))
                 remote_identifier = create_remote_identifier(kwargs['identifier'], {"ip": lru_ip, "port": lru_port, "db": db, "col": col, "func_name": f.__name__})
-                update_one(db_url, db, col, kwargs['identifier'], {"remote_identifier": remote_identifier}, upsert=False)
+                local_identifier = kwargs['identifier']
+                kwargs['identifier'] = remote_identifier
+                p2p_insert_one(db_url, db, col, kwargs, nodes, current_address_func=partial(self_is_reachable, self.local_port))
+                update_one(db_url, db, col, {'identifier':remote_identifier}, {"remote_identifier": remote_identifier, "identifier": local_identifier}, upsert=False)
                 call_remote_func(lru_ip, lru_port, db, col, f.__name__, remote_identifier)
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
-            return create_future(f, kwargs, db_url, db, col, key_interpreter)
+            return create_future(f, identifier, db_url, db, col, key_interpreter)
         return wrap
     return inner_decorator
 
