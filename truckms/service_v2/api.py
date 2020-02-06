@@ -11,6 +11,9 @@ import inspect
 import socket
 from contextlib import closing
 from deprecated import deprecated
+from truckms.service_v2.registry_args import allowed_func_datatypes
+import os
+from truckms.service_v2.registry_args import get_class_dictionary_from_func
 
 
 """
@@ -255,28 +258,14 @@ def validate_update_callables(kwargs):
 
 
 def validate_arguments(f, args, kwargs):
+    """
+    After the function has been called, it's actual arguments are checked for some other constraints.
+    For example all arguments must be specified as keyword arguments,
+    All arguments must be instances of the declared type.
+    # TODO to prevent security issues maybe the type(arg) == declared type, not isinstance(arg, declared_type)
+    """
     if len(args) != 0:
-        raise ValueError("All arguments to a function in this p2p framework need to be specified keyword arguments")
-    if "identifier" in kwargs:
-        raise ValueError("In this p2p framework, identifier is a reserved keyword argument "
-                         "This helps for memoization and retrieving the results from a function")
-    for v in kwargs.values():
-        if not any(isinstance(v, T) for T in [int, float, bool, io.IOBase, str]):
-            raise ValueError("Currently, for simplicity only integers, floats, strings, bools, files are allowed as "
-                             "arguments")
-    if "value_for_key_is_file" in kwargs.values():
-        raise ValueError("'value_for_key_is_file' string is a reserved value in this p2p framework. It helps "
-                         "identifying a file.")
-    files = [v for v in kwargs.values() if isinstance(v, io.IOBase)]
-    if len(files) > 1:
-        raise ValueError("p2p framework does not currently support sending more files")
-    if files:
-        if any(file.closed or file.mode != 'rb' for file in files):
-            raise ValueError("all files should be opened in read binary mode")
-
-    lambda_callables = [v for v in kwargs.values() if isinstance(v, collections.Callable) and 'lambda' in inspect.getsource(v)]
-    if len(lambda_callables) > 0:
-        raise ValueError("Lambda functions are not allowed because these are local functions and cannot be pickled")
+        raise ValueError("All arguments to a function in this p2p framework need to be specified by keyword arguments")
 
     # check that every value passed in this function has the same type as the one declared in function annotation
     f_param_sign = inspect.signature(f).parameters
@@ -284,25 +273,81 @@ def validate_arguments(f, args, kwargs):
     for k, v in kwargs.items():
         f_param_k_annotation = f_param_sign[k].annotation
         if not isinstance(v, f_param_k_annotation):
-            raise ValueError("class of value {v} for argument {k} is not the same as the annotation {f_param_k_annotation}")
+            raise ValueError(
+                f"class of value {v} for argument {k} is not the same as the annotation {f_param_k_annotation}")
+    if "value_for_key_is_file" in kwargs.values():
+        raise ValueError("'value_for_key_is_file' string is a reserved value in this p2p framework. It helps "
+                         "identifying a file when serializing together with other arguments")
+    files = [v for v in kwargs.values() if isinstance(v, io.IOBase)]
+    if len(files) > 1:
+        raise ValueError("p2p framework does not currently support sending more files")
+    if files:
+        if any(file.closed or file.mode != 'rb' or file.tell() != 0 for file in files):
+            raise ValueError("all files should be opened in read binary mode and pointer must be at start")
 
 
 def validate_function_signature(func):
+    """
+    Verifies that the function signature respects the required information about. The function format should be the following:
+    Each argument must be type annotated. In signature the return type must also appear as a dictionary with keys and their data types.
+    The default accepted data types are file, float, int, string.
+
+    In the future more data types could be allowed, but for each new datatype a few functions for serialization, deserialization,
+    hashing must also be supplied.
+
+    For example:
+    def f(arg1: io.IOBase, arg2: str, arg3: float, arg4: int) -> {"key1": io.IOBase, "key2": str}:
+        # do something
+        return {"key1":open(filepath, "rb"), "key2": "value2"}
+
+    There are some reserved keywords:
+    "identifier"
+    """
     formal_args = list(inspect.signature(func).parameters.keys())
     if "identifier" in formal_args:
         raise ValueError("identifier is a restricted keyword argument in this p2p framework")
 
     return_anno = inspect.signature(func).return_annotation
-    if not ("return" in inspect.getsource(func) and isinstance(return_anno, dict)):
-        raise ValueError("Function must return something. And must be return annotated with dict")
-
-    forbidden_return_dtypes = [collections.Callable, dict, list]
-    assert all(v not in forbidden_return_dtypes for v in return_anno.values())
+    if not "return" in inspect.getsource(func):
+        raise ValueError("Function must return something.")
+    if not isinstance(return_anno, dict):
+        raise ValueError("Function must be return annotated with dict")
+    if not all(isinstance(k, str) for k in return_anno.keys()):
+        raise ValueError("Return dictionary must have as keys only strings")
+    if not all(v in allowed_func_datatypes for v in return_anno.values()):
+        raise ValueError("Return values must be one of the following types {}".format(allowed_func_datatypes))
 
     params = [v[1] for v in list(inspect.signature(func).parameters.items())]
     if any(p.annotation == inspect._empty for p in params):
         raise ValueError("Function must have all arguments type annotated")
+    if any(p.annotation not in allowed_func_datatypes for p in params):
+        raise ValueError("Function arguments must be one of the following types {}".format(allowed_func_datatypes))
 
     # TODO in the future all formal args should have type annotations
     #  and provide serialization and deserialization methods for each
 
+
+def derive_vars_from_function(f, cache_path):
+    """
+    Inspects function signature and creates some necessary variables for p2p framework
+
+    Args:
+        f: function to be decorated
+        cache_path: path to directory to store function arguments and results
+
+    Return:
+        key_interpreter: Function is annotated as def f(arg1: io.IOBase, arg2: str)
+            the resulting dictionary will be {"arg1" io.IOBase, "arg2": str}
+        The following refer to tinymongo db
+            db_url: cache_path
+            db: hardcoded "p2p" key
+            col: function name
+    """
+    db_url = cache_path
+    db = "p2p"
+    validate_function_signature(f)
+    key_interpreter = get_class_dictionary_from_func(f)
+    col = f.__name__
+    updir = os.path.join(cache_path, db, col)
+    os.makedirs(updir, exist_ok=True)
+    return key_interpreter, db_url, db, col

@@ -13,46 +13,18 @@ from typing import Tuple
 logger = logging.getLogger(__name__)
 import time
 from functools import wraps
-import inspect
 import collections.abc
-import dill
-import base64
+import zipfile
 
 
 class TinyMongoClientClean(tinymongo.TinyMongoClient):
+    """
+    Class created in order to suppress the warning about the directory existance for the foldername
+    """
     def __init__(self, foldername=u"tinydb"):
-        # super(TinyMongoClientClean, self).__init__(foldername)
         self._foldername = foldername
         if not os.path.exists(foldername):
             os.mkdir(foldername)
-
-
-def fixate_args(**fixed_kwargs):
-    """
-    Unlike functools.partial where you fixate the arguments, maybe we are unable to fixate the arguments because in
-    flask we have routing and we cannot ignore the arguments that are passed from routing.
-    For example we may fixate some arguments in p2p_route_push_update_one() for security reasons. We may want db and collection
-    to be only "mydb" and "mycollection". One way to do this would be to call functools.partial.
-    But that function is used in flask routing, and other functions from this p2pframework such as p2p_push_update_one
-    will call the function with duplicated arguments.
-    """
-    def inner_decorator(f):
-        formal_args = list(inspect.signature(f).parameters.keys())
-        positions_to_check = {i:arg for i, arg in enumerate(formal_args) if arg in fixed_kwargs}
-        @wraps(f)
-        def wrap(*args, **kwargs):
-            for i, val in enumerate(args):
-                if i in positions_to_check and not val == fixed_kwargs[positions_to_check[i]]:
-                    raise ValueError("bad argument: expected ", fixed_kwargs[positions_to_check[i]], "found", val)
-            for k in kwargs:
-                if k in fixed_kwargs and not kwargs[k] == fixed_kwargs[k]:
-                    raise ValueError("bad argument: expected ", fixed_kwargs[k], "found", kwargs[k])
-            return f(*args, **kwargs)
-        return wrap
-    return inner_decorator
-
-import tempfile
-import zipfile
 
 
 def zip_files(files):
@@ -84,11 +56,15 @@ def unzip_files(file, up_dir):
 
 def serialize_doc_for_net(data) -> Tuple[dict, str]:
     """
-    data should be a dictionary
-    return tuple containing a dictionary with handle for a single file and json
-    example:
-    {}, json string: '{"key":value}'
-    {"filename":handle}, '{}'
+    Function that will serialize dictionary for sending over the network using the flask framework
+
+    Args:
+        data: dictionary containing serializable data
+
+    Returns:
+        return tuple containing a dictionary with handle for a single file and json
+        the json may contain additional information in order to decode the files after they are received at the
+        other end
     """
     files = {os.path.basename(v.name): v for k, v in data.items() if isinstance(v, io.IOBase)}
     files_significance = {os.path.basename(v.name): k for k, v in data.items() if isinstance(v, io.IOBase)}
@@ -97,20 +73,38 @@ def serialize_doc_for_net(data) -> Tuple[dict, str]:
     new_data = serialize_doc_for_db(new_data)
     json_obj = dumps(new_data)
     if len(files) >= 2:
+        # the reasong for zipping is explained below
+        # the flask framework can receive multiple files
+        # the requests package can send multiple files
+        # the requests package can download a single file (per transaction)
+        # the flask framrwork can send only a single file as download
         files = zip_files(files)
     return files, json_obj
 
 
 def deserialize_doc_from_net(files, json, up_dir, key_interpreter=None):
     """
-    both are dictionaries
-    the files dict should contain a single handle to file
-    #TODO implement for .ZIP file
+    Function should be called from a flask route context. Will deserialize data sent from the network.
+
+    Args:
+        files: dictionary containing filenames and the file objects
+        json: dictionary to be decoded. In case files is not empty there will be some additional information
+            in the json that will help decode the files
+        up_dir: in case files dictionary is not empty then the files must be stored somewhere
+        key_interpreter: dictionary containing keys and types as values helping to decode the json
+
+    Returns:
+        decoded data dictionary
+        it may look as {"key": io.IOBase, "key1": "value"}
     """
     data = loads(json)
 
     listkeys = list(files.keys())
-    assert len(listkeys) <= 1
+    assert len(listkeys) <= 1  # this assert is explained below
+    # the flask framework can receive multiple files
+    # the requests package can send multiple files
+    # the requests package can download a single file (per transaction)
+    # the flask framrwork can send only a single file as download
     if listkeys:
         original_filename = listkeys[0]
         filepath = os.path.join(up_dir, original_filename)
@@ -137,7 +131,23 @@ def deserialize_doc_from_net(files, json, up_dir, key_interpreter=None):
     return data
 
 
-def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=deserialize_doc_from_net, current_address_func=lambda: None):
+def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=deserialize_doc_from_net):
+    """
+    Function designed to be decorated with flask.app.route
+    The function should be partially applied will all arguments
+
+    The function receives a request json and some files that are part of the same datapoint that can be represented with
+    a dictionary.
+    The json and files are decoded together to return the actual datapoint that will be inserted to database.
+    A datapoint could look as {"key1": str, "key2": io.IOBase}
+
+    Args:
+        db_path, db, col are part of tinymongo db
+        key_interpreter: dictionary containing keys and the expected datatypes
+        deserializer: function that deserializes the json and files (files should be saved to some directory known by the deserialized function)
+    Returns:
+        flask Response
+    """
     if request.files:
         filename = list(request.files.keys())[0]
         files = {secure_filename(filename): request.files[filename]}
@@ -145,21 +155,36 @@ def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=de
         files = dict()
 
     data_to_insert = deserializer(files, request.form['json'], key_interpreter=key_interpreter)
-    data_to_insert["current_address"] = current_address_func()
+    assert set(data_to_insert.keys()) == key_interpreter.keys()
+    # this will insert. and if the same data exists then it will crash
     update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
     return make_response("ok")
 
-# def p2p_route_insert_many(db_path, db, col, deserializer=default_deserialize, current_address_func=lambda: None):
-#     if request.files:
-#         raise ValueError("Not implemented for many documents with files")
-#
-#     data_to_insert = deserializer({}, request.form['json'])
-#     data_to_insert["current_address"] = current_address_func()
-#     # collection.insert_one(data_to_insert)
-#     update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
-
 
 def p2p_route_push_update_one(db_path, db, col, deserializer=deserialize_doc_from_net):
+    """
+    Function designed to be decorated with flask.app.route
+    The function should be partially applied will all arguments
+
+    Push update refers to the fact that the current node is reachable and new data can be pushed to it.
+    The data can create a graph of connections thus in order for the data to be syncronized, the nodes that also have the same data
+    will be updated from this call.
+    A depth first search will be made and visited nodes will be returned
+
+    When called using http the formular should contain the following keys whose values are actually some jsons
+    that can be further decoded to an actual dictionary
+    update_json: the json that encodes a dictionary that contains new data
+    filter_json: the json that encodes a dictionaty that contains the filter which will be used to search for the datapoint to be updated using tinymongo
+    visited_json: nodes that have already been visited
+    recursive: whether this function should propagate the update or not to other nodes related to this datapoint
+
+    Args:
+        db_path, db, col are part of tinymongo db
+        deserializer: function that deserializes the json and files (files should be saved to some directory known by the deserialized function)
+    Returns:
+        set of visited nodes as a json flask response
+
+    """
     if request.files:
         filename = list(request.files.keys())[0]
         files = {secure_filename(filename): request.files[filename]}
@@ -175,6 +200,25 @@ def p2p_route_push_update_one(db_path, db, col, deserializer=deserialize_doc_fro
 
 
 def p2p_route_pull_update_one(db_path, db, col, serializer=serialize_doc_for_net):
+    """
+    Function designed to be decorated with flask.app.route
+    The function should be partially applied will all arguments
+
+    Pull update refers to the fact that the current node is reachable and data can be pulled from it. This is useful for
+    nodes that are not reachable
+
+    When called using http the formular should contain the following keys whose values are actually some jsons
+    that can be further decoded to an actual dictionary
+    filter_json: the json that encodes a dictionaty that contains the filter which will be used to search for the datapoint to be updated using tinymongo
+    req_keys_json: the required keys to be downloaded
+    hint_file_keys_json: some key values are files and these need to be explicityly declared
+
+    Args:
+        db_path, db, col are part of tinymongo db
+        serializer: function that serializes the datapoint (files should be saved to some directory known by the deserialized function)
+    Returns:
+        flask response that will contain the dictionary as a json in header metadata and one file (which may be an archive for multiple files)
+    """
     req_keys = loads(request.form['req_keys_json'])
     filter_data = loads(request.form['filter_json'])
     hint_file_keys = loads(request.form['hint_file_keys_json'])
@@ -210,7 +254,7 @@ def p2p_route_pull_update_one(db_path, db, col, serializer=serialize_doc_for_net
 def create_p2p_blueprint(up_dir, db_url, key_interpreter=None, current_address_func=lambda: None):
     p2p_blueprint = P2PBlueprint("p2p_blueprint", __name__, role="storage")
     new_deserializer = partial(deserialize_doc_from_net, up_dir=up_dir)
-    p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db_path=db_url, deserializer=new_deserializer, current_address_func=current_address_func, key_interpreter=key_interpreter)))
+    p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db_path=db_url, deserializer=new_deserializer, key_interpreter=key_interpreter)))
     p2p_blueprint.route("/insert_one/<db>/<col>", methods=['POST'])(p2p_route_insert_one_func)
     p2p_route_push_update_one_func = (wraps(p2p_route_push_update_one)(partial(p2p_route_push_update_one, db_path=db_url, deserializer=new_deserializer)))
     p2p_blueprint.route("/push_update_one/<db>/<col>", methods=['POST'])(p2p_route_push_update_one_func)

@@ -98,6 +98,15 @@ def cls_finder(d):
         return Dict[cls_finder(keys[0]), cls_finder(values[0])]
 
 
+"""
+The difference between the data types listed here and those in db_encoder dict is that db_encoder contains data types
+that are needed to serialize data.
+If input arguments should be something like Dict[str, str] then there should be a function that will actually check
+that all arguments to the dictionary are of those types
+"""
+allowed_func_datatypes = [int, float, str, IOBase, bool]
+
+
 db_encoder = {int: lambda value: value,
               float: lambda value: value,
               str: lambda value: value,
@@ -169,6 +178,11 @@ def get_class_dictionary_from_doc(doc):
 
 
 def get_class_dictionary_from_func(func):
+    """
+    Return a dictionary that contains function argument names and their data types:
+    Function is annotated as def f(arg1: io.IOBase, arg2: str)
+    Thus the resulting dictionary will be {"arg1" io.IOBase, "arg2": str}
+    """
     doc = inspect.signature(func).parameters
     return {k: v.annotation for k, v in doc.items()}
 

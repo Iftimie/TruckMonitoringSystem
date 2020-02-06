@@ -3,7 +3,7 @@ from truckms.service_v2.api import P2PFlaskApp, validate_function_signature
 from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
 import multiprocessing
 from flask import make_response, jsonify
-import tinymongo
+from truckms.service_v2.api import derive_vars_from_function
 import time
 import os
 from functools import wraps, partial
@@ -51,9 +51,32 @@ def function_executor(f, identifier, db, col, db_url, key_interpreter):
     return update_
 
 
-def execute_function(identifier, f, db_url, db, col, key_interpreter, can_do_locally_func, self):
+def route_execute_function(identifier, f, db_url, db, col, key_interpreter, can_do_locally_func, self):
+    """
+    Function designed to be decorated with flask.app.route
+    The function should be partially applied will all arguments
+
+    # TODO identifier should be receives using a post request or query parameter or url parameter as in here
+    #  most of the other routed functions are requesting post json
+
+    Args from network:
+        identifier: string will be received when there is a http call
+
+    Args from partial application of the function:
+        f: function to execute
+        db_path, db, col are part of tinymongo db
+        key_interpreter: dictionary containing keys and the expected data types
+        can_do_locally_func: function that returns True or False and says if the current function should be executed or not
+        self: P2PFlaskApp instance. this instance contains a worker pool and a list of futures #TODO maybe instead of self, only these arguments should be passed
+    Returns:
+        flask response that will contain the dictionary as a json in header metadata and one file (which may be an archive for multiple files)
+    """
     if can_do_locally_func():
-        new_f = wraps(f)(partial(function_executor, f=f, identifier=identifier, db_url=db_url, db=db, col=col, key_interpreter=key_interpreter))
+        new_f = wraps(f)(
+            partial(function_executor,
+                    f=f, identifier=identifier,
+                    db_url=db_url, db=db, col=col,
+                    key_interpreter=key_interpreter))
         res = self.worker_pool.apply_async(func=new_f)
         TinyMongoClientClean(db_url)[db][col].update_one({"identifier": identifier}, {"started": f.__name__})
         self.list_futures.append(res)
@@ -83,7 +106,18 @@ def search_work(db_url, db, collection, func_name, time_limit):
         return jsonify({})
 
 
-def identifier_available(db_path, db, col, identifier):
+def route_identifier_available(db_path, db, col, identifier):
+    """
+    Function designed to be decorated with flask.app.route
+    The function should be partially applied will all arguments
+
+    The function will return a boolean about the received identifier already exists or not in the database
+
+    Args from network:
+        identifier: string will be received when there is a http call
+    Args from partial application of the function:
+        db_path, db, col are part of tinymongo db
+    """
     collection = find(db_path, db, col, {"identifier": identifier})
     if len(collection) == 0:
         return make_response("yes", 200)
@@ -91,41 +125,58 @@ def identifier_available(db_path, db, col, identifier):
         return make_response("no", 404)
 
 
-def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, current_address_func=lambda: None, time_limit=12):
-    db_url = cache_path
-    db = "p2p"
+def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, time_limit=12):
+    """
+    In p2p brokerworker will have the role of either executing a function that was registered (worker role), or store the arguments in a
+     database in order to execute the function later by a clientworker (broker role).
+
+    Args:
+        self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
+            just to avoid making redundant Classes. Just trying to make the code more functional
+        cache_path: path to a directory that serves storing information about function calls in a database
+        can_do_locally_func: function that returns True if work can be done locally and false if it should be done later
+            by this current node or by a clientworker
+        limit=hours
+    """
 
     def inner_decorator(f):
-        validate_function_signature(f)
-        key_interpreter = get_class_dictionary_from_func(f)
-
-        col = f.__name__
+        key_interpreter, db_url, db, col = derive_vars_from_function(f, cache_path)
         updir = os.path.join(cache_path, db, col)
-        os.makedirs(updir, exist_ok=True)
-
-        execute_function_partial = wraps(f)(partial(execute_function, f=f, db_url=db_url, db=db, col=col, key_interpreter=key_interpreter, can_do_locally_func=can_do_locally_func, self=self))
-
-        # self_is_reachable
-        new_deserializer = partial(deserialize_doc_from_net, up_dir=updir)
 
         # these functions below make more sense in p2p_data.py
-        p2p_route_insert_one_func = (wraps(p2p_route_insert_one)(partial(p2p_route_insert_one, db=db, col=col, db_path=db_url,
-                                                                         deserializer=new_deserializer,
-                                                                         current_address_func=current_address_func,
-                                                                         key_interpreter=key_interpreter)))
+        p2p_route_insert_one_func = wraps(p2p_route_insert_one)(
+            partial(p2p_route_insert_one,
+                    db=db, col=col, db_path=db_url,
+                    deserializer=partial(deserialize_doc_from_net, up_dir=updir),
+                    key_interpreter=key_interpreter))
         self.route("/insert_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_insert_one_func)
-        p2p_route_push_update_one_func = (wraps(p2p_route_push_update_one)(partial(p2p_route_push_update_one, db_path=db_url, db=db, col=col, deserializer=new_deserializer)))
-        self.route("/push_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_push_update_one_func)
-        p2p_route_pull_update_one_func = (wraps(p2p_route_pull_update_one)(partial(p2p_route_pull_update_one, db_path=db_url, db=db, col=col)))
 
-        # TODO be careful with these paths as they have been changed form <> to {} (variable to fixed)
+        p2p_route_push_update_one_func = wraps(p2p_route_push_update_one)(
+            partial(p2p_route_push_update_one,
+                    db_path=db_url, db=db, col=col,
+                    deserializer=partial(deserialize_doc_from_net, up_dir=updir)))
+        self.route("/push_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_push_update_one_func)
+
+        p2p_route_pull_update_one_func = wraps(p2p_route_pull_update_one)(
+            partial(p2p_route_pull_update_one,
+                    db_path=db_url, db=db, col=col))
         self.route("/pull_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_pull_update_one_func)
-        self.route('/execute_function/{db}/{col}/{fname}/<identifier>'.format(db=db, col=col, fname=f.__name__),
-                   methods=['POST'])(execute_function_partial)
-        search_work_partial = (wraps(search_work))(partial(search_work, db_url=db_url, db=db, collection=col, func_name=f.__name__, time_limit=time_limit))
+
+        execute_function_partial = wraps(f)(
+            partial(route_execute_function,
+                    f=f, db_url=db_url, db=db, col=col,
+                    key_interpreter=key_interpreter, can_do_locally_func=can_do_locally_func, self=self))
+        self.route('/execute_function/{db}/{col}/{fname}/<identifier>'.format(db=db, col=col, fname=f.__name__), methods=['POST'])(execute_function_partial)
+
+        search_work_partial = wraps(search_work)(
+            partial(search_work,
+                    db_url=db_url, db=db, collection=col,
+                    func_name=f.__name__, time_limit=time_limit))
         self.route("/search_work/{db}/{col}/{fname}".format(db=db, col=col, fname=f.__name__), methods=['POST'])(search_work_partial)
 
-        identifier_available_partial = (wraps(identifier_available))(partial(identifier_available, db_path=db_url, db=db, col=col))
+        identifier_available_partial = wraps(route_identifier_available)(
+            partial(route_identifier_available,
+                    db_path=db_url, db=db, col=col))
         self.route("/identifier_available/{db}/{col}/{fname}/<identifier>".format(db=db, col=col, fname=f.__name__), methods=['GET'])(identifier_available_partial)
 
     return inner_decorator

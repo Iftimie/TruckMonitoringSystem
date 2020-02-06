@@ -1,25 +1,26 @@
-from truckms.service_v2.api import P2PFlaskApp, validate_arguments, find_update_callables, validate_function_signature
+from truckms.service_v2.api import P2PFlaskApp, validate_arguments
 from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
 from functools import wraps
 from truckms.service_v2.userclient.userclient import select_lru_worker
 from functools import partial
-from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one, find
+from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one
 from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net
-from truckms.service_v2.registry_args import get_class_dictionary_from_func
 import logging
 from truckms.service_v2.api import self_is_reachable
 from truckms.service_v2.brokerworker.p2p_brokerworker import call_remote_func, function_executor
 import multiprocessing
-import collections
-import inspect
 import io
 import os
 from truckms.service_v2.api import wait_until_online
 import time
 import threading
-import deprecated
 import inspect
 import requests
+from truckms.service_v2.p2pdata import update_one
+from truckms.service_v2.api import derive_vars_from_function
+from truckms.service_v2.registry_args import hash_kwargs
+from truckms.service_v2.registry_args import kicomp
+from truckms.service_v2.p2pdata import find
 logger = logging.getLogger(__name__)
 
 
@@ -148,10 +149,20 @@ def identifier_seen(db_url, identifier, db, col, expected_keys, time_limit=24):
     else:
         return False
 
-from truckms.service_v2.registry_args import hash_kwargs
-from truckms.service_v2.registry_args import kicomp
-from truckms.service_v2.p2pdata import find
+
 def create_identifier(db_url, db, col, kwargs, key_interpreter_dict):
+    """
+    A hash from the arguments will be created that will help to easily identify the set of arguments for later retrieval
+
+    Args:
+        db_url, db, col: arguments for tinymongo db
+        kwargs: the provided function keyword arguments
+        key_interpreter_dict: dictionary containing key and the expected data type. Used for decoding arguments from the
+            database in case the initial created identifier already exists (for different reasons)
+
+    Returns:
+        identifier: string
+    """
     identifier = hash_kwargs({k:v for k, v in kwargs.items() if k in key_interpreter_dict})
     identifier_original = identifier  # deepcopy
 
@@ -191,34 +202,22 @@ def create_remote_identifier(local_identifier, check_remote_identifier_args):
                 raise ValueError("Too many hash collisions. Change the hash function")
 
 
-from truckms.service_v2.p2pdata import update_one
 def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
     """
     In p2p client the register decorator will have the role of deciding if the function should be executed remotely or
-    locally. It will store the input in a collection. If the node is reachable, then data will be updated automatically,
-    otherwise data will be updated at subsequent calls.
-
-    The decorator will assign to the function a property that allows accessing the database and the calls.
+    locally. It will store the input in a collection. If the current node is reachable, then data will be updated automatically,
+    otherwise data will be updated at subsequent calls by using a future object
 
     Args:
-        db_url: path to db
-        db: string for database name
-        col: string for collection name
+        self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
+            just to avoid making redundant Classes. Just trying to make the code more functional
+        cache_path: path to a directory that serves storing information about function calls in a database
         can_do_locally_func: function that returns True if work can be done locally and false if it should be done remotely
             if not specified, then it means all calls should be done remotely
-        limit=hours
     """
 
-    db_url = cache_path
-    db = "p2p"
-
     def inner_decorator(f):
-        validate_function_signature(f)
-        key_interpreter = get_class_dictionary_from_func(f)
-
-        col = f.__name__
-        updir = os.path.join(cache_path, db, col)
-        os.makedirs(updir, exist_ok=True)
+        key_interpreter, db_url, db, col = derive_vars_from_function(f, cache_path)
 
         @wraps(f)
         def wrap(*args, **kwargs):
