@@ -6,7 +6,7 @@ import shutil
 
 
 if __name__ == "__main__":
-    clientworker_app = create_p2p_clientworker_app("discovery_ips_clientworker.txt",
+    clientworker_app = create_p2p_clientworker_app("network_discovery_clientworker.txt",
                                                    P2PFlaskApp(__name__, local_port=5002))
     path = '/home/achellaris/projects_data/TruckMonitoringSystem/service/clientworker.db'
 
