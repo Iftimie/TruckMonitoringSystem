@@ -111,6 +111,11 @@ class Future:
 
 
 def get_expected_keys(f):
+    """
+    By inspecting the the function signature we can get a dictionary with the arguments (because all are annotated)
+    and a dictionary about the return (because this is required by the p2p framework)
+    The combined dictionary will be stored in the database
+    """
     expected_keys = inspect.signature(f).return_annotation
     expected_keys = {k:None for k in expected_keys}
     expected_keys['progress'] = 0

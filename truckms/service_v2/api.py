@@ -304,8 +304,8 @@ def validate_function_signature(func):
     "identifier"
     """
     formal_args = list(inspect.signature(func).parameters.keys())
-    if "identifier" in formal_args:
-        raise ValueError("identifier is a restricted keyword argument in this p2p framework")
+    if any(key in formal_args for key in ["identifier", "nodes", "timestamp"]):
+        raise ValueError("identifier, nodes, timestamp are restricted keywords in this p2p framework")
 
     return_anno = inspect.signature(func).return_annotation
     if not "return" in inspect.getsource(func):
@@ -323,6 +323,8 @@ def validate_function_signature(func):
     if any(p.annotation not in allowed_func_datatypes for p in params):
         raise ValueError("Function arguments must be one of the following types {}".format(allowed_func_datatypes))
 
+    if len(set(formal_args) & set(return_anno.keys())) != 0:
+        raise ValueError("The keys specified in return annotation must not be found in arguments names")
     # TODO in the future all formal args should have type annotations
     #  and provide serialization and deserialization methods for each
 
@@ -348,6 +350,4 @@ def derive_vars_from_function(f, cache_path):
     validate_function_signature(f)
     key_interpreter = get_class_dictionary_from_func(f)
     col = f.__name__
-    updir = os.path.join(cache_path, db, col)
-    os.makedirs(updir, exist_ok=True)
     return key_interpreter, db_url, db, col

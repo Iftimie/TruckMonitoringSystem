@@ -141,7 +141,8 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, time_l
 
     def inner_decorator(f):
         key_interpreter, db_url, db, col = derive_vars_from_function(f, cache_path)
-        updir = os.path.join(cache_path, db, col)
+        updir = os.path.join(cache_path, db, col)  # upload directory
+        os.makedirs(updir, exist_ok=True)
 
         # these functions below make more sense in p2p_data.py
         p2p_route_insert_one_func = wraps(p2p_route_insert_one)(
