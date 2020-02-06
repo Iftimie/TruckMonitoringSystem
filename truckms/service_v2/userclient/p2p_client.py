@@ -19,8 +19,9 @@ import requests
 from truckms.service_v2.p2pdata import update_one
 from truckms.service_v2.api import derive_vars_from_function
 from truckms.service_v2.registry_args import hash_kwargs
-from truckms.service_v2.registry_args import kicomp
+from truckms.service_v2.brokerworker.p2p_brokerworker import check_remote_identifier
 from truckms.service_v2.p2pdata import find
+from truckms.service_v2.registry_args import kicomp
 logger = logging.getLogger(__name__)
 
 
@@ -53,11 +54,6 @@ def p2p_dictionary_update(update_dictionary):
     actual_args = find_required_args()
     filter_ = {"identifier": actual_args['identifier']}
     p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_dictionary)
-
-from truckms.service_v2.registry_args import kicomp
-
-
-
 
 
 def get_remote_future(f, identifier, db_url, db, col, key_interpreter_dict):
@@ -130,15 +126,10 @@ def create_future(f, identifier, db_url, db, col, key_interpreter):
         return Future(partial(get_local_future, f, identifier, db_url, db, col, key_interpreter))
 
 
-# def verify_kwargs(db_url, db, col, kwargs, key_interpreter_dict):
-#     collection = find(db_url, db, col, {"identifier": kwargs['identifier']}, key_interpreter_dict)
-#     if collection:
-#         item = collection[0]
-#         if not all(kicomp(kwargs[k]) == kicomp(item[k]) for k in kwargs):
-#             raise ValueError("different arguments for same identifier are not allowed")
-
-
 def identifier_seen(db_url, identifier, db, col, expected_keys, time_limit=24):
+    """
+    Returns boolean about if the current arguments resulted in an identifier that was already seen
+    """
     collection = find(db_url, db, col, {"identifier": identifier})
 
     if collection:
@@ -191,8 +182,10 @@ def create_identifier(db_url, db, col, kwargs, key_interpreter_dict):
                 raise ValueError("Too many hash collisions. Change the hash function")
 
 
-from truckms.service_v2.brokerworker.p2p_brokerworker import check_remote_identifier
 def create_remote_identifier(local_identifier, check_remote_identifier_args):
+    """
+    A remote identifier is created in order to prevent name collisions in worker nodes.
+    """
     original_local_identifier = local_identifier
     args = {k: v for k, v in check_remote_identifier_args.items()}
     count = 1
@@ -209,7 +202,7 @@ def create_remote_identifier(local_identifier, check_remote_identifier_args):
 
 def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
     """
-    In p2p client the register decorator will have the role of deciding if the function should be executed remotely or
+    In p2p client, this decorator will have the role of deciding if the function should be executed remotely or
     locally. It will store the input in a collection. If the current node is reachable, then data will be updated automatically,
     otherwise data will be updated at subsequent calls by using a future object
 
@@ -248,11 +241,18 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
             else:
                 nodes = [str(lru_ip) + ":" + str(lru_port)]
                 # TODO check if the item was allready sent for processing
+
+                # This is a bit messy about remote identifier and local identifier (not sure what is the best way to solve
+                # identifier collisions on server
+                # TODO to solve this messy remote identifier stuff, the route_execute_function should actually receive
+                #  an arbitrary filter (that may or may not contain the identifier keyword)
+                #  which would also solve another TODO from route_execute_function
+                #  the current node should pull the identifier that the worker created and use it to filter the next time the arguments
                 remote_identifier = create_remote_identifier(kwargs['identifier'], {"ip": lru_ip, "port": lru_port, "db": db, "col": col, "func_name": f.__name__})
                 local_identifier = kwargs['identifier']
                 kwargs['identifier'] = remote_identifier
                 p2p_insert_one(db_url, db, col, kwargs, nodes, current_address_func=partial(self_is_reachable, self.local_port))
-                update_one(db_url, db, col, {'identifier':remote_identifier}, {"remote_identifier": remote_identifier, "identifier": local_identifier}, upsert=False)
+                update_one(db_url, db, col, {'identifier': remote_identifier}, {"remote_identifier": remote_identifier, "identifier": local_identifier}, upsert=False)
                 call_remote_func(lru_ip, lru_port, db, col, f.__name__, remote_identifier)
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
             return create_future(f, identifier, db_url, db, col, key_interpreter)

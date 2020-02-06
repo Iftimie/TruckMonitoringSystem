@@ -127,7 +127,7 @@ def route_identifier_available(db_path, db, col, identifier):
 
 def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, time_limit=12):
     """
-    In p2p brokerworker will have the role of either executing a function that was registered (worker role), or store the arguments in a
+    In p2p brokerworker, this decorator will have the role of either executing a function that was registered (worker role), or store the arguments in a
      database in order to execute the function later by a clientworker (broker role).
 
     Args:
