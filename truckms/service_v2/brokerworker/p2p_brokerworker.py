@@ -1,5 +1,5 @@
 import requests
-from truckms.service_v2.api import P2PFlaskApp, validate_function_signature
+from truckms.service_v2.api import P2PFlaskApp
 from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
 import multiprocessing
 from flask import make_response, jsonify
@@ -8,16 +8,12 @@ import time
 import os
 from flask import request
 from functools import wraps, partial
-from truckms.service_v2.p2pdata import p2p_route_insert_one, deserialize_doc_from_net, p2p_route_pull_update_one, p2p_route_push_update_one
+from truckms.service_v2.p2pdata import p2p_route_insert_one, deserialize_doc_from_net, p2p_route_pull_update_one, \
+    p2p_route_push_update_one
 from truckms.service_v2.p2pdata import find, p2p_push_update_one, TinyMongoClientClean
-from truckms.service_v2.registry_args import get_class_dictionary_from_func
-import traceback
-from flask.logging import default_handler
 import inspect
 import logging
-from logging.config import dictConfig
 from json import dumps, loads
-logger = logging.getLogger(__name__)
 
 
 def call_remote_func(ip, port, db, col, func_name, filter):
@@ -45,7 +41,18 @@ def check_remote_identifier(ip, port, db, col, func_name, identifier):
         raise ValueError("Problem")
 
 
-def function_executor(f, filter, db, col, db_url, key_interpreter):
+def function_executor(f, filter, db, col, db_url, key_interpreter, q):
+    qh = logging.handlers.QueueHandler(q)
+    root = logging.getLogger()
+    root.setLevel(logging.DEBUG)
+    # show only critical errors in console from workers
+    # the rest of the errors will be handled customly
+    # or instead of setting crititcal maybe the only handler should be qh
+    root.handlers = []
+    root.addHandler(qh)
+
+    logger = logging.getLogger(__name__)
+
     kwargs_ = find(db_url, db, col, filter, key_interpreter)[0]
     kwargs = {k:kwargs_[k] for k in inspect.signature(f).parameters.keys()}
 
@@ -89,7 +96,8 @@ def route_execute_function(f, db_url, db, col, key_interpreter, can_do_locally_f
             partial(function_executor,
                     f=f, filter=filter,
                     db_url=db_url, db=db, col=col,
-                    key_interpreter=key_interpreter))
+                    key_interpreter=key_interpreter,
+                    q = self.q))
         res = self.worker_pool.apply_async(func=new_f)
         TinyMongoClientClean(db_url)[db][col].update_one(filter, {"started": f.__name__})
         self.list_futures.append(res)
@@ -205,46 +213,18 @@ def heartbeat(db_url, db="tms"):
     return make_response("Thank god you are alive", 200)
 
 
-def configure_logger(app):
-    # https://fangpenlin.com/posts/2012/08/26/good-logging-practice-in-python/
-    app.logger.removeHandler(default_handler)
-    dictConfig({
-        'version': 1,
-        'disable_existing_loggers': False,
-        'formatters': {'default': {
-            'format': '[asdasdasdasdasdasd%(asctime)s] %(levelname)s in %(module)s: %(message)s',
-        }},
-        'handlers': {
-            'console': {
-                'level': 'WARNING',
-                'class': 'logging.StreamHandler',
-                'stream': "ext://sys.stdout",
-                'formatter': 'default'
-            },
-            "info_file_handler": {
-                "class": "logging.handlers.RotatingFileHandler",
-                "level": "INFO",
-                "formatter": "default",
-                "filename": "info.log",
-                "maxBytes": 10485760,
-                "backupCount": 20,
-                "encoding": "utf8"
-            },
-            "error_file_handler": {
-                "class": "logging.handlers.RotatingFileHandler",
-                "level": "ERROR",
-                "formatter": "default",
-                "filename": "errors.log",
-                "maxBytes": 10485760,
-                "backupCount": 20,
-                "encoding": "utf8"
-            }
-        },  # TODO maybe add an email handler
-        'root': {
-            'level': 'INFO',
-            'handlers': ['console', 'info_file_handler', 'error_file_handler']
-        }
-    })
+import logging
+from multiprocessing import Queue
+import threading
+
+def logger_thread(q):
+    while True:
+        record = q.get()
+        if record is None:
+            break
+        print(record.name, "asdasdasdasdaaaaaaaaqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq")
+        logger = logging.getLogger(record.name)
+        logger.handle(record)
 
 
 def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
@@ -255,9 +235,14 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
         port:
         discovery_ips_file: file with other nodes
     """
+
+    m = multiprocessing.Manager()
+    q = m.Queue()
+    lp = threading.Thread(target=logger_thread, args=(q,))
+    lp.start()
+
     if p2p_flask_app is None:
         p2p_flask_app = P2PFlaskApp(__name__)
-    configure_logger(p2p_flask_app)
 
     p2p_flask_app.roles.append("brokerworker")
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
@@ -267,6 +252,7 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(2)
     p2p_flask_app.list_futures = []
+    p2p_flask_app.q = q
     # TODO I need to create a time regular func for those requests that are old in order to execute them in broker
 
     return p2p_flask_app

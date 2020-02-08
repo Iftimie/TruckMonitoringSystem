@@ -1,3 +1,5 @@
+from logging.config import dictConfig
+
 import requests
 from flask import request, jsonify, send_file, make_response
 from json import dumps, loads
@@ -10,7 +12,6 @@ import traceback
 import tinymongo
 import os
 from typing import Tuple
-logger = logging.getLogger(__name__)
 import time
 from functools import wraps
 import collections.abc
@@ -314,6 +315,8 @@ def p2p_insert_one(db_path, db, col, document, nodes, serializer=serialize_doc_f
     post_func is used especially for testing
     current_address_func: self_is_reachable should be called or actually a function that returns the current address
     """
+    logger = logging.getLogger(__name__)
+
     current_addr = current_address_func()
     data = {k:v for k, v in document.items()}
     try:
@@ -341,6 +344,8 @@ def p2p_insert_one(db_path, db, col, document, nodes, serializer=serialize_doc_f
 
 
 def p2p_push_update_one(db_path, db, col, filter, update,  serializer=serialize_doc_for_net, visited_nodes=None, recursive=True):
+    logger = logging.getLogger(__name__)
+
     if visited_nodes is None:
         visited_nodes = []
     try:
@@ -378,9 +383,7 @@ def p2p_push_update_one(db_path, db, col, filter, update,  serializer=serialize_
                     returned_json = res.json # from Flask test client
                 visited_nodes = list(set(visited_nodes) | set(returned_json))
         except:
-            traceback.print_exc()
-            logger.info(traceback.format_exc())
-            logger.info("Unable to post p2p data")
+            logger.info("Unable to post p2p data to node: {}".format(node))
 
     return visited_nodes
 
@@ -415,6 +418,8 @@ def merge_downloaded_data(original_data, merging_data):
 
 
 def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_file_keys=None, merging_func=merge_downloaded_data):
+    logger = logging.getLogger(__name__)
+
     if hint_file_keys is None:
         hint_file_keys = []
 
@@ -464,3 +469,106 @@ def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_f
     except ValueError as e:
         logger.info(traceback.format_exc())
         raise e
+
+
+
+
+
+def configure_logger():
+    # https://fangpenlin.com/posts/2012/08/26/good-logging-practice-in-python/
+    # HINT do not use dictConfig as it either removes existing loggers or leaves existing loggers with old configuration
+    # and duplicates output
+    # import sys
+    # logging._handlers
+    # info_file_handler = logging.FileHandler('info.log')
+    # formatter = logging.Formatter('asdasdasdasdasd%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+    # info_file_handler.formatter = formatter
+    # info_file_handler.level = logging.INFO
+    # console_handler = logging.StreamHandler(sys.stdout)
+    # console_handler.formatter = formatter
+    # console_handler.level = logging.WARNING
+    # error_file_handler = logging.handlers.RotatingFileHandler('info.log')
+    # error_file_handler.formatter = formatter
+    # error_file_handler.level = logging.WARNING
+    #
+    # # logging.basicConfig(level=logging.INFO, format='asdasdasdasdasd[%(asctime)s] %(message)s', datefmt='%Y-%m-%d %H:%M:%S',
+    # #                     handlers=[info_file_handler, console_handler, error_file_handler])
+    #
+    # # logger = logging.getLogger('flask.app')
+    # logger = app.logger
+    # logger.handlers = [info_file_handler, console_handler, error_file_handler]
+    # logger = logging.getLogger('root')
+    # logger.handlers = [info_file_handler, console_handler, error_file_handler]
+    # app.logger
+    # logger.addHandler()
+
+    format_string = 'asdasdasdasdasd%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+
+    import sys
+    dictConfig({
+        'version': 1,
+        'disable_existing_loggers': True,
+        'formatters': {'MYFORMATTER': {
+            'format': format_string,
+        }},
+        'handlers': {
+            'console': {
+                'level': 'WARNING',
+                'class': 'logging.StreamHandler',
+                'stream': "ext://sys.stdout",
+                'formatter': 'MYFORMATTER'
+            },
+            "info_file_handler": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "level": "INFO",
+                "formatter": "MYFORMATTER",
+                "filename": "info.log",
+                "maxBytes": 10485760,
+                "backupCount": 20,
+                "encoding": "utf8"
+            },
+            "error_file_handler": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "level": "ERROR",
+                "formatter": "MYFORMATTER",
+                "filename": "errors.log",
+                "maxBytes": 10485760,
+                "backupCount": 20,
+                "encoding": "utf8"
+            },
+            'wsgi': {
+                "level": "ERROR",
+                'class': 'logging.StreamHandler',
+                'stream': 'ext://flask.logging.wsgi_errors_stream',
+                'formatter': 'MYFORMATTER'
+            }
+        },  # TODO maybe add an email handler
+        '': {
+            'level': 'WARNING',
+            'handlers': ['console', 'info_file_handler', 'error_file_handler']
+        },
+        'root': {
+            'level': 'WARNING',
+            'handlers': ['console', 'info_file_handler', 'error_file_handler']
+        },
+        __name__: {
+            'level': 'INFO',
+            'handlers': ['console', 'info_file_handler', 'error_file_handler']
+        }
+    })
+
+    formatter = logging.Formatter(format_string)
+
+    info_file_handler = logging.FileHandler('info.log')
+    info_file_handler.setFormatter(formatter)
+    info_file_handler.setLevel(logging.INFO)
+
+    console_handler = logging.StreamHandler(sys.stdout)
+    console_handler.setFormatter(formatter)
+    console_handler.setLevel(logging.INFO)
+
+    logger_p2pdata = logging.getLogger(__name__)
+    logger_p2pdata.addHandler(info_file_handler)
+    logger_p2pdata.addHandler(console_handler)
+
+    pass

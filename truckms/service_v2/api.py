@@ -3,6 +3,7 @@ import time
 import threading
 import logging
 import requests
+
 logger = logging.getLogger(__name__)
 import io
 from warnings import warn
@@ -12,7 +13,6 @@ import socket
 from contextlib import closing
 from deprecated import deprecated
 from truckms.service_v2.registry_args import allowed_func_datatypes
-import os
 from truckms.service_v2.registry_args import get_class_dictionary_from_func
 
 
@@ -23,6 +23,7 @@ nests of Callable. For example, the correct way to type a simple higher order de
 is by declaring F = TypeVar[‘F’, bound=Callable[..., Any]] then annotating as def transparent(func: F) -> F: return func
 . Or, you may be tempted to bail and use Any instead of trying to figure out the correct signature.
 """
+
 
 def echo():
     """

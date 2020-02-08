@@ -3,7 +3,7 @@ from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
 from functools import wraps
 from truckms.service_v2.userclient.userclient import select_lru_worker
 from functools import partial
-from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one
+from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one, configure_logger
 from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net
 import logging
 from truckms.service_v2.api import self_is_reachable

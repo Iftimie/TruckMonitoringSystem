@@ -170,7 +170,7 @@ def deserialize_doc_from_db(doc, clsd):
         deserialized_doc[k] = db_decoder[clsd[k]](doc[k])
     diff_keys = set(doc.keys()) - set(clsd.keys())
     if diff_keys:
-        logging.warning("The following keys do not have deserializers " + str(diff_keys))
+        logging.debug("The following keys do not have deserializers " + str(diff_keys))
     return deserialized_doc
 
 

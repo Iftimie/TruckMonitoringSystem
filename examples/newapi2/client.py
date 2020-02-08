@@ -1,16 +1,18 @@
+from truckms.service_v2.api import P2PFlaskApp
+from truckms.service_v2.p2pdata import configure_logger
 from truckms.service_v2.userclient.p2p_client import create_p2p_client_app
 from examples.newapi2.function import analyze_movie
 import os
-from truckms.service_v2.api import P2PFlaskApp
 
 import shutil
 
 
-
 if __name__ == "__main__":
+    configure_logger()
     client_app = create_p2p_client_app("network_discovery_client.txt",
                                        P2PFlaskApp(__name__, local_port=5000))
     path = '/home/achellaris/projects_data/TruckMonitoringSystem/service/client.db'
+    path = r'D:\tms_data\node_dirs\client.db'
 
     if True:
         if os.path.exists(path):
