@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 
 def find_required_args():
-    necessary_args = ['db', 'col', 'identifier', 'db_url']
+    necessary_args = ['db', 'col', 'filter', 'db_url']
     actual_args = dict()
     frame_infos = inspect.stack()[:]
     for frame in frame_infos:
@@ -41,7 +41,7 @@ def p2p_progress_hook(curidx, endidx):
 
     actual_args = find_required_args()
     update_ = {"progress": curidx/endidx * 100}
-    filter_ = {"identifier": actual_args['identifier']}
+    filter_ = actual_args['filter']
     p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_)
 
 
@@ -246,14 +246,15 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
                 # identifier collisions on server
                 # TODO to solve this messy remote identifier stuff, the route_execute_function should actually receive
                 #  an arbitrary filter (that may or may not contain the identifier keyword)
+                #  or It shoudl contain both identifier and remote identifier
                 #  which would also solve another TODO from route_execute_function
                 #  the current node should pull the identifier that the worker created and use it to filter the next time the arguments
-                remote_identifier = create_remote_identifier(kwargs['identifier'], {"ip": lru_ip, "port": lru_port, "db": db, "col": col, "func_name": f.__name__})
-                local_identifier = kwargs['identifier']
-                kwargs['identifier'] = remote_identifier
+                kwargs['remote_identifier'] = create_remote_identifier(kwargs['identifier'],
+                                                                       {"ip": lru_ip, "port": lru_port, "db": db,
+                                                                        "col": col, "func_name": f.__name__})
                 p2p_insert_one(db_url, db, col, kwargs, nodes, current_address_func=partial(self_is_reachable, self.local_port))
-                update_one(db_url, db, col, {'identifier': remote_identifier}, {"remote_identifier": remote_identifier, "identifier": local_identifier}, upsert=False)
-                call_remote_func(lru_ip, lru_port, db, col, f.__name__, remote_identifier)
+                filter = {"identifier": identifier, "remote_identifier": kwargs['remote_identifier']}
+                call_remote_func(lru_ip, lru_port, db, col, f.__name__, filter)
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
             return create_future(f, identifier, db_url, db, col, key_interpreter)
         return wrap

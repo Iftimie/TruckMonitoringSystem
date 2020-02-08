@@ -6,20 +6,27 @@ from flask import make_response, jsonify
 from truckms.service_v2.api import derive_vars_from_function
 import time
 import os
+from flask import request
 from functools import wraps, partial
 from truckms.service_v2.p2pdata import p2p_route_insert_one, deserialize_doc_from_net, p2p_route_pull_update_one, p2p_route_push_update_one
 from truckms.service_v2.p2pdata import find, p2p_push_update_one, TinyMongoClientClean
 from truckms.service_v2.registry_args import get_class_dictionary_from_func
+import traceback
 import inspect
 import logging
+from json import dumps, loads
 logger = logging.getLogger(__name__)
 
 
-def call_remote_func(ip, port, db, col, func_name, identifier):
+def call_remote_func(ip, port, db, col, func_name, filter):
+    """
+    Client wrapper function over REST Api call
+    """
+    data = {"filter_json": dumps(filter)}
+
     res = requests.post(
-        "http://{ip}:{port}/execute_function/{db}/{col}/{fname}/{identifier}".format(ip=ip, port=port, db=db,
-                                                                                     col=col, fname=func_name,
-                                                                                 identifier=identifier), files={},data={})
+        "http://{ip}:{port}/execute_function/{db}/{col}/{fname}".format(ip=ip, port=port, db=db,
+                                                                         col=col, fname=func_name), files={}, data=data)
     return res
 
 
@@ -36,22 +43,25 @@ def check_remote_identifier(ip, port, db, col, func_name, identifier):
         raise ValueError("Problem")
 
 
-def function_executor(f, identifier, db, col, db_url, key_interpreter):
-    kwargs_ = find(db_url, db, col, {"identifier": identifier}, key_interpreter)[0]
+def function_executor(f, filter, db, col, db_url, key_interpreter):
+    kwargs_ = find(db_url, db, col, filter, key_interpreter)[0]
     kwargs = {k:kwargs_[k] for k in inspect.signature(f).parameters.keys()}
 
     logger.info("Executing function: " + f.__name__)
-    update_ = f(**kwargs)
+    try:
+        update_ = f(**kwargs)
+    except:
+        logger.error("Function execution crashed for filter: {}".format(str(filter)))
+        logger.error(traceback.format_exc())
     update_['finished'] = True
     if not all(isinstance(k, str) for k in update_.keys()):
         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
-    filter_ = {"identifier": identifier}
-    p2p_push_update_one(db_url, db, col, filter_, update_)
+    p2p_push_update_one(db_url, db, col, filter, update_)
     # TODO key interpreter might be necessary in p2p_push_update_one from the returned dictionary. This can be solved by annotation the function with {"key":"value"}
     return update_
 
 
-def route_execute_function(identifier, f, db_url, db, col, key_interpreter, can_do_locally_func, self):
+def route_execute_function(f, db_url, db, col, key_interpreter, can_do_locally_func, self):
     """
     Function designed to be decorated with flask.app.route
     The function should be partially applied will all arguments
@@ -71,14 +81,16 @@ def route_execute_function(identifier, f, db_url, db, col, key_interpreter, can_
     Returns:
         flask response that will contain the dictionary as a json in header metadata and one file (which may be an archive for multiple files)
     """
+    filter = loads(request.form['filter_json'])
+
     if can_do_locally_func():
         new_f = wraps(f)(
             partial(function_executor,
-                    f=f, identifier=identifier,
+                    f=f, filter=filter,
                     db_url=db_url, db=db, col=col,
                     key_interpreter=key_interpreter))
         res = self.worker_pool.apply_async(func=new_f)
-        TinyMongoClientClean(db_url)[db][col].update_one({"identifier": identifier}, {"started": f.__name__})
+        TinyMongoClientClean(db_url)[db][col].update_one(filter, {"started": f.__name__})
         self.list_futures.append(res)
 
     return make_response("ok")
@@ -167,7 +179,7 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, time_l
             partial(route_execute_function,
                     f=f, db_url=db_url, db=db, col=col,
                     key_interpreter=key_interpreter, can_do_locally_func=can_do_locally_func, self=self))
-        self.route('/execute_function/{db}/{col}/{fname}/<identifier>'.format(db=db, col=col, fname=f.__name__), methods=['POST'])(execute_function_partial)
+        self.route('/execute_function/{db}/{col}/{fname}'.format(db=db, col=col, fname=f.__name__), methods=['POST'])(execute_function_partial)
 
         search_work_partial = wraps(search_work)(
             partial(search_work,

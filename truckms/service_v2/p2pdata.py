@@ -155,7 +155,7 @@ def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=de
         files = dict()
 
     data_to_insert = deserializer(files, request.form['json'], key_interpreter=key_interpreter)
-    assert set(data_to_insert.keys()) == key_interpreter.keys()
+    assert len(set(key_interpreter.keys()) - set(data_to_insert.keys())) == 0
     # this will insert. and if the same data exists then it will crash
     update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
     return make_response("ok")
