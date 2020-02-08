@@ -12,8 +12,10 @@ from truckms.service_v2.p2pdata import p2p_route_insert_one, deserialize_doc_fro
 from truckms.service_v2.p2pdata import find, p2p_push_update_one, TinyMongoClientClean
 from truckms.service_v2.registry_args import get_class_dictionary_from_func
 import traceback
+from flask.logging import default_handler
 import inspect
 import logging
+from logging.config import dictConfig
 from json import dumps, loads
 logger = logging.getLogger(__name__)
 
@@ -51,8 +53,7 @@ def function_executor(f, filter, db, col, db_url, key_interpreter):
     try:
         update_ = f(**kwargs)
     except:
-        logger.error("Function execution crashed for filter: {}".format(str(filter)))
-        logger.error(traceback.format_exc())
+        logger.error("Function execution crashed for filter: {}".format(str(filter)), exc_info=True)
     update_['finished'] = True
     if not all(isinstance(k, str) for k in update_.keys()):
         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
@@ -204,6 +205,48 @@ def heartbeat(db_url, db="tms"):
     return make_response("Thank god you are alive", 200)
 
 
+def configure_logger(app):
+    # https://fangpenlin.com/posts/2012/08/26/good-logging-practice-in-python/
+    app.logger.removeHandler(default_handler)
+    dictConfig({
+        'version': 1,
+        'disable_existing_loggers': False,
+        'formatters': {'default': {
+            'format': '[asdasdasdasdasdasd%(asctime)s] %(levelname)s in %(module)s: %(message)s',
+        }},
+        'handlers': {
+            'console': {
+                'level': 'WARNING',
+                'class': 'logging.StreamHandler',
+                'stream': "ext://sys.stdout",
+                'formatter': 'default'
+            },
+            "info_file_handler": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "level": "INFO",
+                "formatter": "default",
+                "filename": "info.log",
+                "maxBytes": 10485760,
+                "backupCount": 20,
+                "encoding": "utf8"
+            },
+            "error_file_handler": {
+                "class": "logging.handlers.RotatingFileHandler",
+                "level": "ERROR",
+                "formatter": "default",
+                "filename": "errors.log",
+                "maxBytes": 10485760,
+                "backupCount": 20,
+                "encoding": "utf8"
+            }
+        },  # TODO maybe add an email handler
+        'root': {
+            'level': 'INFO',
+            'handlers': ['console', 'info_file_handler', 'error_file_handler']
+        }
+    })
+
+
 def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
     """
     Returns a Flask derived object with additional features
@@ -214,6 +257,7 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
     """
     if p2p_flask_app is None:
         p2p_flask_app = P2PFlaskApp(__name__)
+    configure_logger(p2p_flask_app)
 
     p2p_flask_app.roles.append("brokerworker")
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,

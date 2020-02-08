@@ -337,7 +337,7 @@ def p2p_insert_one(db_path, db, col, document, nodes, serializer=serialize_doc_f
             except:
                 traceback.print_exc()
                 logger.info(traceback.format_exc())
-                logger.info("Unable to post p2p data")
+                logger.warning("Unable to post p2p data",)
 
 
 def p2p_push_update_one(db_path, db, col, filter, update,  serializer=serialize_doc_for_net, visited_nodes=None, recursive=True):

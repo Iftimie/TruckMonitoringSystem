@@ -5,12 +5,13 @@ import inspect
 from multipledispatch import dispatch
 import dill
 import base64
-from warnings import warn
 import binascii
 import os
 import varint
 import mmh3
 import struct
+import logging
+logger = logging.getLogger(__name__)
 
 
 """
@@ -162,14 +163,14 @@ def serialize_doc_for_db(doc):
 
 def deserialize_doc_from_db(doc, clsd):
     if clsd is None:
-        warn("Document not deserialized from db")
+        logging.warning("Document not deserialized from db")
         return doc
     deserialized_doc = {k:v for k, v in doc.items()}
     for k in clsd:
         deserialized_doc[k] = db_decoder[clsd[k]](doc[k])
     diff_keys = set(doc.keys()) - set(clsd.keys())
     if diff_keys:
-        warn("The following keys do not have deserializers " + str(diff_keys))
+        logging.warning("The following keys do not have deserializers " + str(diff_keys))
     return deserialized_doc
 
 

@@ -27,3 +27,4 @@ examples/evaluation/here.avi
 tmsvenv/
 examples/log.txt
 *.bin
+*.log
