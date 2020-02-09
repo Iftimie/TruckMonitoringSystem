@@ -4,14 +4,13 @@ from functools import wraps
 from functools import partial
 from truckms.service_v2.p2pdata import p2p_insert_one
 from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net
-import logging
 import inspect
 import io
 import os
 from truckms.service_v2.clientworker.clientworker import find_response_with_work
 from truckms.service_v2.brokerworker.p2p_brokerworker import function_executor
 from truckms.service_v2.api import derive_vars_from_function
-logger = logging.getLogger(__name__)
+from truckms.service_v2.api import configure_logger
 
 
 def register_p2p_func(self, cache_path):
@@ -40,25 +39,25 @@ def register_p2p_func(self, cache_path):
             if broker_ip is None:
                 return
 
-            filter_ = {"identifier": res['identifier']}
+            filter_ = res['filter']
 
-            local_data = dict()
+            local_data = {k: v for k, v in filter_.items()}
             local_data.update({k: None for k in param_keys})
             local_data.update({k: None for k in key_return})
-            local_data["identifier"] = res['identifier']
 
             deserializer = partial(deserialize_doc_from_net, up_dir=updir)
-            p2p_insert_one(db_url, db, col, local_data, [broker_ip+":"+str(broker_port)], do_upload=False)
+            p2p_insert_one(db_url, db, col, local_data, [broker_ip + ":" + str(broker_port)], do_upload=False)
             p2p_pull_update_one(db_url, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys)
 
-            _ = function_executor(f, res['identifier'], db, col, db_url, key_interpreter)
+            _ = function_executor(f, filter_, db, col, db_url, key_interpreter, self._logging_queue)
 
-        return wrap
+        self.register_time_regular_func(wrap)
+        return None
 
     return inner_decorator
 
 
-def create_p2p_clientworker_app(discovery_ips_file=None, p2p_flask_app=None):
+def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None):
     """
     Returns a Flask derived object with additional features
 
@@ -66,8 +65,9 @@ def create_p2p_clientworker_app(discovery_ips_file=None, p2p_flask_app=None):
         port:
         discovery_ips_file: file with other nodes
     """
-    if p2p_flask_app is None:
-        p2p_flask_app = P2PFlaskApp(__name__)
+    configure_logger("clientworker", module_level_list=[(__name__, 'INFO')])
+
+    p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
                                                    discovery_ips_file=discovery_ips_file)

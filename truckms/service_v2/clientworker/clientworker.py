@@ -30,7 +30,7 @@ def find_response_with_work(local_port, db, collection, func_name):
                 returned_json = res.json()
             else: # is property
                 returned_json = res.json # from Flask test client
-            if returned_json and 'identifier' in returned_json:
+            if returned_json and 'filter' in returned_json:
                 logger.info("Found work from {}, {}".format(broker_ip, broker_port))
                 res_broker_ip = broker_ip
                 res_broker_port = broker_port

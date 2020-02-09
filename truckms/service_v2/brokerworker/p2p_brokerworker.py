@@ -87,6 +87,8 @@ def route_execute_function(f, db_url, db, col, key_interpreter, can_do_locally_f
     Returns:
         flask response that will contain the dictionary as a json in header metadata and one file (which may be an archive for multiple files)
     """
+    logger = logging.getLogger(__name__)
+
     filter = loads(request.form['filter_json'])
 
     if can_do_locally_func():
@@ -99,11 +101,14 @@ def route_execute_function(f, db_url, db, col, key_interpreter, can_do_locally_f
         res = self.worker_pool.apply_async(func=new_f)
         TinyMongoClientClean(db_url)[db][col].update_one(filter, {"started": f.__name__})
         self.list_futures.append(res)
+    else:
+        logger.info("Cannot execute function now: " + f.__name__)
 
     return make_response("ok")
 
 
-def search_work(db_url, db, collection, func_name, time_limit):
+def route_search_work(db_url, db, collection, func_name, time_limit):
+    logger = logging.getLogger(__name__)
 
     col = list(TinyMongoClientClean(db_url)[db][collection].find({}))
 
@@ -116,11 +121,13 @@ def search_work(db_url, db, collection, func_name, time_limit):
     # list(col) + list(col2)
     # TODO fix this. it returns items that have finished
     if col:
+
         col.sort(key=lambda item: item["timestamp"])  # might allready be sorted
         item = col[0]
-        TinyMongoClientClean(db_url)[db][collection].update_one({"identifier": item["identifier"]},
-                                                                        {"started": func_name})
-        return jsonify({"identifier": item["identifier"]})
+        filter_ = {"identifier": item["identifier"], "remote_identifier": item['remote_identifier']}
+        logger.info("Node{}(possible client worker) will ask for filter: {}".format(request.remote_addr, str(filter_)))
+        TinyMongoClientClean(db_url)[db][collection].update_one(filter_, {"started": func_name})
+        return jsonify({"filter": filter_})
     else:
         return jsonify({})
 
@@ -188,8 +195,8 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, time_l
                     key_interpreter=key_interpreter, can_do_locally_func=can_do_locally_func, self=self))
         self.route('/execute_function/{db}/{col}/{fname}'.format(db=db, col=col, fname=f.__name__), methods=['POST'])(execute_function_partial)
 
-        search_work_partial = wraps(search_work)(
-            partial(search_work,
+        search_work_partial = wraps(route_search_work)(
+            partial(route_search_work,
                     db_url=db_url, db=db, collection=col,
                     func_name=f.__name__, time_limit=time_limit))
         self.route("/search_work/{db}/{col}/{fname}".format(db=db, col=col, fname=f.__name__), methods=['POST'])(search_work_partial)
