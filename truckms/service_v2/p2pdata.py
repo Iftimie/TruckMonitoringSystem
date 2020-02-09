@@ -28,7 +28,7 @@ class TinyMongoClientClean(tinymongo.TinyMongoClient):
 
 def zip_files(files):
     # TODO fix the temporary archive
-    directory = os.path.dirname(list(files.keys())[0])
+    directory = os.path.dirname(list(files.values())[0].name)
     zip_path = os.path.join(directory, "archive.ZIP")
     zf = zipfile.ZipFile(zip_path, "w")
     for k, v in files.items():
@@ -241,7 +241,7 @@ def p2p_route_pull_update_one(db_path, db, col, serializer=serialize_doc_for_net
     files, json = serializer(data_to_send)
     if files:
         k = list(files.keys())[0]
-        result = send_file(files[k].name, as_attachment=True)
+        result = send_file(list(files.values())[0].name, as_attachment=True)
         result.headers['update_json'] = json
     else:
         result = make_response("")
