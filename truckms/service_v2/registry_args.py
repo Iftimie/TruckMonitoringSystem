@@ -134,7 +134,7 @@ def kidser(ser_value, cls):
 db_decoder = {int: lambda value: value,
               float: lambda value: value,
               str: lambda value: value,
-              IOBase: lambda path: open(path, 'rb'),
+              IOBase: lambda path: open(path, 'rb') if path is not None else None,
               Callable: lambda value: dill.loads(base64.b64decode(value.encode('utf8'))),
               List[str]: lambda value: value,
               List[int]: lambda value: value,
@@ -166,7 +166,7 @@ def deserialize_doc_from_db(doc, clsd):
         logger.warning("Document not deserialized from db")
         return doc
     deserialized_doc = {k:v for k, v in doc.items()}
-    for k in clsd:
+    for k in set(doc.keys()) & set(clsd.keys()):
         deserialized_doc[k] = db_decoder[clsd[k]](doc[k])
     diff_keys = set(doc.keys()) - set(clsd.keys())
     if diff_keys:
@@ -185,7 +185,13 @@ def get_class_dictionary_from_func(func):
     Thus the resulting dictionary will be {"arg1" io.IOBase, "arg2": str}
     """
     doc = inspect.signature(func).parameters
-    return {k: v.annotation for k, v in doc.items()}
+    key_interpreter = {k: v.annotation for k, v in doc.items()}
+    key_interpreter.update(inspect.signature(func).return_annotation)
+    key_interpreter['progress'] = float
+    # key_interpreter['identifier'] = str # Thse do not need any interpretation
+    # key_interpreter['remote_identifier'] = str
+    # key_interpreter['nodes'] = List[str]
+    return key_interpreter
 
 
 SAMPLE_THRESHOLD = 128 * 1024

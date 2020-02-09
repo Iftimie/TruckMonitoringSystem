@@ -68,7 +68,9 @@ def get_remote_future(f, identifier, db_url, db, col, key_interpreter_dict):
 
         search_filter = {"$or": [{"identifier": identifier}, {"identifier": item['remote_identifier']}]}
         p2p_pull_update_one(db_url, db, col, search_filter, expected_keys_list,
-                            deserializer=partial(deserialize_doc_from_net, up_dir=up_dir), hint_file_keys=hint_file_keys)
+                            deserializer=partial(deserialize_doc_from_net,
+                                                 up_dir=up_dir, key_interpreter=key_interpreter_dict),
+                            hint_file_keys=hint_file_keys)
 
     item = find(db_url, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
     item = {k: item[k] for k in expected_keys_list}
@@ -104,7 +106,6 @@ class Future:
             if count_time > self.max_waiting_time:
                 raise ValueError("Waiting time exceeded")
             logger.info("Not done yet " + str(item))
-            print("asdasdasd")
         return item
 
 
@@ -115,7 +116,7 @@ def get_expected_keys(f):
     The combined dictionary will be stored in the database
     """
     expected_keys = inspect.signature(f).return_annotation
-    expected_keys = {k:None for k in expected_keys}
+    expected_keys = {k: None for k in expected_keys}
     expected_keys['progress'] = 0
     return expected_keys
 

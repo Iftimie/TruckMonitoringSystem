@@ -127,15 +127,13 @@ class P2PFlaskApp(Flask):
 
     @staticmethod
     def _dispatch_log_records(queue, stop_thread):
-        record = None
         while not stop_thread():
-            record = queue.get()
-            if record is None:
-                break
-            logger = logging.getLogger(record.name)
-            logger.handle(record)
-        if record is None:
-            raise ValueError("Received logging record as None")
+            try:
+                record = queue.get(block=False, timeout=1)  # set timeout so it's non-blocking
+                logger = logging.getLogger(record.name)
+                logger.handle(record)
+            except Exception as e:
+                pass
 
     def register_time_regular_func(self, f):
         """
