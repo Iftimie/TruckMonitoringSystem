@@ -174,14 +174,13 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, time_l
         p2p_route_insert_one_func = wraps(p2p_route_insert_one)(
             partial(p2p_route_insert_one,
                     db=db, col=col, db_path=db_url,
-                    deserializer=partial(deserialize_doc_from_net, up_dir=updir),
-                    key_interpreter=key_interpreter))
+                    deserializer=partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)))
         self.route("/insert_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_insert_one_func)
 
         p2p_route_push_update_one_func = wraps(p2p_route_push_update_one)(
             partial(p2p_route_push_update_one,
                     db_path=db_url, db=db, col=col,
-                    deserializer=partial(deserialize_doc_from_net, up_dir=updir)))
+                    deserializer=partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)))
         self.route("/push_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_push_update_one_func)
 
         p2p_route_pull_update_one_func = wraps(p2p_route_pull_update_one)(

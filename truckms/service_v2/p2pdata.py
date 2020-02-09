@@ -130,7 +130,7 @@ def deserialize_doc_from_net(files, json, up_dir, key_interpreter=None):
     return data
 
 
-def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=deserialize_doc_from_net):
+def p2p_route_insert_one(db_path, db, col, deserializer=deserialize_doc_from_net):
     """
     Function designed to be decorated with flask.app.route
     The function should be partially applied will all arguments
@@ -153,8 +153,7 @@ def p2p_route_insert_one(db_path, db, col, key_interpreter=None, deserializer=de
     else:
         files = dict()
 
-    data_to_insert = deserializer(files, request.form['json'], key_interpreter=key_interpreter)
-    assert len(set(key_interpreter.keys()) - set(data_to_insert.keys())) == 0
+    data_to_insert = deserializer(files, request.form['json'])
     # this will insert. and if the same data exists then it will crash
     update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
     return make_response("ok")
@@ -193,6 +192,7 @@ def p2p_route_push_update_one(db_path, db, col, deserializer=deserialize_doc_fro
     filter_data = deserializer({}, request.form['filter_json'])
     visited_nodes = loads(request.form['visited_json'])
     recursive = request.form["recursive"]
+
     if recursive:
         visited_nodes = p2p_push_update_one(db_path, db, col, filter_data, update_data, visited_nodes=visited_nodes)
     return jsonify(visited_nodes)

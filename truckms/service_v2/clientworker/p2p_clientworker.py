@@ -45,7 +45,7 @@ def register_p2p_func(self, cache_path):
             local_data.update({k: None for k in param_keys})
             local_data.update({k: None for k in key_return})
 
-            deserializer = partial(deserialize_doc_from_net, up_dir=updir)
+            deserializer = partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)
             p2p_insert_one(db_url, db, col, local_data, [broker_ip + ":" + str(broker_port)], do_upload=False)
             p2p_pull_update_one(db_url, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys)
 

@@ -2,12 +2,10 @@ from truckms.service.worker.worker_client import get_available_brokers
 import requests
 import logging
 logger = logging.getLogger(__name__)
-import time
 import tinymongo
 from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net, p2p_push_update_one, p2p_insert_one
 from functools import partial
 import inspect
-import traceback
 import collections
 
 

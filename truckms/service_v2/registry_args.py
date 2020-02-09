@@ -11,6 +11,7 @@ import varint
 import mmh3
 import struct
 import logging
+import traceback
 
 
 """
@@ -163,7 +164,8 @@ def serialize_doc_for_db(doc):
 def deserialize_doc_from_db(doc, clsd):
     logger = logging.getLogger(__name__)
     if clsd is None:
-        logger.warning("Document not deserialized from db")
+        callstack = ''.join(line for line in traceback.format_stack())
+        logger.warning("Document not deserialized from db: {} \n This is JUST WARNING".format(callstack))
         return doc
     deserialized_doc = {k:v for k, v in doc.items()}
     for k in set(doc.keys()) & set(clsd.keys()):
