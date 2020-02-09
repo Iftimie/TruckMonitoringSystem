@@ -1,48 +1,11 @@
 from truckms.service.worker.worker_client import get_available_brokers
 import requests
 import logging
-logger = logging.getLogger(__name__)
 import tinymongo
 from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net, p2p_push_update_one, p2p_insert_one
 from functools import partial
 import inspect
 import collections
-
-
-def find_response_with_work(local_port, db, collection, func_name):
-
-    res_broker_ip = None
-    res_broker_port = None
-    res_json = dict()
-
-    brokers = get_available_brokers(local_port=local_port)
-
-    if not brokers:
-        logger.info("No broker found")
-
-    for broker in brokers:
-        broker_ip, broker_port = broker['ip'], broker['port']
-        try:
-            res = requests.post('http://{}:{}/search_work/{}/{}/{}'.format(broker_ip, broker_port, db, collection, func_name), timeout=5)
-            if isinstance(res.json, collections.Callable): # from requests lib
-                returned_json = res.json()
-            else: # is property
-                returned_json = res.json # from Flask test client
-            if returned_json and 'filter' in returned_json:
-                logger.info("Found work from {}, {}".format(broker_ip, broker_port))
-                res_broker_ip = broker_ip
-                res_broker_port = broker_port
-                res_json = returned_json
-                break
-        except:  # except connection timeout or something like that
-            logger.info("broker unavailable {}:{}".format(broker_ip, broker_port))
-            pass
-
-    if res_broker_ip is None:
-        logger.info("No work found")
-
-    # TODO it may be possible that res allready contains broker ip and port?
-    return res_json, res_broker_ip, res_broker_port
 
 
 def do_work(up_dir, db_url, local_port, func, db, collection):

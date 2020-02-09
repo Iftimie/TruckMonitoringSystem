@@ -7,10 +7,51 @@ from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from
 import inspect
 import io
 import os
-from truckms.service_v2.clientworker.clientworker import find_response_with_work
 from truckms.service_v2.brokerworker.p2p_brokerworker import function_executor
+from truckms.service_v2.brokerworker import p2p_brokerworker
 from truckms.service_v2.api import derive_vars_from_function
 from truckms.service_v2.api import configure_logger
+import logging
+from truckms.service.worker.worker_client import get_available_brokers
+import requests
+import collections
+
+
+def find_response_with_work(local_port, db, collection, func_name):
+    logger = logging.getLogger(__name__)
+
+    res_broker_ip = None
+    res_broker_port = None
+    res_json = dict()
+
+    brokers = get_available_brokers(local_port=local_port)
+
+    if not brokers:
+        logger.info("No broker found")
+
+    for broker in brokers:
+        broker_ip, broker_port = broker['ip'], broker['port']
+        try:
+            res = requests.post('http://{}:{}/search_work/{}/{}/{}'.format(broker_ip, broker_port, db, collection, func_name), timeout=5)
+            if isinstance(res.json, collections.Callable):
+                returned_json = res.json()  # from requests lib
+            else: # is property
+                returned_json = res.json  # from Flask test client
+            if returned_json and 'filter' in returned_json:
+                logger.info("Found work from {}, {}".format(broker_ip, broker_port))
+                res_broker_ip = broker_ip
+                res_broker_port = broker_port
+                res_json = returned_json
+                break
+        except:  # except connection timeout or something like that
+            logger.info("broker unavailable {}:{}".format(broker_ip, broker_port))
+            pass
+
+    if res_broker_ip is None:
+        logger.info("No work found")
+
+    # TODO it may be possible that res allready contains broker ip and port?
+    return res_json, res_broker_ip, res_broker_port
 
 
 def register_p2p_func(self, cache_path):
@@ -35,6 +76,9 @@ def register_p2p_func(self, cache_path):
 
         @wraps(f)
         def wrap():
+            logger = logging.getLogger(__name__)
+
+            logger.info("Searching for work")
             res, broker_ip, broker_port = find_response_with_work(self.local_port, db, col, f.__name__)
             if broker_ip is None:
                 return
@@ -50,6 +94,7 @@ def register_p2p_func(self, cache_path):
             p2p_pull_update_one(db_url, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys)
 
             _ = function_executor(f, filter_, db, col, db_url, key_interpreter, self._logging_queue)
+            logger.info("Finished work")
 
         self.register_time_regular_func(wrap)
         return None
@@ -65,7 +110,8 @@ def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None):
         port:
         discovery_ips_file: file with other nodes
     """
-    configure_logger("clientworker", module_level_list=[(__name__, 'INFO')])
+    configure_logger("clientworker", module_level_list=[(__name__, 'INFO'),
+                                                        (p2p_brokerworker.__name__, 'INFO')])
 
     p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
 

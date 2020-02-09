@@ -147,17 +147,17 @@ class P2PFlaskApp(Flask):
         self._time_regular_funcs.append(f)
 
     def start_background_threads(self):
-        self._time_regular_thread = threading.Thread(target=P2PFlaskApp._time_regular,
-                                                    args=(
-                                                    self._time_regular_funcs, self._time_interval, self.local_port,
-                                                    lambda: self._stop_thread))
-        self._time_regular_thread.start()
         self._logger_thread = threading.Thread(target=P2PFlaskApp._dispatch_log_records,
                                                args=(
                                                    self._logging_queue,
                                                    lambda: self._stop_thread
                                                ))
         self._logger_thread.start()
+        self._time_regular_thread = threading.Thread(target=P2PFlaskApp._time_regular,
+                                                     args=(
+                                                         self._time_regular_funcs, self._time_interval, self.local_port,
+                                                         lambda: self._stop_thread))
+        self._time_regular_thread.start()
 
     def stop_background_threads(self):
         self._stop_thread = True
