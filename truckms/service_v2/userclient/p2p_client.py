@@ -22,6 +22,7 @@ from truckms.service_v2.brokerworker.p2p_brokerworker import check_remote_identi
 from truckms.service_v2.p2pdata import find
 from truckms.service_v2.registry_args import kicomp
 from werkzeug.serving import make_server
+from truckms.service_v2.api import configure_logger
 
 
 def find_required_args():
@@ -311,6 +312,8 @@ def create_p2p_client_app(discovery_ips_file=None, local_port=None):
         discovery_ips_file: file with other nodes
         local_port: Local port of the app
     """
+    configure_logger("client", module_level_list=[(__name__, 'INFO')])
+
     p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,

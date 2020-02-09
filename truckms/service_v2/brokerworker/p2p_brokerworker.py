@@ -14,6 +14,7 @@ from truckms.service_v2.p2pdata import find, p2p_push_update_one, TinyMongoClien
 import inspect
 import logging
 from json import dumps, loads
+from truckms.service_v2.api import configure_logger
 
 
 def call_remote_func(ip, port, db, col, func_name, filter):
@@ -210,7 +211,7 @@ def heartbeat(db_url, db="tms"):
     return make_response("Thank god you are alive", 200)
 
 
-def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
+def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None):
     """
     Returns a Flask derived object with additional features
 
@@ -218,9 +219,9 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
         port:
         discovery_ips_file: file with other nodes
     """
+    configure_logger("brokerworker", module_level_list=[(__name__, 'INFO')])
 
-    if p2p_flask_app is None:
-        p2p_flask_app = P2PFlaskApp(__name__)
+    p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
 
     p2p_flask_app.roles.append("brokerworker")
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
