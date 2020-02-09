@@ -14,6 +14,7 @@ from contextlib import closing
 from deprecated import deprecated
 from truckms.service_v2.registry_args import allowed_func_datatypes
 from truckms.service_v2.registry_args import get_class_dictionary_from_func
+import multiprocessing
 
 
 """
@@ -43,6 +44,9 @@ def wait_until_online(local_port):
             logger.info("App not ready")
 
 
+P2P_INFO = 25
+
+
 class P2PFlaskApp(Flask):
     """
     Flask derived class for P2P applications. In this framework, the P2P app can have different roles. Not all nodes in
@@ -67,6 +71,8 @@ class P2PFlaskApp(Flask):
         self._blueprints = {}
         self._time_regular_funcs = []
         self._time_regular_thread = None
+        self._logging_queue = multiprocessing.Manager().Queue()
+        self._logger_thread = None
         self._stop_thread = False
         self._time_interval = 10
         if local_port is None:
@@ -111,13 +117,25 @@ class P2PFlaskApp(Flask):
             except:
                 logger.info("App not ready")
             time.sleep(1)
-            count+=1
+            count += 1
 
         # infinite loop will not start until the app is online
         while not stop_thread():
             for f in list_funcs:
                 f()
             time.sleep(time_interval)
+
+    @staticmethod
+    def _dispatch_log_records(queue, stop_thread):
+        record = None
+        while not stop_thread():
+            record = queue.get()
+            if record is None:
+                break
+            logger = logging.getLogger(record.name)
+            logger.handle(record)
+        if record is None:
+            raise ValueError("Received logging record as None")
 
     def register_time_regular_func(self, f):
         """
@@ -128,16 +146,23 @@ class P2PFlaskApp(Flask):
         """
         self._time_regular_funcs.append(f)
 
-    def start_time_regular_thread(self):
+    def start_background_threads(self):
         self._time_regular_thread = threading.Thread(target=P2PFlaskApp._time_regular,
                                                     args=(
                                                     self._time_regular_funcs, self._time_interval, self.local_port,
-                                                    lambda :self._stop_thread))
+                                                    lambda: self._stop_thread))
         self._time_regular_thread.start()
+        self._logger_thread = threading.Thread(target=P2PFlaskApp._dispatch_log_records,
+                                               args=(
+                                                   self._logging_queue,
+                                                   lambda: self._stop_thread
+                                               ))
+        self._logger_thread.start()
 
-    def stop_time_regular_thread(self):
+    def stop_background_threads(self):
         self._stop_thread = True
         self._time_regular_thread.join()
+        self._logger_thread.join()
 
     def run(self, *args, **kwargs):
         if len(args) > 0:
@@ -146,7 +171,7 @@ class P2PFlaskApp(Flask):
             raise ValueError("port argument does not need to be specified as it either specified in constructor or generated randomly")
 
         kwargs['port'] = self.local_port
-        self.start_time_regular_thread()
+        self.start_background_threads()
         super(P2PFlaskApp, self).run(*args, **kwargs)
 
 

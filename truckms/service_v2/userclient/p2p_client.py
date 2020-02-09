@@ -3,7 +3,7 @@ from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
 from functools import wraps
 from truckms.service_v2.userclient.userclient import select_lru_worker
 from functools import partial
-from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one, configure_logger
+from truckms.service_v2.p2pdata import p2p_push_update_one, p2p_insert_one
 from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from_net
 import logging
 from truckms.service_v2.api import self_is_reachable
@@ -16,13 +16,12 @@ import time
 import threading
 import inspect
 import requests
-from truckms.service_v2.p2pdata import update_one
 from truckms.service_v2.api import derive_vars_from_function
 from truckms.service_v2.registry_args import hash_kwargs
 from truckms.service_v2.brokerworker.p2p_brokerworker import check_remote_identifier
 from truckms.service_v2.p2pdata import find
 from truckms.service_v2.registry_args import kicomp
-logger = logging.getLogger(__name__)
+from werkzeug.serving import make_server
 
 
 def find_required_args():
@@ -93,6 +92,8 @@ class Future:
         self.max_waiting_time = max_waiting_time
 
     def get(self):
+        logger = logging.getLogger(__name__)
+
         item = self.get_future_func()
         count_time = 0
         wait_time = 4
@@ -130,6 +131,8 @@ def identifier_seen(db_url, identifier, db, col, expected_keys, time_limit=24):
     """
     Returns boolean about if the current arguments resulted in an identifier that was already seen
     """
+    logger = logging.getLogger(__name__)
+
     collection = find(db_url, db, col, {"identifier": identifier})
 
     if collection:
@@ -219,6 +222,7 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
 
         @wraps(f)
         def wrap(*args, **kwargs):
+            logger = logging.getLogger(__name__)
 
             identifier = create_identifier(db_url, db, col, kwargs, key_interpreter)
             expected_keys = get_expected_keys(f)
@@ -235,7 +239,9 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
             if can_do_locally_func() or lru_ip is None:
                 nodes = []
                 p2p_insert_one(db_url, db, col, kwargs, nodes)
-                new_f = wraps(f)(partial(function_executor, f=f, identifier=kwargs['identifier'], db_url=db_url, db=db, col=col, key_interpreter=key_interpreter))
+                new_f = wraps(f)(partial(function_executor, f=f, filter={'identifier': kwargs['identifier']},
+                                         db_url=db_url, db=db, col=col, key_interpreter=key_interpreter,
+                                         logging_queue=self._logging_queue))
                 res = self.worker_pool.apply_async(func=new_f)
                 logger.info("Executing function locally")
             else:
@@ -261,10 +267,9 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
     return inner_decorator
 
 
-from werkzeug.serving import make_server
 class ServerThread(threading.Thread):
 
-    def __init__(self, app):
+    def __init__(self, app: P2PFlaskApp):
         threading.Thread.__init__(self)
         self.srv = make_server('0.0.0.0', app.local_port, app)
         self.app = app
@@ -272,11 +277,11 @@ class ServerThread(threading.Thread):
         self.ctx.push()
 
     def run(self):
-        self.app.start_time_regular_thread()
+        self.app.start_background_threads()
         self.srv.serve_forever()
 
     def shutdown(self):
-        self.app.stop_time_regular_thread()
+        self.app.stop_background_threads()
         self.srv.shutdown()
 
 
@@ -284,14 +289,15 @@ def wait_for_discovery(local_port):
     """
     Try at most max_trials times to connect to p2p network or until the list of node si not empty
     """
+    logger = logging.getLogger(__name__)
     max_trials = 3
     count = 0
     while count < max_trials:
-        logger.info("Waiting for nodes")
         res = requests.get('http://localhost:{}/node_states'.format(local_port)).json()  # will get the data defined above
         if len(res) != 0:
             break
-        count+=1
+        logger.warning("No peers found. Waiting for nodes")
+        count += 1
         time.sleep(5)
 
 

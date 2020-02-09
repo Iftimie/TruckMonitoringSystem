@@ -41,31 +41,28 @@ def check_remote_identifier(ip, port, db, col, func_name, identifier):
         raise ValueError("Problem")
 
 
-def function_executor(f, filter, db, col, db_url, key_interpreter, q):
-    qh = logging.handlers.QueueHandler(q)
+def function_executor(f, filter, db, col, db_url, key_interpreter, logging_queue):
+    qh = logging.handlers.QueueHandler(logging_queue)
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
-    # show only critical errors in console from workers
-    # the rest of the errors will be handled customly
-    # or instead of setting crititcal maybe the only handler should be qh
     root.handlers = []
     root.addHandler(qh)
 
     logger = logging.getLogger(__name__)
 
     kwargs_ = find(db_url, db, col, filter, key_interpreter)[0]
-    kwargs = {k:kwargs_[k] for k in inspect.signature(f).parameters.keys()}
+    kwargs = {k: kwargs_[k] for k in inspect.signature(f).parameters.keys()}
 
     logger.info("Executing function: " + f.__name__)
     try:
         update_ = f(**kwargs)
-    except:
+    except Exception as e:
         logger.error("Function execution crashed for filter: {}".format(str(filter)), exc_info=True)
+        raise e
     update_['finished'] = True
     if not all(isinstance(k, str) for k in update_.keys()):
         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
     p2p_push_update_one(db_url, db, col, filter, update_)
-    # TODO key interpreter might be necessary in p2p_push_update_one from the returned dictionary. This can be solved by annotation the function with {"key":"value"}
     return update_
 
 
@@ -97,7 +94,7 @@ def route_execute_function(f, db_url, db, col, key_interpreter, can_do_locally_f
                     f=f, filter=filter,
                     db_url=db_url, db=db, col=col,
                     key_interpreter=key_interpreter,
-                    q = self.q))
+                    logging_queue=self._logging_queue))
         res = self.worker_pool.apply_async(func=new_f)
         TinyMongoClientClean(db_url)[db][col].update_one(filter, {"started": f.__name__})
         self.list_futures.append(res)
@@ -213,20 +210,6 @@ def heartbeat(db_url, db="tms"):
     return make_response("Thank god you are alive", 200)
 
 
-import logging
-from multiprocessing import Queue
-import threading
-
-def logger_thread(q):
-    while True:
-        record = q.get()
-        if record is None:
-            break
-        print(record.name, "asdasdasdasdaaaaaaaaqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq")
-        logger = logging.getLogger(record.name)
-        logger.handle(record)
-
-
 def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
     """
     Returns a Flask derived object with additional features
@@ -235,11 +218,6 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
         port:
         discovery_ips_file: file with other nodes
     """
-
-    m = multiprocessing.Manager()
-    q = m.Queue()
-    lp = threading.Thread(target=logger_thread, args=(q,))
-    lp.start()
 
     if p2p_flask_app is None:
         p2p_flask_app = P2PFlaskApp(__name__)
@@ -252,7 +230,6 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, p2p_flask_app=None):
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(2)
     p2p_flask_app.list_futures = []
-    p2p_flask_app.q = q
     # TODO I need to create a time regular func for those requests that are old in order to execute them in broker
 
     return p2p_flask_app
