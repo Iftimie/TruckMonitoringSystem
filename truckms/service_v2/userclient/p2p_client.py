@@ -81,7 +81,7 @@ def get_local_future(f, identifier, db_url, db, col, key_interpreter_dict):
     expected_keys_list.append("progress")
 
     item = find(db_url, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
-    item = {k:v for k, v in item.items() if k in expected_keys_list}
+    item = {k: v for k, v in item.items() if k in expected_keys_list}
     return item
 
 
@@ -104,6 +104,7 @@ class Future:
             if count_time > self.max_waiting_time:
                 raise ValueError("Waiting time exceeded")
             logger.info("Not done yet " + str(item))
+            print("asdasdasd")
         return item
 
 
@@ -120,7 +121,7 @@ def get_expected_keys(f):
 
 
 def create_future(f, identifier, db_url, db, col, key_interpreter):
-    item = find(db_url, db, col, {"identifier": identifier})[0]
+    item = find(db_url, db, col, {"identifier": identifier}, key_interpreter)[0]
     if item['nodes'] or 'remote_identifier' in item:
         return Future(partial(get_remote_future, f, identifier, db_url, db, col, key_interpreter))
     else:
@@ -301,16 +302,15 @@ def wait_for_discovery(local_port):
         time.sleep(5)
 
 
-def create_p2p_client_app(discovery_ips_file=None, p2p_flask_app=None):
+def create_p2p_client_app(discovery_ips_file=None, local_port=None):
     """
     Returns a Flask derived object with additional features
 
     Args:
-        port:
         discovery_ips_file: file with other nodes
+        local_port: Local port of the app
     """
-    if p2p_flask_app is None:
-        p2p_flask_app = P2PFlaskApp(__name__)
+    p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
                                                    discovery_ips_file=discovery_ips_file)
