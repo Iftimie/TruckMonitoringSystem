@@ -13,6 +13,6 @@ if __name__ == "__main__":
         if os.path.exists(path):
             shutil.rmtree(path)
 
-    analyze_movie = broker_worker_app.register_p2p_func(path, can_do_locally_func=lambda: True,
+    analyze_movie = broker_worker_app.register_p2p_func(path, can_do_locally_func=lambda: False,
                                                         time_limit=12)(analyze_movie)
     broker_worker_app.run(host='0.0.0.0')

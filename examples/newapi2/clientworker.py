@@ -13,5 +13,5 @@ if __name__ == "__main__":
         if os.path.exists(path):
             shutil.rmtree(path)
 
-    clientworker_app.register_p2p_func(path)(analyze_movie)
+    clientworker_app.register_p2p_func(path, can_do_work_func=lambda: True)(analyze_movie)
     clientworker_app.run(host='0.0.0.0')

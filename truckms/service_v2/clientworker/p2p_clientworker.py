@@ -15,6 +15,7 @@ import logging
 from truckms.service.worker.worker_client import get_available_brokers
 import requests
 import collections
+import multiprocessing
 
 
 def find_response_with_work(local_port, db, collection, func_name):
@@ -54,7 +55,7 @@ def find_response_with_work(local_port, db, collection, func_name):
     return res_json, res_broker_ip, res_broker_port
 
 
-def register_p2p_func(self, cache_path):
+def register_p2p_func(self, cache_path, can_do_work_func):
     """
     In p2p clientworker, this decorator will have the role of deciding making a node behind a firewall or NAT capable of
     executing a function that receives input arguments from over the network.
@@ -76,8 +77,10 @@ def register_p2p_func(self, cache_path):
 
         @wraps(f)
         def wrap():
-            logger = logging.getLogger(__name__)
+            if not can_do_work_func():
+                return
 
+            logger = logging.getLogger(__name__)
             logger.info("Searching for work")
             res, broker_ip, broker_port = find_response_with_work(self.local_port, db, col, f.__name__)
             if broker_ip is None:
@@ -93,8 +96,16 @@ def register_p2p_func(self, cache_path):
             p2p_insert_one(db_url, db, col, local_data, [broker_ip + ":" + str(broker_port)], do_upload=False)
             p2p_pull_update_one(db_url, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys)
 
-            _ = function_executor(f, filter_, db, col, db_url, key_interpreter, self._logging_queue)
-            logger.info("Finished work")
+            new_f = wraps(f)(
+                partial(function_executor,
+                        f=f, filter=filter_,
+                        db_url=db_url, db=db, col=col,
+                        key_interpreter=key_interpreter,
+                        logging_queue=self._logging_queue))
+            res = self.worker_pool.apply_async(func=new_f)
+            self.list_futures.append(res)
+            # _ = function_executor(f, filter_, db, col, db_url, key_interpreter, self._logging_queue)
+            # something weird was happening with logging when the function was executed in the same thread
 
         self.register_time_regular_func(wrap)
         return None
@@ -119,5 +130,7 @@ def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None):
                                                    discovery_ips_file=discovery_ips_file)
     p2p_flask_app.register_blueprint(bookkeeper_bp)
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
+    p2p_flask_app.worker_pool = multiprocessing.Pool(2)
+    p2p_flask_app.list_futures = []
 
     return p2p_flask_app

@@ -60,6 +60,7 @@ def function_executor(f, filter, db, col, db_url, key_interpreter, logging_queue
     except Exception as e:
         logger.error("Function execution crashed for filter: {}".format(str(filter)), exc_info=True)
         raise e
+    logger.info("Finished executing function: " + f.__name__)
     update_['finished'] = True
     if not all(isinstance(k, str) for k in update_.keys()):
         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))

@@ -17,6 +17,7 @@ from deprecated import deprecated
 from truckms.service_v2.registry_args import allowed_func_datatypes
 from truckms.service_v2.registry_args import get_class_dictionary_from_func
 import multiprocessing
+import traceback
 
 
 """
@@ -128,13 +129,17 @@ class P2PFlaskApp(Flask):
             time.sleep(time_interval)
 
     @staticmethod
-    def _dispatch_log_records(queue, stop_thread):
-        while not stop_thread():
+    def _dispatch_log_records(queue):
+        while True:
             try:
-                record = queue.get(block=False, timeout=1)  # set timeout so it's non-blocking
+                record = queue.get()
+                queue.task_done()
+                if isinstance(record, str) and record == 'STOP _dispatch_log_records':
+                    break
                 logger = logging.getLogger(record.name)
                 logger.handle(record)
             except Exception as e:
+                traceback.print_exc()
                 pass
 
     def register_time_regular_func(self, f):
@@ -150,7 +155,6 @@ class P2PFlaskApp(Flask):
         self._logger_thread = threading.Thread(target=P2PFlaskApp._dispatch_log_records,
                                                args=(
                                                    self._logging_queue,
-                                                   lambda: self._stop_thread
                                                ))
         self._logger_thread.start()
         self._time_regular_thread = threading.Thread(target=P2PFlaskApp._time_regular,
@@ -162,6 +166,7 @@ class P2PFlaskApp(Flask):
     def stop_background_threads(self):
         self._stop_thread = True
         self._time_regular_thread.join()
+        self._logging_queue.put_nowait('STOP _dispatch_log_records')
         self._logger_thread.join()
 
     def run(self, *args, **kwargs):
