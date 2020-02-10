@@ -16,9 +16,10 @@ from truckms.service.worker.worker_client import get_available_brokers
 import requests
 import collections
 import multiprocessing
+from passlib.hash import sha256_crypt
 
 
-def find_response_with_work(local_port, db, collection, func_name):
+def find_response_with_work(local_port, db, collection, func_name, password):
     logger = logging.getLogger(__name__)
 
     res_broker_ip = None
@@ -33,7 +34,8 @@ def find_response_with_work(local_port, db, collection, func_name):
     for broker in brokers:
         broker_ip, broker_port = broker['ip'], broker['port']
         try:
-            res = requests.post('http://{}:{}/search_work/{}/{}/{}'.format(broker_ip, broker_port, db, collection, func_name), timeout=5)
+            url = 'http://{}:{}/search_work/{}/{}/{}'.format(broker_ip, broker_port, db, collection, func_name)
+            res = requests.post(url, timeout=5, headers={"Authorization": password})
             if isinstance(res.json, collections.Callable):
                 returned_json = res.json()  # from requests lib
             else: # is property
@@ -82,7 +84,7 @@ def register_p2p_func(self, cache_path, can_do_work_func):
 
             logger = logging.getLogger(__name__)
             logger.info("Searching for work")
-            res, broker_ip, broker_port = find_response_with_work(self.local_port, db, col, f.__name__)
+            res, broker_ip, broker_port = find_response_with_work(self.local_port, db, col, f.__name__, self.crypt_pass)
             if broker_ip is None:
                 return
 
@@ -93,15 +95,16 @@ def register_p2p_func(self, cache_path, can_do_work_func):
             local_data.update({k: None for k in key_return})
 
             deserializer = partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)
-            p2p_insert_one(db_url, db, col, local_data, [broker_ip + ":" + str(broker_port)], do_upload=False)
-            p2p_pull_update_one(db_url, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys)
+            p2p_insert_one(db_url, db, col, local_data, [broker_ip + ":" + str(broker_port)], do_upload=False, password=self.crypt_pass)
+            p2p_pull_update_one(db_url, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys, password=self.crypt_pass)
 
             new_f = wraps(f)(
                 partial(function_executor,
                         f=f, filter=filter_,
                         db_url=db_url, db=db, col=col,
                         key_interpreter=key_interpreter,
-                        logging_queue=self._logging_queue))
+                        logging_queue=self._logging_queue,
+                        password=self.crypt_pass))
             res = self.worker_pool.apply_async(func=new_f)
             self.list_futures.append(res)
             # _ = function_executor(f, filter_, db, col, db_url, key_interpreter, self._logging_queue)
@@ -113,7 +116,7 @@ def register_p2p_func(self, cache_path, can_do_work_func):
     return inner_decorator
 
 
-def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None):
+def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None, password=""):
     """
     Returns a Flask derived object with additional features
 
@@ -132,5 +135,6 @@ def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None):
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(2)
     p2p_flask_app.list_futures = []
+    p2p_flask_app.crypt_pass = sha256_crypt.encrypt(password)
 
     return p2p_flask_app

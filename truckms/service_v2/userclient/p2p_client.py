@@ -23,10 +23,11 @@ from truckms.service_v2.p2pdata import find
 from truckms.service_v2.registry_args import kicomp
 from werkzeug.serving import make_server
 from truckms.service_v2.api import configure_logger
+from passlib.hash import sha256_crypt
 
 
 def find_required_args():
-    necessary_args = ['db', 'col', 'filter', 'db_url']
+    necessary_args = ['db', 'col', 'filter', 'db_url', 'password']
     actual_args = dict()
     frame_infos = inspect.stack()[:]
     for frame in frame_infos:
@@ -42,7 +43,7 @@ def p2p_progress_hook(curidx, endidx):
     actual_args = find_required_args()
     update_ = {"progress": curidx/endidx * 100}
     filter_ = actual_args['filter']
-    p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_)
+    p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_, password=actual_args['password'])
 
 
 def p2p_dictionary_update(update_dictionary):
@@ -56,7 +57,7 @@ def p2p_dictionary_update(update_dictionary):
     p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_dictionary)
 
 
-def get_remote_future(f, identifier, db_url, db, col, key_interpreter_dict):
+def get_remote_future(f, identifier, db_url, db, col, key_interpreter_dict, password):
     up_dir = os.path.join(db_url, db)
     if not os.path.exists(up_dir):
         os.mkdir(up_dir)
@@ -71,7 +72,8 @@ def get_remote_future(f, identifier, db_url, db, col, key_interpreter_dict):
         p2p_pull_update_one(db_url, db, col, search_filter, expected_keys_list,
                             deserializer=partial(deserialize_doc_from_net,
                                                  up_dir=up_dir, key_interpreter=key_interpreter_dict),
-                            hint_file_keys=hint_file_keys)
+                            hint_file_keys=hint_file_keys,
+                            password=password)
 
     item = find(db_url, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
     item = {k: item[k] for k in expected_keys_list}
@@ -122,10 +124,10 @@ def get_expected_keys(f):
     return expected_keys
 
 
-def create_future(f, identifier, db_url, db, col, key_interpreter):
+def create_future(f, identifier, db_url, db, col, key_interpreter, password):
     item = find(db_url, db, col, {"identifier": identifier}, key_interpreter)[0]
     if item['nodes'] or 'remote_identifier' in item:
-        return Future(partial(get_remote_future, f, identifier, db_url, db, col, key_interpreter))
+        return Future(partial(get_remote_future, f, identifier, db_url, db, col, key_interpreter, password))
     else:
         return Future(partial(get_local_future, f, identifier, db_url, db, col, key_interpreter))
 
@@ -231,7 +233,7 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
             expected_keys = get_expected_keys(f)
             if identifier_seen(db_url, identifier, db, col, expected_keys):
                 logger.info("Returning future that may already be precomputed")
-                return create_future(f, identifier, db_url, db, col, key_interpreter)
+                return create_future(f, identifier, db_url, db, col, key_interpreter, self.crypt_pass)
 
             validate_arguments(f, args, kwargs)
             kwargs.update(expected_keys)
@@ -241,7 +243,7 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
 
             if can_do_locally_func() or lru_ip is None:
                 nodes = []
-                p2p_insert_one(db_url, db, col, kwargs, nodes)
+                p2p_insert_one(db_url, db, col, kwargs, nodes, self.crypt_pass)
                 new_f = wraps(f)(partial(function_executor, f=f, filter={'identifier': kwargs['identifier']},
                                          db_url=db_url, db=db, col=col, key_interpreter=key_interpreter,
                                          logging_queue=self._logging_queue))
@@ -260,12 +262,14 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
                 #  the current node should pull the identifier that the worker created and use it to filter the next time the arguments
                 kwargs['remote_identifier'] = create_remote_identifier(kwargs['identifier'],
                                                                        {"ip": lru_ip, "port": lru_port, "db": db,
-                                                                        "col": col, "func_name": f.__name__})
-                p2p_insert_one(db_url, db, col, kwargs, nodes, current_address_func=partial(self_is_reachable, self.local_port))
+                                                                        "col": col, "func_name": f.__name__,
+                                                                        "password": self.crypt_pass})
+                p2p_insert_one(db_url, db, col, kwargs, nodes, current_address_func=partial(self_is_reachable, self.local_port),
+                               password=self.crypt_pass)
                 filter = {"identifier": identifier, "remote_identifier": kwargs['remote_identifier']}
-                call_remote_func(lru_ip, lru_port, db, col, f.__name__, filter)
+                call_remote_func(lru_ip, lru_port, db, col, f.__name__, filter, self.crypt_pass)
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
-            return create_future(f, identifier, db_url, db, col, key_interpreter)
+            return create_future(f, identifier, db_url, db, col, key_interpreter, self.crypt_pass)
         return wrap
     return inner_decorator
 
@@ -322,7 +326,7 @@ def create_p2p_client_app(discovery_ips_file=None, local_port=None, password="")
     p2p_flask_app.register_blueprint(bookkeeper_bp)
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(1)
-    p2p_flask_app.password = password
+    p2p_flask_app.crypt_pass = sha256_crypt.encrypt(password)
     # p2p_flask_app.list_futures = []
 
     p2p_flask_app.background_thread = ServerThread(p2p_flask_app)

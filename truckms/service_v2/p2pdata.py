@@ -347,14 +347,15 @@ def p2p_insert_one(db_path, db, col, document, nodes, serializer=serialize_doc_f
             file, json = serializer(data)
             try:
                 requests.post("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json},
-                              headers={'Authorization': sha256_crypt.encrypt(password)})
+                              headers={'Authorization': password})
             except:
                 traceback.print_exc()
                 logger.info(traceback.format_exc())
                 logger.warning("Unable to post p2p data",)
 
 
-def p2p_push_update_one(db_path, db, col, filter, update,  serializer=serialize_doc_for_net, visited_nodes=None, recursive=True):
+def p2p_push_update_one(db_path, db, col, filter, update,  serializer=serialize_doc_for_net, visited_nodes=None, recursive=True,
+                        password=""):
     logger = logging.getLogger(__name__)
 
     if visited_nodes is None:
@@ -383,10 +384,10 @@ def p2p_push_update_one(db_path, db, col, filter, update,  serializer=serialize_
         visited_json = dumps(visited_nodes)
 
         try:
-            res = requests.post("http://{}/push_update_one/{}/{}".format(node, db, col), files=files, data={"update_json": update_json,
-                                                                                                   "filter_json": filter_json,
-                                                                                                   "visited_json": visited_json,
-                                                                                                        "recursive": recursive})
+            url = "http://{}/push_update_one/{}/{}".format(node, db, col)
+            data_to_send = {"update_json": update_json, "filter_json": filter_json, "visited_json": visited_json,
+                            "recursive": recursive}
+            res = requests.post(url, files=files, data=data_to_send, headers={"Authorization": password})
             if res.status_code == 200:
                 if isinstance(res.json, collections.Callable): # from requests lib
                     returned_json = res.json()
@@ -428,7 +429,8 @@ def merge_downloaded_data(original_data, merging_data):
     return result_update
 
 
-def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_file_keys=None, merging_func=merge_downloaded_data):
+def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_file_keys=None, merging_func=merge_downloaded_data,
+                        password=""):
     logger = logging.getLogger(__name__)
 
     if hint_file_keys is None:
@@ -454,9 +456,9 @@ def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_f
 
 
         try:
-            res = requests.post("http://{}/pull_update_one/{}/{}".format(node, db, col), files={}, data={"req_keys_json": req_keys_json,
-                                                                                          "filter_json": filter_json,
-                                                                                          "hint_file_keys_json": hint_file_keys_json})
+            data_to_send = {"req_keys_json": req_keys_json, "filter_json": filter_json, "hint_file_keys_json": hint_file_keys_json}
+            url = "http://{}/pull_update_one/{}/{}".format(node, db, col)
+            res = requests.post(url, files={}, data=data_to_send, headers={"Authorization": password})
 
             if res.status_code == 200:
                 update_json = res.headers['update_json']

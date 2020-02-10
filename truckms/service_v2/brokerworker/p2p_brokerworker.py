@@ -17,23 +17,23 @@ from json import dumps, loads
 from truckms.service_v2.api import configure_logger
 
 
-def call_remote_func(ip, port, db, col, func_name, filter):
+def call_remote_func(ip, port, db, col, func_name, filter, password):
     """
     Client wrapper function over REST Api call
     """
     data = {"filter_json": dumps(filter)}
 
-    res = requests.post(
-        "http://{ip}:{port}/execute_function/{db}/{col}/{fname}".format(ip=ip, port=port, db=db,
-                                                                         col=col, fname=func_name), files={}, data=data)
+    url = "http://{ip}:{port}/execute_function/{db}/{col}/{fname}".format(ip=ip, port=port, db=db, col=col,
+                                                                          fname=func_name)
+    res = requests.post(url, files={}, data=data, headers={"Authorization": password})
     return res
 
 
-def check_remote_identifier(ip, port, db, col, func_name, identifier):
-    res = requests.get(
-        "http://{ip}:{port}/identifier_available/{db}/{col}/{fname}/{identifier}".format(ip=ip, port=port, db=db,
+def check_remote_identifier(ip, port, db, col, func_name, identifier, password):
+    url = "http://{ip}:{port}/identifier_available/{db}/{col}/{fname}/{identifier}".format(ip=ip, port=port, db=db,
                                                                                      col=col, fname=func_name,
-                                                                                 identifier=identifier), files={},data={})
+                                                                                 identifier=identifier)
+    res = requests.get(url, files={}, data={}, headers={"Authorization": password})
     if res.status_code == 200 and res.content == b'yes':
         return True
     elif res.status_code == 404 and res.content == b'no':
@@ -42,7 +42,7 @@ def check_remote_identifier(ip, port, db, col, func_name, identifier):
         raise ValueError("Problem")
 
 
-def function_executor(f, filter, db, col, db_url, key_interpreter, logging_queue):
+def function_executor(f, filter, db, col, db_url, key_interpreter, logging_queue, password):
     qh = logging.handlers.QueueHandler(logging_queue)
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
@@ -64,7 +64,7 @@ def function_executor(f, filter, db, col, db_url, key_interpreter, logging_queue
     update_['finished'] = True
     if not all(isinstance(k, str) for k in update_.keys()):
         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
-    p2p_push_update_one(db_url, db, col, filter, update_)
+    p2p_push_update_one(db_url, db, col, filter, update_, password)
     return update_
 
 
@@ -98,7 +98,8 @@ def route_execute_function(f, db_url, db, col, key_interpreter, can_do_locally_f
                     f=f, filter=filter,
                     db_url=db_url, db=db, col=col,
                     key_interpreter=key_interpreter,
-                    logging_queue=self._logging_queue))
+                    logging_queue=self._logging_queue,
+                    password=self.crypt_pass))
         res = self.worker_pool.apply_async(func=new_f)
         TinyMongoClientClean(db_url)[db][col].update_one(filter, {"started": f.__name__})
         self.list_futures.append(res)
@@ -180,30 +181,30 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, time_l
         self.route("/insert_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_insert_one_func)
 
         p2p_route_push_update_one_func = wraps(p2p_route_push_update_one)(
-            partial(p2p_route_push_update_one,
+            partial(self.pass_req_dec(p2p_route_push_update_one),
                     db_path=db_url, db=db, col=col,
                     deserializer=partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)))
         self.route("/push_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_push_update_one_func)
 
         p2p_route_pull_update_one_func = wraps(p2p_route_pull_update_one)(
-            partial(p2p_route_pull_update_one,
+            partial(self.pass_req_dec(p2p_route_pull_update_one),
                     db_path=db_url, db=db, col=col))
         self.route("/pull_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_pull_update_one_func)
 
         execute_function_partial = wraps(f)(
-            partial(route_execute_function,
+            partial(self.pass_req_dec(route_execute_function),
                     f=f, db_url=db_url, db=db, col=col,
                     key_interpreter=key_interpreter, can_do_locally_func=can_do_locally_func, self=self))
         self.route('/execute_function/{db}/{col}/{fname}'.format(db=db, col=col, fname=f.__name__), methods=['POST'])(execute_function_partial)
 
         search_work_partial = wraps(route_search_work)(
-            partial(route_search_work,
+            partial(self.pass_req_dec(route_search_work),
                     db_url=db_url, db=db, collection=col,
                     func_name=f.__name__, time_limit=time_limit))
         self.route("/search_work/{db}/{col}/{fname}".format(db=db, col=col, fname=f.__name__), methods=['POST'])(search_work_partial)
 
         identifier_available_partial = wraps(route_identifier_available)(
-            partial(route_identifier_available,
+            partial(self.pass_req_dec(route_identifier_available),
                     db_path=db_url, db=db, col=col))
         self.route("/identifier_available/{db}/{col}/{fname}/<identifier>".format(db=db, col=col, fname=f.__name__), methods=['GET'])(identifier_available_partial)
 

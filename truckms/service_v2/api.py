@@ -138,6 +138,8 @@ class P2PFlaskApp(Flask):
                     break
                 logger = logging.getLogger(record.name)
                 logger.handle(record)
+            except BrokenPipeError as e:
+                break
             except Exception as e:
                 traceback.print_exc()
                 pass
