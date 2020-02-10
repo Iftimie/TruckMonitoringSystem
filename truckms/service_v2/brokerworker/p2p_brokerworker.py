@@ -173,9 +173,10 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, time_l
 
         # these functions below make more sense in p2p_data.py
         p2p_route_insert_one_func = wraps(p2p_route_insert_one)(
-            partial(p2p_route_insert_one,
+            partial(self.pass_req_dec(p2p_route_insert_one),
                     db=db, col=col, db_path=db_url,
                     deserializer=partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)))
+
         self.route("/insert_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_insert_one_func)
 
         p2p_route_push_update_one_func = wraps(p2p_route_push_update_one)(
@@ -217,8 +218,8 @@ def heartbeat(db_url, db="tms"):
     collection.insert_one({"time_of_heartbeat": time.time()})
     return make_response("Thank god you are alive", 200)
 
-
-def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None):
+from truckms.service_v2.p2pdata import password_required
+def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, password=""):
     """
     Returns a Flask derived object with additional features
 
@@ -238,6 +239,7 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None):
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(2)
     p2p_flask_app.list_futures = []
+    p2p_flask_app.pass_req_dec = password_required(password)
     # TODO I need to create a time regular func for those requests that are old in order to execute them in broker
 
     return p2p_flask_app

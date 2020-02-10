@@ -14,6 +14,7 @@ import time
 from functools import wraps
 import collections.abc
 import zipfile
+from passlib.hash import sha256_crypt
 
 
 class TinyMongoClientClean(tinymongo.TinyMongoClient):
@@ -130,6 +131,17 @@ def deserialize_doc_from_net(files, json, up_dir, key_interpreter=None):
     return data
 
 
+def password_required(password):
+    def internal_decorator(f):
+        @wraps(f)
+        def wrap(*args, **kwargs):
+            if not sha256_crypt.verify(password, request.headers.get('Authorization')):
+                return make_response("Unauthorized", 401)
+            return f(*args, **kwargs)
+        return wrap
+    return internal_decorator
+
+
 def p2p_route_insert_one(db_path, db, col, deserializer=deserialize_doc_from_net):
     """
     Function designed to be decorated with flask.app.route
@@ -142,7 +154,6 @@ def p2p_route_insert_one(db_path, db, col, deserializer=deserialize_doc_from_net
 
     Args:
         db_path, db, col are part of tinymongo db
-        key_interpreter: dictionary containing keys and the expected datatypes
         deserializer: function that deserializes the json and files (files should be saved to some directory known by the deserialized function)
     Returns:
         flask Response
@@ -308,7 +319,8 @@ def find(db_path, db, col, query, key_interpreter_dict=None):
     return collection
 
 
-def p2p_insert_one(db_path, db, col, document, nodes, serializer=serialize_doc_for_net, current_address_func=lambda : None, do_upload=True):
+def p2p_insert_one(db_path, db, col, document, nodes, serializer=serialize_doc_for_net, current_address_func=lambda : None, do_upload=True,
+                   password=""):
     """
     post_func is used especially for testing
     current_address_func: self_is_reachable should be called or actually a function that returns the current address
@@ -334,7 +346,8 @@ def p2p_insert_one(db_path, db, col, document, nodes, serializer=serialize_doc_f
             data["nodes"] += current_addr
             file, json = serializer(data)
             try:
-                requests.post("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json})
+                requests.post("http://{}/insert_one/{}/{}".format(node, db, col), files=file, data={"json": json},
+                              headers={'Authorization': sha256_crypt.encrypt(password)})
             except:
                 traceback.print_exc()
                 logger.info(traceback.format_exc())

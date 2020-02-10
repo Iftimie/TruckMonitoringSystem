@@ -304,13 +304,14 @@ def wait_for_discovery(local_port):
         time.sleep(5)
 
 
-def create_p2p_client_app(discovery_ips_file=None, local_port=None):
+def create_p2p_client_app(discovery_ips_file=None, local_port=None, password=""):
     """
     Returns a Flask derived object with additional features
 
     Args:
         discovery_ips_file: file with other nodes
         local_port: Local port of the app
+        password: used for authentification when asking for brokers or client workers
     """
     configure_logger("client", module_level_list=[(__name__, 'INFO')])
 
@@ -321,6 +322,7 @@ def create_p2p_client_app(discovery_ips_file=None, local_port=None):
     p2p_flask_app.register_blueprint(bookkeeper_bp)
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(1)
+    p2p_flask_app.password = password
     # p2p_flask_app.list_futures = []
 
     p2p_flask_app.background_thread = ServerThread(p2p_flask_app)
