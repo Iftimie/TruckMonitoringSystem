@@ -153,7 +153,7 @@ def route_identifier_available(db_path, db, col, identifier):
         return make_response("no", 404)
 
 
-def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, time_limit=12):
+def register_p2p_func(self, can_do_locally_func=lambda: True, time_limit=12):
     """
     In p2p brokerworker, this decorator will have the role of either executing a function that was registered (worker role), or store the arguments in a
      database in order to execute the function later by a clientworker (broker role).
@@ -161,15 +161,14 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: True, time_l
     Args:
         self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
             just to avoid making redundant Classes. Just trying to make the code more functional
-        cache_path: path to a directory that serves storing information about function calls in a database
         can_do_locally_func: function that returns True if work can be done locally and false if it should be done later
             by this current node or by a clientworker
         limit=hours
     """
 
     def inner_decorator(f):
-        key_interpreter, db_url, db, col = derive_vars_from_function(f, cache_path)
-        updir = os.path.join(cache_path, db, col)  # upload directory
+        key_interpreter, db_url, db, col = derive_vars_from_function(f, self.cache_path)
+        updir = os.path.join(self.cache_path, db, col)  # upload directory
         os.makedirs(updir, exist_ok=True)
 
         # these functions below make more sense in p2p_data.py
@@ -220,21 +219,23 @@ def heartbeat(db_url, db="tms"):
     return make_response("Thank god you are alive", 200)
 
 from truckms.service_v2.p2pdata import password_required
-def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, password=""):
+def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, password="", cache_path=None):
     """
     Returns a Flask derived object with additional features
 
     Args:
         port:
         discovery_ips_file: file with other nodes
+        cache_path: path to a directory that serves storing information about function calls in a database
     """
     configure_logger("brokerworker", module_level_list=[(__name__, 'INFO')])
 
     p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
+    p2p_flask_app.cache_path = cache_path
 
     p2p_flask_app.roles.append("brokerworker")
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
-                                                   discovery_ips_file=discovery_ips_file)
+                                                   discovery_ips_file=discovery_ips_file, db_url=cache_path)
     p2p_flask_app.register_blueprint(bookkeeper_bp)
 
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)

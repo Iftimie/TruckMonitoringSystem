@@ -32,22 +32,21 @@ def find_response_with_work(local_port, db, collection, func_name, password):
         logger.info("No broker found")
 
     for broker in brokers:
-        broker_ip, broker_port = broker['ip'], broker['port']
+        broker_address = broker['address']
         try:
-            url = 'http://{}:{}/search_work/{}/{}/{}'.format(broker_ip, broker_port, db, collection, func_name)
+            url = 'http://{}/search_work/{}/{}/{}'.format(broker_address, db, collection, func_name)
             res = requests.post(url, timeout=5, headers={"Authorization": password})
             if isinstance(res.json, collections.Callable):
                 returned_json = res.json()  # from requests lib
             else: # is property
                 returned_json = res.json  # from Flask test client
             if returned_json and 'filter' in returned_json:
-                logger.info("Found work from {}, {}".format(broker_ip, broker_port))
-                res_broker_ip = broker_ip
-                res_broker_port = broker_port
+                logger.info("Found work from {}".format(broker_address))
+                res_broker_ip,res_broker_port = broker_address.split(":")
                 res_json = returned_json
                 break
         except:  # except connection timeout or something like that
-            logger.info("broker unavailable {}:{}".format(broker_ip, broker_port))
+            logger.info("broker unavailable {}".format(broker_address))
             pass
 
     if res_broker_ip is None:
@@ -57,7 +56,7 @@ def find_response_with_work(local_port, db, collection, func_name, password):
     return res_json, res_broker_ip, res_broker_port
 
 
-def register_p2p_func(self, cache_path, can_do_work_func):
+def register_p2p_func(self, can_do_work_func):
     """
     In p2p clientworker, this decorator will have the role of deciding making a node behind a firewall or NAT capable of
     executing a function that receives input arguments from over the network.
@@ -65,12 +64,11 @@ def register_p2p_func(self, cache_path, can_do_work_func):
     Args:
         self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
             just to avoid making redundant Classes. Just trying to make the code more functional
-        cache_path: path to a directory that serves storing information about function calls in a database
     """
 
     def inner_decorator(f):
-        key_interpreter, db_url, db, col = derive_vars_from_function(f, cache_path)
-        updir = os.path.join(cache_path, db, col)  # upload directory
+        key_interpreter, db_url, db, col = derive_vars_from_function(f, self.cache_path)
+        updir = os.path.join(self.cache_path, db, col)  # upload directory
         os.makedirs(updir, exist_ok=True)
 
         param_keys = list(inspect.signature(f).parameters.keys())
@@ -116,21 +114,23 @@ def register_p2p_func(self, cache_path, can_do_work_func):
     return inner_decorator
 
 
-def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None, password=""):
+def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None, password="", cache_path=None):
     """
     Returns a Flask derived object with additional features
 
     Args:
         port:
         discovery_ips_file: file with other nodes
+        cache_path: path to a directory that serves storing information about function calls in a database
     """
     configure_logger("clientworker", module_level_list=[(__name__, 'INFO'),
                                                         (p2p_brokerworker.__name__, 'INFO')])
 
     p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
+    p2p_flask_app.cache_path = cache_path
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
-                                                   discovery_ips_file=discovery_ips_file)
+                                                   discovery_ips_file=discovery_ips_file, db_url=cache_path)
     p2p_flask_app.register_blueprint(bookkeeper_bp)
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(2)

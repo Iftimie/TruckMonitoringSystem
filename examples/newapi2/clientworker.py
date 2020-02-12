@@ -6,14 +6,14 @@ import shutil
 
 if __name__ == "__main__":
     password = "super secret password"
-    clientworker_app = create_p2p_clientworker_app("network_discovery_clientworker.txt", local_port=5002,
-                                                   password=password)
     path = '/home/achellaris/projects_data/TruckMonitoringSystem/service/clientworker.db'
+    clientworker_app = create_p2p_clientworker_app("network_discovery_clientworker.txt", local_port=5002,
+                                                   password=password, cache_path=path)
     # path = r'D:\tms_data\node_dirs\clientworker.db'
 
     if True:
         if os.path.exists(path):
             shutil.rmtree(path)
 
-    clientworker_app.register_p2p_func(path, can_do_work_func=lambda: True)(analyze_movie)
+    clientworker_app.register_p2p_func(can_do_work_func=lambda: True)(analyze_movie)
     clientworker_app.run(host='0.0.0.0')

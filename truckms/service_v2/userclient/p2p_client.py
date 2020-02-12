@@ -208,7 +208,7 @@ def create_remote_identifier(local_identifier, check_remote_identifier_args):
                 raise ValueError("Too many hash collisions. Change the hash function")
 
 
-def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
+def register_p2p_func(self, can_do_locally_func=lambda: False):
     """
     In p2p client, this decorator will have the role of deciding if the function should be executed remotely or
     locally. It will store the input in a collection. If the current node is reachable, then data will be updated automatically,
@@ -217,13 +217,12 @@ def register_p2p_func(self, cache_path, can_do_locally_func=lambda: False):
     Args:
         self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
             just to avoid making redundant Classes. Just trying to make the code more functional
-        cache_path: path to a directory that serves storing information about function calls in a database
         can_do_locally_func: function that returns True if work can be done locally and false if it should be done remotely
             if not specified, then it means all calls should be done remotely
     """
 
     def inner_decorator(f):
-        key_interpreter, db_url, db, col = derive_vars_from_function(f, cache_path)
+        key_interpreter, db_url, db, col = derive_vars_from_function(f, self.cache_path)
 
         @wraps(f)
         def wrap(*args, **kwargs):
@@ -308,7 +307,7 @@ def wait_for_discovery(local_port):
         time.sleep(5)
 
 
-def create_p2p_client_app(discovery_ips_file=None, local_port=None, password=""):
+def create_p2p_client_app(discovery_ips_file=None, local_port=None, password="", cache_path=None):
     """
     Returns a Flask derived object with additional features
 
@@ -316,13 +315,15 @@ def create_p2p_client_app(discovery_ips_file=None, local_port=None, password="")
         discovery_ips_file: file with other nodes
         local_port: Local port of the app
         password: used for authentification when asking for brokers or client workers
+        cache_path: path to a directory that serves storing information about function calls in a database
     """
     configure_logger("client", module_level_list=[(__name__, 'INFO')])
 
     p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
+    p2p_flask_app.cache_path = cache_path
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
-                                                   discovery_ips_file=discovery_ips_file)
+                                                   discovery_ips_file=discovery_ips_file, db_url=cache_path)
     p2p_flask_app.register_blueprint(bookkeeper_bp)
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(1)

@@ -5,7 +5,6 @@ import requests
 from truckms.service.model import create_session, VideoStatuses
 import os
 import GPUtil
-from truckms.service.bookkeeper import NodeState
 import time
 import logging
 import traceback
@@ -61,6 +60,8 @@ def select_lru_worker(local_port):
         logger.info(traceback.format_exc())
         return None, None
 
+    print(res)
+    res = list(filter(lambda d: 'node_type' in d, res))
     res1 = [item for item in res if 'worker' in item['node_type'] or 'broker' in item['node_type']]
     if len(res1) == 0:
         logger.info("No worker or broker available")
@@ -68,19 +69,19 @@ def select_lru_worker(local_port):
     res1 = sorted(res1, key=lambda x: x['workload'])
     while res1:
         try:
-            response = requests.get('http://{}:{}/echo'.format(res1[0]['ip'], res1[0]['port']))
+            response = requests.get('http://{}/echo'.format(res1[0]['address']))
             if response.status_code == 200:
                 break
             else:
                 raise ValueError
         except:
-            logger.info("worker unavailable {}:{}".format(res1[0]['ip'], res1[0]['port']))
+            logger.info("worker unavailable {}".format(res1[0]['address']))
             res1.pop(0)
 
     if len(res1) == 0:
         logger.info("No worker or broker available")
         return None, None
-    return res1[0]['ip'], res1[0]['port']
+    return res1[0]['address'].split(":")
 
 
 def get_job_dispathcher(db_url, num_workers, max_operating_res, skip, local_port, analysis_func=None):
