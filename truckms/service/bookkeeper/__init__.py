@@ -8,7 +8,6 @@ from werkzeug.serving import make_server
 import requests
 import logging
 import traceback
-from typing import Tuple
 import socket
 from typing import List
 from tinymongo import TinyMongoClient
@@ -21,10 +20,8 @@ def node_states(db_url):
     if request.method == 'POST':
         current_states = {d['address']: d for d in db[collection].find({})}
         current_states.update({d['address']: d for d in request.json})
-        print(current_states)
         db[collection].remove({})
         db[collection].insert_many(list(current_states.values()))
-        print(list(db[collection].find({})))
         return make_response("done", 200)
     else:
         current_states = list(db[collection].find({}))
@@ -54,6 +51,94 @@ def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discov
     return bookkeeper_bp
 
 
+def get_state_in_lan(local_port, app_roles):
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    s.connect(("8.8.8.8", 80))
+    ip_ = s.getsockname()[0]
+    s.close()
+    state = {'address': ip_+":"+str(local_port),
+                              'workload': find_workload(),
+                              'node_type': ",".join(app_roles)}
+    return state
+
+
+def get_state_in_wan(local_port, app_roles):
+    state = []
+    try:
+        externalipres = requests.get('http://checkip.dyndns.org/')
+        part = externalipres.content.decode('utf-8').split(": ")[1]
+        ip_ = part.split("<")[0]
+        try:
+            echo_response = requests.get('http://{}:{}/echo'.format(ip_, local_port), timeout=3)
+            if echo_response.status_code == 200:
+                state.append({'address': ip_+":"+str(local_port),
+                                          'workload': find_workload(),
+                                          'node_type': ",".join(app_roles)})
+        except:
+            pass
+    except:
+        pass
+    return state
+
+
+def get_states_from_file(discovery_ips_file):
+    states = []
+    # other states
+    if discovery_ips_file is not None:
+        with open(discovery_ips_file, 'r') as f:
+            for line in f.readlines():
+                if len(line) < 4: continue
+                states.append({'address': line.strip()})
+    return states
+
+
+def write_states_to_file(discovery_ips_file, discovered_states):
+    # TODO I should move this reading from here to the app creation and use app.test_client.get
+    if discovery_ips_file is not None:
+        with open(discovery_ips_file, 'w') as f:
+            for state in discovered_states:
+                f.write("{address}\n".format(address=state['address']))
+
+
+def set_from_list(discovered_states):
+    merge_states = dict()
+    for d in discovered_states:
+        if d['address'] in merge_states:
+            if len(d) > len(merge_states[d['address']]):  # or d is newer than merge_states[d]
+                merge_states[d['address']] = d
+        else:
+            merge_states[d['address']] = d
+    discovered_states = list(merge_states.values())
+    return discovered_states
+
+
+def query_pull_from_nodes(discovered_states):
+    states = discovered_states[:]
+    for state in discovered_states[:]:
+        try:
+            discovered_ = requests.get('http://{}/node_states'.format(state['address'])).json()
+            states.extend(discovered_)
+        except:
+            #some adresses may be dead
+            #TODO maybe remove them?
+            pass
+    states = set_from_list(states)
+    return states
+
+
+def push_to_nodes(discovered_states):
+    logger = logging.getLogger(__name__)
+    # publish the results to the current node and also to the rest of the nodes
+    for state in discovered_states:
+        try:
+            response = requests.post('http://{}/node_states'.format(state['address']), json=discovered_states)
+        except:
+            logger.info("{} no longer exists".format(state['address']))
+            # some adresses may be dead
+            # TODO maybe remove them?
+            pass
+
+
 def update_function(local_port, app_roles, discovery_ips_file):
     """
     Function for bookkeeper to make network discovery
@@ -61,90 +146,33 @@ def update_function(local_port, app_roles, discovery_ips_file):
     """
     logger = logging.getLogger(__name__)
 
+    discovered_states = []
+
+    # get the current list of nodes
     try:
         res = requests.get('http://localhost:{}/node_states'.format(local_port)).json()  # will get the data defined above
-
-        # own state
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        ip_ = s.getsockname()[0]
-        s.close()
-        discovered_states = []
-        discovered_states.append({'address': ip_+":"+str(local_port),
-                                  'workload': find_workload(),
-                                  'hardware': "Nvidia GTX 960M Intel i7",
-                                  'nickname': "rmstn",
-                                  'node_type': ",".join(app_roles),
-                                  'email': 'iftimie.alexandru.florentin@gmail.com'})
-
-        try:
-            externalipres = requests.get('http://checkip.dyndns.org/')
-            part = externalipres.content.decode('utf-8').split(": ")[1]
-            ip_ = part.split("<")[0]
-            try:
-                echo_response = requests.get('http://{}:{}/echo'.format(ip_, local_port), timeout=3)
-                if echo_response.status_code == 200:
-                    discovered_states.append({'address': ip_+":"+str(local_port),
-                                              'workload': find_workload(),
-                                              'hardware': "Nvidia GTX 960M Intel i7",
-                                              'nickname': "rmstn",
-                                              'node_type': ",".join(app_roles),
-                                              'email': 'iftimie.alexandru.florentin@gmail.com'})
-            except:
-                pass
-        except:
-            logger.info(traceback.format_exc())
-
-        # other states
-        if discovery_ips_file is not None:
-            with open(discovery_ips_file, 'r') as f:
-                for line in f.readlines():
-                    if len(line) < 4 : continue
-                    discovered_states.append({'address': line.strip()})
-        print("ASDasdasdasdasdasdasdaasdasdasdasdasdasd")
-
-        for state in res:
-            try:
-                discovered_ = requests.get('http://{}/node_states'.format(state['address'])).json()
-                discovered_states.extend(discovered_)
-            except:
-                #some adresses may be dead
-                #TODO maybe remove them?
-                pass
-
-        print("ASDasdasdasdasdasdasda")
-
-        merge_states = dict()
-        for d in discovered_states:
-            if d['address'] in merge_states:
-                if len(d) > len(merge_states[d['address']]):# or d is newer than merge_states[d]
-                    merge_states[d['address']] = d
-            else:
-                merge_states[d['address']] = d
-
-        discovered_states = list(merge_states.values())
-
-        # also store them
-        print("ASDasdasdasd")
-        # TODO I should move this reading from here to the app creation and use app.test_client.get
-        if discovery_ips_file is not None:
-            with open(discovery_ips_file, 'w') as f:
-                for state in discovered_states:
-                    f.write("{address}\n".format(address=state['address']))
-
-        # publish the results to the current node and also to the rest of the nodes
-        print(discovered_states)
-        requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states)
-        for state in res:
-            try:
-                response = requests.post('http://{}/node_states'.format(state['address']), json=discovered_states)
-            except:
-                logger.info("{} no longer exists".format(state['address']))
-                #some adresses may be dead
-                #TODO maybe remove them?
-                pass
+        discovered_states.extend(res)
     except:
         logger.info(traceback.format_exc())
+
+    # get the current node state in LAN
+    discovered_states.append(get_state_in_lan(local_port, app_roles))
+    discovered_states.extend(get_state_in_wan(local_port, app_roles))
+    discovered_states.extend(get_states_from_file(discovered_states))
+
+    discovered_states = set_from_list(discovered_states)
+
+    # query the remote nodes
+    discovered_states = query_pull_from_nodes(discovered_states)
+
+    # also store them
+    write_states_to_file(discovery_ips_file, discovered_states)
+
+    # publish them locally
+    requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states)
+
+    # publish them remotely
+    push_to_nodes(discovered_states)
 
 
 def create_bookkeeper_service(local_port: int, discovery_ips_file: str) -> P2PFlaskApp:
