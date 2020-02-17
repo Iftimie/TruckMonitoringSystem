@@ -60,7 +60,6 @@ def select_lru_worker(local_port):
         logger.info(traceback.format_exc())
         return None, None
 
-    print(res)
     res = list(filter(lambda d: 'node_type' in d, res))
     res1 = [item for item in res if 'worker' in item['node_type'] or 'broker' in item['node_type']]
     if len(res1) == 0:

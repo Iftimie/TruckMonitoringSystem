@@ -7,7 +7,7 @@ from truckms.service_v2.p2pdata import p2p_pull_update_one, deserialize_doc_from
 import inspect
 import io
 import os
-from truckms.service_v2.brokerworker.p2p_brokerworker import function_executor
+from truckms.service_v2.brokerworker.p2p_brokerworker import function_executor, delete_old_finished_requests
 from truckms.service_v2.brokerworker import p2p_brokerworker
 from truckms.service_v2.api import derive_vars_from_function
 from truckms.service_v2.api import configure_logger
@@ -17,6 +17,7 @@ import requests
 import collections
 import multiprocessing
 from passlib.hash import sha256_crypt
+from collections import defaultdict
 
 
 def find_response_with_work(local_port, db, collection, func_name, password):
@@ -67,7 +68,12 @@ def register_p2p_func(self, can_do_work_func):
     """
 
     def inner_decorator(f):
+        if f.__name__ in self.registry_functions:
+            raise ValueError("Function name already registered")
         key_interpreter, db_url, db, col = derive_vars_from_function(f, self.cache_path)
+        
+        self.registry_functions[f.__name__]['key_interpreter'] = key_interpreter
+
         updir = os.path.join(self.cache_path, db, col)  # upload directory
         os.makedirs(updir, exist_ok=True)
 
@@ -132,9 +138,12 @@ def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None, passwo
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
                                                    discovery_ips_file=discovery_ips_file, db_url=cache_path)
     p2p_flask_app.register_blueprint(bookkeeper_bp)
+
+    p2p_flask_app.registry_functions = defaultdict(dict)
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(2)
     p2p_flask_app.list_futures = []
     p2p_flask_app.crypt_pass = sha256_crypt.encrypt(password)
+    p2p_flask_app.register_time_regular_func(partial(delete_old_finished_requests, p2p_flask_app.registry_functions))
 
     return p2p_flask_app

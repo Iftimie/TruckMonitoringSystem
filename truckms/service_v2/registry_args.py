@@ -244,3 +244,23 @@ def hash_kwargs(doc):
         acc += bytes_hasher[cls_finder(v)](v)
     hash_ = mmh3.hash_bytes(acc)
     return binascii.hexlify(hash_).decode()
+
+
+value_remover = {int: lambda value: None,
+                float: lambda value: None,
+                str: lambda value: None,
+                IOBase: lambda handle: os.remove(handle.name),
+                Callable: lambda func: None,
+                List[str]: lambda lstr: None,
+                List[int]: lambda lint: None,
+                List[float]: lambda lfloat: None,
+                List: lambda value: None,
+                type(None): lambda value: None,
+                Dict: lambda value: None,
+                Dict[str, str]: lambda value: None}
+
+
+def remove_values_from_doc(doc):
+    for k in doc:
+        v = doc[k]
+        value_remover[cls_finder(v)](v)

@@ -15,6 +15,7 @@ import inspect
 import logging
 from json import dumps, loads
 from truckms.service_v2.api import configure_logger
+from collections import defaultdict
 
 
 def call_remote_func(ip, port, db, col, func_name, filter, password):
@@ -167,7 +168,12 @@ def register_p2p_func(self, can_do_locally_func=lambda: True, time_limit=12):
     """
 
     def inner_decorator(f):
+        if f.__name__ in self.registry_functions:
+            raise ValueError("Function name already registered")
         key_interpreter, db_url, db, col = derive_vars_from_function(f, self.cache_path)
+
+        self.registry_functions[f.__name__]['key_interpreter'] = key_interpreter
+
         updir = os.path.join(self.cache_path, db, col)  # upload directory
         os.makedirs(updir, exist_ok=True)
 
@@ -218,6 +224,26 @@ def heartbeat(db_url, db="tms"):
     collection.insert_one({"time_of_heartbeat": time.time()})
     return make_response("Thank god you are alive", 200)
 
+
+from truckms.service_v2.p2pdata import deserialize_doc_from_db
+from truckms.service_v2.registry_args import remove_values_from_doc
+def delete_old_finished_requests(cache_path, registry_functions, time_limit=24):
+    db_url = cache_path
+    db = TinyMongoClientClean(db_url)['p2p']
+    collection_names = db.tinydb.tables() - {"_default"}
+    for col_name in collection_names:
+        key_interpreter_dict = registry_functions[col_name]['key_interpreter']
+
+        col_items = list(db[col_name].find({}))
+        col_items = filter(lambda item: "finished" in item, col_items)
+        col_items = filter(lambda item: (time.time() - item['timestamp']) > time_limit * 3600, col_items)
+
+        for item in col_items:
+            if (time.time() - item['timestamp']) > time_limit * 3600:
+                document = deserialize_doc_from_db(item, key_interpreter_dict)
+                remove_values_from_doc(document)
+                db[col_name].remove(item)
+
 from truckms.service_v2.p2pdata import password_required
 def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, password="", cache_path=None):
     """
@@ -238,10 +264,12 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, passwo
                                                    discovery_ips_file=discovery_ips_file, db_url=cache_path)
     p2p_flask_app.register_blueprint(bookkeeper_bp)
 
+    p2p_flask_app.registry_functions = defaultdict(dict)
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(2)
     p2p_flask_app.list_futures = []
     p2p_flask_app.pass_req_dec = password_required(password)
+    p2p_flask_app.register_time_regular_func(partial(delete_old_finished_requests, p2p_flask_app.registry_functions))
     # TODO I need to create a time regular func for those requests that are old in order to execute them in broker
 
     return p2p_flask_app
