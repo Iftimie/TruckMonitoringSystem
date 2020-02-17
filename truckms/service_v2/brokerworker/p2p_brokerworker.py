@@ -16,6 +16,7 @@ import logging
 from json import dumps, loads
 from truckms.service_v2.api import configure_logger
 from collections import defaultdict
+from passlib.hash import sha256_crypt
 
 
 def call_remote_func(ip, port, db, col, func_name, filter, password):
@@ -269,7 +270,10 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, passwo
     p2p_flask_app.worker_pool = multiprocessing.Pool(2)
     p2p_flask_app.list_futures = []
     p2p_flask_app.pass_req_dec = password_required(password)
-    p2p_flask_app.register_time_regular_func(partial(delete_old_finished_requests, p2p_flask_app.registry_functions))
+    p2p_flask_app.register_time_regular_func(partial(delete_old_finished_requests,
+                                                     cache_path=cache_path,
+                                                     registry_functions=p2p_flask_app.registry_functions))
+    p2p_flask_app.crypt_pass = sha256_crypt.encrypt(password)
     # TODO I need to create a time regular func for those requests that are old in order to execute them in broker
 
     return p2p_flask_app

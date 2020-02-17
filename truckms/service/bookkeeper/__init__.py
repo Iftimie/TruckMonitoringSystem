@@ -158,7 +158,7 @@ def update_function(local_port, app_roles, discovery_ips_file):
     # get the current node state in LAN
     discovered_states.append(get_state_in_lan(local_port, app_roles))
     discovered_states.extend(get_state_in_wan(local_port, app_roles))
-    discovered_states.extend(get_states_from_file(discovered_states))
+    discovered_states.extend(get_states_from_file(discovery_ips_file))
 
     discovered_states = set_from_list(discovered_states)
 

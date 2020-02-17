@@ -71,7 +71,7 @@ def register_p2p_func(self, can_do_work_func):
         if f.__name__ in self.registry_functions:
             raise ValueError("Function name already registered")
         key_interpreter, db_url, db, col = derive_vars_from_function(f, self.cache_path)
-        
+
         self.registry_functions[f.__name__]['key_interpreter'] = key_interpreter
 
         updir = os.path.join(self.cache_path, db, col)  # upload directory
