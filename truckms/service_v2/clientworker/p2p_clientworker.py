@@ -144,6 +144,8 @@ def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None, passwo
     p2p_flask_app.worker_pool = multiprocessing.Pool(2)
     p2p_flask_app.list_futures = []
     p2p_flask_app.crypt_pass = sha256_crypt.encrypt(password)
-    p2p_flask_app.register_time_regular_func(partial(delete_old_finished_requests, p2p_flask_app.registry_functions))
+    p2p_flask_app.register_time_regular_func(partial(delete_old_finished_requests,
+                                                     cache_path=cache_path,
+                                                     registry_functions=p2p_flask_app.registry_functions))
 
     return p2p_flask_app

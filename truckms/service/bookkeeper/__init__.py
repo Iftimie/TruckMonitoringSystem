@@ -11,21 +11,30 @@ import traceback
 import socket
 from typing import List
 from tinymongo import TinyMongoClient
+from pprint import pprint
+import json
+
 
 p2pbookdb = "p2pbookdb"
 collection = "nodes"
 
 def node_states(db_url):
-    db = TinyMongoClient(db_url)[p2pbookdb]
+    logger = logging.getLogger(__name__)
+    try:
+        db = TinyMongoClient(db_url)[p2pbookdb]
+        current_items = list(db[collection].find({}))
+    except json.decoder.JSONDecodeError:
+        logger.debug("{} json decoding error. probably because of not being threadsafe".format(request.remote_addr))
+        return make_response("not ok", 500)
     if request.method == 'POST':
-        current_states = {d['address']: d for d in db[collection].find({})}
+        current_states = {d['address']: d for d in current_items}
         current_states.update({d['address']: d for d in request.json})
         db[collection].remove({})
-        db[collection].insert_many(list(current_states.values()))
+        new_data = list(current_states.values())
+        db[collection].insert_many(new_data)
         return make_response("done", 200)
     else:
-        current_states = list(db[collection].find({}))
-        return jsonify(current_states)
+        return jsonify(current_items)
 
 
 def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discovery_ips_file: str, db_url) -> P2PBlueprint:
@@ -167,6 +176,12 @@ def update_function(local_port, app_roles, discovery_ips_file):
 
     # also store them
     write_states_to_file(discovery_ips_file, discovered_states)
+
+    discovered_states = list(filter(lambda d: len(d) > 1, discovered_states))
+
+    for state in discovered_states:
+        if '_id' in state:
+            del state['_id']
 
     # publish them locally
     requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states)
