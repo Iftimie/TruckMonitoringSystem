@@ -12,7 +12,7 @@ if __name__ == "__main__":
         if os.path.exists(path):
             shutil.rmtree(path)
 
-    broker_worker_app = create_p2p_brokerworker_app("network_discovery_brokerworker.txt", local_port=5001,
+    broker_worker_app = create_p2p_brokerworker_app("network_discovery_brokerworker.txt", local_port=5001, mongod_port=5101,
                                                     password=password, cache_path=path)
     # path = r'D:\tms_data\node_dirs\brokerworker.db'
 

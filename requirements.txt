@@ -28,3 +28,4 @@ multipledispatch
 varint
 mmh3
 passlib
+pymongo

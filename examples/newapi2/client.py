@@ -13,7 +13,7 @@ if __name__ == "__main__":
         if os.path.exists(path):
             shutil.rmtree(path)
 
-    client_app = create_p2p_client_app("network_discovery_client.txt", local_port=5000, password=password, cache_path=path)
+    client_app = create_p2p_client_app("network_discovery_client.txt", local_port=5000, mongod_port=5100, password=password, cache_path=path)
     # path = r'D:\tms_data\node_dirs\client.db'
 
     analyze_movie = client_app.register_p2p_func(can_do_locally_func=lambda: False)(analyze_movie)

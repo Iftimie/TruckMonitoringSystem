@@ -246,7 +246,7 @@ def delete_old_finished_requests(cache_path, registry_functions, time_limit=24):
                 db[col_name].remove(item)
 
 from truckms.service_v2.p2pdata import password_required
-def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, password="", cache_path=None):
+def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, password="", cache_path=None, mongod_port=None):
     """
     Returns a Flask derived object with additional features
 
@@ -262,7 +262,7 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, passwo
 
     p2p_flask_app.roles.append("brokerworker")
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
-                                                   discovery_ips_file=discovery_ips_file, db_url=cache_path)
+                                                   discovery_ips_file=discovery_ips_file, db_url=cache_path, mongod_port=mongod_port)
     p2p_flask_app.register_blueprint(bookkeeper_bp)
 
     p2p_flask_app.registry_functions = defaultdict(dict)

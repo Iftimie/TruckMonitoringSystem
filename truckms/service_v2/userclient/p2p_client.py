@@ -307,7 +307,7 @@ def wait_for_discovery(local_port):
         time.sleep(5)
 
 
-def create_p2p_client_app(discovery_ips_file=None, local_port=None, password="", cache_path=None):
+def create_p2p_client_app(discovery_ips_file=None, local_port=None, mongod_port=None, password="", cache_path=None):
     """
     Returns a Flask derived object with additional features
 
@@ -319,11 +319,12 @@ def create_p2p_client_app(discovery_ips_file=None, local_port=None, password="",
     """
     configure_logger("client", module_level_list=[(__name__, 'INFO')])
 
+
     p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
     p2p_flask_app.cache_path = cache_path
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
-                                                   discovery_ips_file=discovery_ips_file, db_url=cache_path)
+                                                   discovery_ips_file=discovery_ips_file, db_url=cache_path, mongod_port=mongod_port)
     p2p_flask_app.register_blueprint(bookkeeper_bp)
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(1)

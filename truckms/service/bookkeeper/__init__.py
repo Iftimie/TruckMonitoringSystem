@@ -1,7 +1,5 @@
 from flask import make_response, request, jsonify
-from truckms.service_v2.api import P2PFlaskApp, P2PBlueprint, find_free_port
-from collections import namedtuple
-from flask import Blueprint
+from truckms.service_v2.api import P2PFlaskApp, P2PBlueprint
 from functools import partial, wraps
 import threading
 from werkzeug.serving import make_server
@@ -10,19 +8,23 @@ import logging
 import traceback
 import socket
 from typing import List
-from tinymongo import TinyMongoClient
-from pprint import pprint
+from pymongo import MongoClient
 import json
-
+import os
+import subprocess
 
 p2pbookdb = "p2pbookdb"
 collection = "nodes"
 
-def node_states(db_url):
+
+def node_states(mongod_port):
     logger = logging.getLogger(__name__)
     try:
-        db = TinyMongoClient(db_url)[p2pbookdb]
+        client = MongoClient(port=mongod_port)
+        db = client[p2pbookdb]
         current_items = list(db[collection].find({}))
+        for item in current_items:
+            del item['_id']
     except json.decoder.JSONDecodeError:
         logger.debug("{} json decoding error. probably because of not being threadsafe".format(request.remote_addr))
         return make_response("not ok", 500)
@@ -37,7 +39,7 @@ def node_states(db_url):
         return jsonify(current_items)
 
 
-def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discovery_ips_file: str, db_url) -> P2PBlueprint:
+def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discovery_ips_file: str, db_url, mongod_port) -> P2PBlueprint:
     """
     Creates the bookkeeper blueprint
 
@@ -51,8 +53,12 @@ def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discov
         P2PBluePrint
     """
     bookkeeper_bp = P2PBlueprint("bookkeeper_bp", __name__, role="bookkeeper")
-    func = (wraps(node_states)(partial(node_states, db_url)))
+    func = (wraps(node_states)(partial(node_states, mongod_port)))
     bookkeeper_bp.route("/node_states", methods=['POST', 'GET'])(func)
+    if not os.path.exists(db_url):
+        os.mkdir(db_url)
+    bookkeeper_bp.mongod = subprocess.Popen(["mongod", "--dbpath", db_url, "--port", str(mongod_port),
+                                             "--logpath", os.path.join(db_url, "mongodlog.log")])
 
     time_regular_func = partial(update_function, local_port, app_roles, discovery_ips_file)
     bookkeeper_bp.register_time_regular_func(time_regular_func)
