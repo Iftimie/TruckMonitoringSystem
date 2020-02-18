@@ -66,7 +66,7 @@ def function_executor(f, filter, db, col, db_url, key_interpreter, logging_queue
     update_['finished'] = True
     if not all(isinstance(k, str) for k in update_.keys()):
         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
-    p2p_push_update_one(db_url, db, col, filter, update_, password)
+    p2p_push_update_one(db_url, db, col, filter, update_, password=password)
     return update_
 
 

@@ -54,7 +54,7 @@ def p2p_dictionary_update(update_dictionary):
     assert all(key not in update_dictionary for key in ["nodes", "timestamp", "identifier", "id_", "remote_identifier"])
     actual_args = find_required_args()
     filter_ = {"identifier": actual_args['identifier']}
-    p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_dictionary)
+    p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_dictionary, password=actual_args['password'])
 
 
 def get_remote_future(f, identifier, db_url, db, col, key_interpreter_dict, password):

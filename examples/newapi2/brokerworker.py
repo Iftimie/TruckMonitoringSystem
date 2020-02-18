@@ -17,6 +17,6 @@ if __name__ == "__main__":
     # path = r'D:\tms_data\node_dirs\brokerworker.db'
 
 
-    analyze_movie = broker_worker_app.register_p2p_func(can_do_locally_func=lambda: True,
+    analyze_movie = broker_worker_app.register_p2p_func(can_do_locally_func=lambda: False,
                                                         time_limit=12)(analyze_movie)
     broker_worker_app.run(host='0.0.0.0')
