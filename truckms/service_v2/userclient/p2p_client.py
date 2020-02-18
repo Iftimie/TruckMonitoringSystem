@@ -24,10 +24,12 @@ from truckms.service_v2.registry_args import kicomp
 from werkzeug.serving import make_server
 from truckms.service_v2.api import configure_logger
 from passlib.hash import sha256_crypt
+import os
+import subprocess
 
 
 def find_required_args():
-    necessary_args = ['db', 'col', 'filter', 'db_url', 'password']
+    necessary_args = ['db', 'col', 'filter', 'mongod_port', 'password']
     actual_args = dict()
     frame_infos = inspect.stack()[:]
     for frame in frame_infos:
@@ -43,7 +45,7 @@ def p2p_progress_hook(curidx, endidx):
     actual_args = find_required_args()
     update_ = {"progress": curidx/endidx * 100}
     filter_ = actual_args['filter']
-    p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_, password=actual_args['password'])
+    p2p_push_update_one(actual_args['mongod_port'], actual_args['db'], actual_args['col'], filter_, update_, password=actual_args['password'])
 
 
 def p2p_dictionary_update(update_dictionary):
@@ -57,11 +59,11 @@ def p2p_dictionary_update(update_dictionary):
     p2p_push_update_one(actual_args['db_url'], actual_args['db'], actual_args['col'], filter_, update_dictionary, password=actual_args['password'])
 
 
-def get_remote_future(f, identifier, db_url, db, col, key_interpreter_dict, password):
-    up_dir = os.path.join(db_url, db)
+def get_remote_future(f, identifier, cache_path, mongod_port, db, col, key_interpreter_dict, password):
+    up_dir = os.path.join(cache_path, db)
     if not os.path.exists(up_dir):
         os.mkdir(up_dir)
-    item = find(db_url, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
+    item = find(mongod_port, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
     expected_keys = inspect.signature(f).return_annotation
     expected_keys_list = list(expected_keys.keys())
     expected_keys_list.append("progress")
@@ -69,23 +71,23 @@ def get_remote_future(f, identifier, db_url, db, col, key_interpreter_dict, pass
         hint_file_keys = [k for k, v in expected_keys.items() if v == io.IOBase]
 
         search_filter = {"$or": [{"identifier": identifier}, {"identifier": item['remote_identifier']}]}
-        p2p_pull_update_one(db_url, db, col, search_filter, expected_keys_list,
+        p2p_pull_update_one(mongod_port, db, col, search_filter, expected_keys_list,
                             deserializer=partial(deserialize_doc_from_net,
                                                  up_dir=up_dir, key_interpreter=key_interpreter_dict),
                             hint_file_keys=hint_file_keys,
                             password=password)
 
-    item = find(db_url, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
+    item = find(mongod_port, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
     item = {k: item[k] for k in expected_keys_list}
     return item
 
 
-def get_local_future(f, identifier, db_url, db, col, key_interpreter_dict):
+def get_local_future(f, identifier, cache_path, mongod_port, db, col, key_interpreter_dict):
     expected_keys = inspect.signature(f).return_annotation
     expected_keys_list = list(expected_keys.keys())
     expected_keys_list.append("progress")
 
-    item = find(db_url, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
+    item = find(mongod_port, db, col, {"identifier": identifier}, key_interpreter_dict)[0]
     item = {k: v for k, v in item.items() if k in expected_keys_list}
     return item
 
@@ -124,21 +126,21 @@ def get_expected_keys(f):
     return expected_keys
 
 
-def create_future(f, identifier, db_url, db, col, key_interpreter, password):
-    item = find(db_url, db, col, {"identifier": identifier}, key_interpreter)[0]
+def create_future(f, identifier, cache_path, mongod_port, db, col, key_interpreter, password):
+    item = find(mongod_port, db, col, {"identifier": identifier}, key_interpreter)[0]
     if item['nodes'] or 'remote_identifier' in item:
-        return Future(partial(get_remote_future, f, identifier, db_url, db, col, key_interpreter, password))
+        return Future(partial(get_remote_future, f, identifier, cache_path, mongod_port, db, col, key_interpreter, password))
     else:
-        return Future(partial(get_local_future, f, identifier, db_url, db, col, key_interpreter))
+        return Future(partial(get_local_future, f, identifier, cache_path, mongod_port, db, col, key_interpreter))
 
 
-def identifier_seen(db_url, identifier, db, col, expected_keys, time_limit=24):
+def identifier_seen(mongod_port, identifier, db, col, expected_keys, time_limit=24):
     """
     Returns boolean about if the current arguments resulted in an identifier that was already seen
     """
     logger = logging.getLogger(__name__)
 
-    collection = find(db_url, db, col, {"identifier": identifier})
+    collection = find(mongod_port, db, col, {"identifier": identifier})
 
     if collection:
         assert len(collection) == 1
@@ -154,7 +156,7 @@ def identifier_seen(db_url, identifier, db, col, expected_keys, time_limit=24):
         return False
 
 
-def create_identifier(db_url, db, col, kwargs, key_interpreter_dict):
+def create_identifier(mongod_port, db, col, kwargs, key_interpreter_dict):
     """
     A hash from the arguments will be created that will help to easily identify the set of arguments for later retrieval
 
@@ -172,7 +174,7 @@ def create_identifier(db_url, db, col, kwargs, key_interpreter_dict):
 
     count = 1
     while True:
-        collection = find(db_url, db, col, {"identifier": identifier}, key_interpreter_dict)
+        collection = find(mongod_port, db, col, {"identifier": identifier}, key_interpreter_dict)
         if len(collection) == 0:
             # we found an identifier that is not in DB
             return identifier
@@ -222,17 +224,17 @@ def register_p2p_func(self, can_do_locally_func=lambda: False):
     """
 
     def inner_decorator(f):
-        key_interpreter, db_url, db, col = derive_vars_from_function(f, self.cache_path)
+        key_interpreter, db, col = derive_vars_from_function(f)
 
         @wraps(f)
         def wrap(*args, **kwargs):
             logger = logging.getLogger(__name__)
 
-            identifier = create_identifier(db_url, db, col, kwargs, key_interpreter)
+            identifier = create_identifier(self.mongod_port, db, col, kwargs, key_interpreter)
             expected_keys = get_expected_keys(f)
-            if identifier_seen(db_url, identifier, db, col, expected_keys):
+            if identifier_seen(self.mongod_port, identifier, db, col, expected_keys):
                 logger.info("Returning future that may already be precomputed")
-                return create_future(f, identifier, db_url, db, col, key_interpreter, self.crypt_pass)
+                return create_future(f, identifier, self.cache_path, self.mongod_port, db, col, key_interpreter, self.crypt_pass)
 
             validate_arguments(f, args, kwargs)
             kwargs.update(expected_keys)
@@ -242,9 +244,9 @@ def register_p2p_func(self, can_do_locally_func=lambda: False):
 
             if can_do_locally_func() or lru_ip is None:
                 nodes = []
-                p2p_insert_one(db_url, db, col, kwargs, nodes, self.crypt_pass)
+                p2p_insert_one(self.mongod_port, db, col, kwargs, nodes, self.crypt_pass)
                 new_f = wraps(f)(partial(function_executor, f=f, filter={'identifier': kwargs['identifier']},
-                                         db_url=db_url, db=db, col=col, key_interpreter=key_interpreter,
+                                         mongod_port=self.mongod_port, db=db, col=col, key_interpreter=key_interpreter,
                                          logging_queue=self._logging_queue))
                 res = self.worker_pool.apply_async(func=new_f)
                 logger.info("Executing function locally")
@@ -263,12 +265,12 @@ def register_p2p_func(self, can_do_locally_func=lambda: False):
                                                                        {"ip": lru_ip, "port": lru_port, "db": db,
                                                                         "col": col, "func_name": f.__name__,
                                                                         "password": self.crypt_pass})
-                p2p_insert_one(db_url, db, col, kwargs, nodes, current_address_func=partial(self_is_reachable, self.local_port),
+                p2p_insert_one(self.mongod_port, db, col, kwargs, nodes, current_address_func=partial(self_is_reachable, self.local_port),
                                password=self.crypt_pass)
                 filter = {"identifier": identifier, "remote_identifier": kwargs['remote_identifier']}
                 call_remote_func(lru_ip, lru_port, db, col, f.__name__, filter, self.crypt_pass)
                 logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
-            return create_future(f, identifier, db_url, db, col, key_interpreter, self.crypt_pass)
+            return create_future(f, identifier, self.cache_path, self.mongod_port, db, col, key_interpreter, self.crypt_pass)
         return wrap
     return inner_decorator
 
@@ -318,13 +320,20 @@ def create_p2p_client_app(discovery_ips_file=None, local_port=None, mongod_port=
         cache_path: path to a directory that serves storing information about function calls in a database
     """
     configure_logger("client", module_level_list=[(__name__, 'INFO')])
-
+    if not os.path.exists(cache_path):
+        os.mkdir(cache_path)
 
     p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
     p2p_flask_app.cache_path = cache_path
+    p2p_flask_app.mongod_port = mongod_port
+
+    if not os.path.exists(cache_path):
+        os.mkdir(cache_path)
+    p2p_flask_app.mongod = subprocess.Popen(["mongod", "--dbpath", cache_path, "--port", str(mongod_port),
+                                             "--logpath", os.path.join(cache_path, "mongodlog.log")])
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
-                                                   discovery_ips_file=discovery_ips_file, db_url=cache_path, mongod_port=mongod_port)
+                                                   discovery_ips_file=discovery_ips_file, mongod_port=mongod_port)
     p2p_flask_app.register_blueprint(bookkeeper_bp)
     p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
     p2p_flask_app.worker_pool = multiprocessing.Pool(1)

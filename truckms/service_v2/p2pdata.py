@@ -7,7 +7,6 @@ from functools import partial
 import logging
 import io
 import traceback
-import tinymongo
 import os
 from typing import Tuple
 import time
@@ -15,16 +14,9 @@ from functools import wraps
 import collections.abc
 import zipfile
 from passlib.hash import sha256_crypt
-
-
-class TinyMongoClientClean(tinymongo.TinyMongoClient):
-    """
-    Class created in order to suppress the warning about the directory existance for the foldername
-    """
-    def __init__(self, foldername=u"tinydb"):
-        self._foldername = foldername
-        if not os.path.exists(foldername):
-            os.mkdir(foldername)
+from truckms.service_v2.registry_args import serialize_doc_for_db
+from truckms.service_v2.registry_args import deserialize_doc_from_db
+from pymongo import MongoClient
 
 
 def zip_files(files):
@@ -142,7 +134,7 @@ def password_required(password):
     return internal_decorator
 
 
-def p2p_route_insert_one(db_path, db, col, deserializer=deserialize_doc_from_net):
+def p2p_route_insert_one(mongod_port, db, col, deserializer=deserialize_doc_from_net):
     """
     Function designed to be decorated with flask.app.route
     The function should be partially applied will all arguments
@@ -166,11 +158,11 @@ def p2p_route_insert_one(db_path, db, col, deserializer=deserialize_doc_from_net
 
     data_to_insert = deserializer(files, request.form['json'])
     # this will insert. and if the same data exists then it will crash
-    update_one(db_path, db, col, data_to_insert, data_to_insert, upsert=True)
+    update_one(mongod_port, db, col, data_to_insert, data_to_insert, upsert=True)
     return make_response("ok")
 
 
-def p2p_route_push_update_one(db_path, db, col, deserializer=deserialize_doc_from_net):
+def p2p_route_push_update_one(mongod_port, db, col, deserializer=deserialize_doc_from_net):
     """
     Function designed to be decorated with flask.app.route
     The function should be partially applied will all arguments
@@ -205,11 +197,11 @@ def p2p_route_push_update_one(db_path, db, col, deserializer=deserialize_doc_fro
     recursive = request.form["recursive"]
 
     if recursive:
-        visited_nodes = p2p_push_update_one(db_path, db, col, filter_data, update_data, visited_nodes=visited_nodes)
+        visited_nodes = p2p_push_update_one(mongod_port, db, col, filter_data, update_data, visited_nodes=visited_nodes)
     return jsonify(visited_nodes)
 
 
-def p2p_route_pull_update_one(db_path, db, col, serializer=serialize_doc_for_net):
+def p2p_route_pull_update_one(mongod_port, db, col, serializer=serialize_doc_for_net):
     """
     Function designed to be decorated with flask.app.route
     The function should be partially applied will all arguments
@@ -232,7 +224,7 @@ def p2p_route_pull_update_one(db_path, db, col, serializer=serialize_doc_for_net
     req_keys = loads(request.form['req_keys_json'])
     filter_data = loads(request.form['filter_json'])
     hint_file_keys = loads(request.form['hint_file_keys_json'])
-    required_list = list(TinyMongoClientClean(db_path)[db][col].find(filter_data))
+    required_list = list(MongoClient(port=mongod_port)[db][col].find(filter_data))
     if not required_list:
         return make_response("filter" + str(filter_data) + "resulted in empty collection")
     # TODO there is a case when filter from client contains both local and remote identifiers, and also both identifiers can be seen here
@@ -279,11 +271,8 @@ def validate_document(document):
             raise ValueError("Cannot have nested dictionaries in current implementation")
 
 
-from truckms.service_v2.registry_args import serialize_doc_for_db
-from truckms.service_v2.registry_args import deserialize_doc_from_db
-
 #https://gitlab.nsd.no/ire/python-webserver-file-submission-poc/blob/master/flask_app.py
-def update_one(db_path, db, col, query, doc, upsert=False):
+def update_one(mongod_port, db, col, query, doc, upsert=False):
     """
     This function is entry point for both insert and update.
     """
@@ -294,7 +283,7 @@ def update_one(db_path, db, col, query, doc, upsert=False):
     validate_document(doc)
     validate_document(query)
 
-    collection = TinyMongoClientClean(db_path)[db][col]
+    collection = MongoClient(port=mongod_port)[db][col]
     res = list(collection.find(query))
     doc["timestamp"] = time.time()
     if len(res) == 0 and upsert is True:
@@ -307,11 +296,11 @@ def update_one(db_path, db, col, query, doc, upsert=False):
         raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(query), str(res)))
 
 
-def find(db_path, db, col, query, key_interpreter_dict=None):
+def find(mongod_port, db, col, query, key_interpreter_dict=None):
 
     query = serialize_doc_for_db(query)
 
-    collection = list(TinyMongoClientClean(db_path)[db][col].find(query))
+    collection = list(MongoClient(port=mongod_port)[db][col].find(query))
     for i in range(len(collection)):
         collection[i] = deserialize_doc_from_db(collection[i], key_interpreter_dict)
         # TODO should delete keys such as nodes, _id, timestamp?
@@ -354,19 +343,19 @@ def p2p_insert_one(db_path, db, col, document, nodes, serializer=serialize_doc_f
                 logger.warning("Unable to post p2p data",)
 
 
-def p2p_push_update_one(db_path, db, col, filter, update,  serializer=serialize_doc_for_net, visited_nodes=None, recursive=True,
+def p2p_push_update_one(mongod_port, db, col, filter, update,  serializer=serialize_doc_for_net, visited_nodes=None, recursive=True,
                         password=""):
     logger = logging.getLogger(__name__)
 
     if visited_nodes is None:
         visited_nodes = []
     try:
-        update_one(db_path, db, col, filter, update, upsert=False)
+        update_one(mongod_port, db, col, filter, update, upsert=False)
     except ValueError as e:
         logger.info(traceback.format_exc())
         raise e
 
-    collection = TinyMongoClientClean(db_path)[db][col]
+    collection = MongoClient(port=mongod_port)[db][col]
     res = list(collection.find(filter))
     if len(res) != 1:
         raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(filter), str(res)))
@@ -429,7 +418,7 @@ def merge_downloaded_data(original_data, merging_data):
     return result_update
 
 
-def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_file_keys=None, merging_func=merge_downloaded_data,
+def p2p_pull_update_one(mongod_port, db, col, filter, req_keys, deserializer, hint_file_keys=None, merging_func=merge_downloaded_data,
                         password=""):
     logger = logging.getLogger(__name__)
 
@@ -438,7 +427,7 @@ def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_f
 
     req_keys = list(set(req_keys) | set(["timestamp"]))
 
-    collection = TinyMongoClientClean(db_path)[db][col]
+    collection = MongoClient(port=mongod_port)[db][col]
     collection_res = list(collection.find(filter))
     if len(collection_res) != 1:
         raise ValueError("Unable to update. Query: {}. Documents: {}".format(str(filter), str(collection_res)))
@@ -478,7 +467,7 @@ def p2p_pull_update_one(db_path, db, col, filter, req_keys, deserializer, hint_f
     update = merging_func(collection_res[0], merging_data)
 
     try:
-        update_one(db_path, db, col, filter, update, upsert=False)
+        update_one(mongod_port, db, col, filter, update, upsert=False)
     except ValueError as e:
         logger.info(traceback.format_exc())
         raise e

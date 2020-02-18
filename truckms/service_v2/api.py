@@ -362,7 +362,7 @@ def validate_function_signature(func):
     #  and provide serialization and deserialization methods for each
 
 
-def derive_vars_from_function(f, cache_path):
+def derive_vars_from_function(f):
     """
     Inspects function signature and creates some necessary variables for p2p framework
 
@@ -378,12 +378,11 @@ def derive_vars_from_function(f, cache_path):
             db: hardcoded "p2p" key
             col: function name
     """
-    db_url = cache_path
     db = "p2p"
     validate_function_signature(f)
     key_interpreter = get_class_dictionary_from_func(f)
     col = f.__name__
-    return key_interpreter, db_url, db, col
+    return key_interpreter, db, col
 
 
 def configure_logger(name, module_level_list=None, default_level='WARNING'):

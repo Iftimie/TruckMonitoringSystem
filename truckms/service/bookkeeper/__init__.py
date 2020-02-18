@@ -10,8 +10,6 @@ import socket
 from typing import List
 from pymongo import MongoClient
 import json
-import os
-import subprocess
 
 p2pbookdb = "p2pbookdb"
 collection = "nodes"
@@ -39,7 +37,7 @@ def node_states(mongod_port):
         return jsonify(current_items)
 
 
-def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discovery_ips_file: str, db_url, mongod_port) -> P2PBlueprint:
+def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discovery_ips_file: str, mongod_port) -> P2PBlueprint:
     """
     Creates the bookkeeper blueprint
 
@@ -55,10 +53,6 @@ def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discov
     bookkeeper_bp = P2PBlueprint("bookkeeper_bp", __name__, role="bookkeeper")
     func = (wraps(node_states)(partial(node_states, mongod_port)))
     bookkeeper_bp.route("/node_states", methods=['POST', 'GET'])(func)
-    if not os.path.exists(db_url):
-        os.mkdir(db_url)
-    bookkeeper_bp.mongod = subprocess.Popen(["mongod", "--dbpath", db_url, "--port", str(mongod_port),
-                                             "--logpath", os.path.join(db_url, "mongodlog.log")])
 
     time_regular_func = partial(update_function, local_port, app_roles, discovery_ips_file)
     bookkeeper_bp.register_time_regular_func(time_regular_func)

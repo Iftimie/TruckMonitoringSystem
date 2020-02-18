@@ -11,6 +11,7 @@ if __name__ == "__main__":
     if True:
         if os.path.exists(path):
             shutil.rmtree(path)
+            while os.path.exists(path): pass
 
     broker_worker_app = create_p2p_brokerworker_app("network_discovery_brokerworker.txt", local_port=5001, mongod_port=5101,
                                                     password=password, cache_path=path)

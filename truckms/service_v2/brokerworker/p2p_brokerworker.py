@@ -5,18 +5,23 @@ import multiprocessing
 from flask import make_response, jsonify
 from truckms.service_v2.api import derive_vars_from_function
 import time
-import os
+from truckms.service_v2.p2pdata import password_required
 from flask import request
 from functools import wraps, partial
 from truckms.service_v2.p2pdata import p2p_route_insert_one, deserialize_doc_from_net, p2p_route_pull_update_one, \
     p2p_route_push_update_one
-from truckms.service_v2.p2pdata import find, p2p_push_update_one, TinyMongoClientClean
+from truckms.service_v2.p2pdata import find, p2p_push_update_one
+from pymongo import MongoClient
 import inspect
 import logging
 from json import dumps, loads
 from truckms.service_v2.api import configure_logger
 from collections import defaultdict
 from passlib.hash import sha256_crypt
+import os
+import subprocess
+from truckms.service_v2.p2pdata import deserialize_doc_from_db
+from truckms.service_v2.registry_args import remove_values_from_doc
 
 
 def call_remote_func(ip, port, db, col, func_name, filter, password):
@@ -44,7 +49,7 @@ def check_remote_identifier(ip, port, db, col, func_name, identifier, password):
         raise ValueError("Problem")
 
 
-def function_executor(f, filter, db, col, db_url, key_interpreter, logging_queue, password):
+def function_executor(f, filter, db, col, mongod_port, key_interpreter, logging_queue, password):
     qh = logging.handlers.QueueHandler(logging_queue)
     root = logging.getLogger()
     root.setLevel(logging.DEBUG)
@@ -53,7 +58,7 @@ def function_executor(f, filter, db, col, db_url, key_interpreter, logging_queue
 
     logger = logging.getLogger(__name__)
 
-    kwargs_ = find(db_url, db, col, filter, key_interpreter)[0]
+    kwargs_ = find(mongod_port, db, col, filter, key_interpreter)[0]
     kwargs = {k: kwargs_[k] for k in inspect.signature(f).parameters.keys()}
 
     logger.info("Executing function: " + f.__name__)
@@ -66,11 +71,11 @@ def function_executor(f, filter, db, col, db_url, key_interpreter, logging_queue
     update_['finished'] = True
     if not all(isinstance(k, str) for k in update_.keys()):
         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
-    p2p_push_update_one(db_url, db, col, filter, update_, password=password)
+    p2p_push_update_one(mongod_port, db, col, filter, update_, password=password)
     return update_
 
 
-def route_execute_function(f, db_url, db, col, key_interpreter, can_do_locally_func, self):
+def route_execute_function(f, mongod_port, db, col, key_interpreter, can_do_locally_func, self):
     """
     Function designed to be decorated with flask.app.route
     The function should be partially applied will all arguments
@@ -98,12 +103,12 @@ def route_execute_function(f, db_url, db, col, key_interpreter, can_do_locally_f
         new_f = wraps(f)(
             partial(function_executor,
                     f=f, filter=filter,
-                    db_url=db_url, db=db, col=col,
+                    mongod_port=mongod_port, db=db, col=col,
                     key_interpreter=key_interpreter,
                     logging_queue=self._logging_queue,
                     password=self.crypt_pass))
         res = self.worker_pool.apply_async(func=new_f)
-        TinyMongoClientClean(db_url)[db][col].update_one(filter, {"started": f.__name__})
+        MongoClient(port=mongod_port)[db][col].update_one(filter, {"$set": {"started": f.__name__}})
         self.list_futures.append(res)
     else:
         logger.info("Cannot execute function now: " + f.__name__)
@@ -111,10 +116,10 @@ def route_execute_function(f, db_url, db, col, key_interpreter, can_do_locally_f
     return make_response("ok")
 
 
-def route_search_work(db_url, db, collection, func_name, time_limit):
+def route_search_work(mongod_port, db, collection, func_name, time_limit):
     logger = logging.getLogger(__name__)
 
-    col = list(TinyMongoClientClean(db_url)[db][collection].find({}))
+    col = list(MongoClient(port=mongod_port)[db][collection].find({}))
 
     col = list(filter(lambda item: "finished" not in item, col))
     col1 = filter(lambda item: "started" not in item, col)
@@ -130,13 +135,13 @@ def route_search_work(db_url, db, collection, func_name, time_limit):
         item = col[0]
         filter_ = {"identifier": item["identifier"], "remote_identifier": item['remote_identifier']}
         logger.info("Node{}(possible client worker) will ask for filter: {}".format(request.remote_addr, str(filter_)))
-        TinyMongoClientClean(db_url)[db][collection].update_one(filter_, {"started": func_name})
+        MongoClient(port=mongod_port)[db][collection].update_one(filter_, {"$set": {"started": func_name}})
         return jsonify({"filter": filter_})
     else:
         return jsonify({})
 
 
-def route_identifier_available(db_path, db, col, identifier):
+def route_identifier_available(mongod_port, db, col, identifier):
     """
     Function designed to be decorated with flask.app.route
     The function should be partially applied will all arguments
@@ -148,7 +153,7 @@ def route_identifier_available(db_path, db, col, identifier):
     Args from partial application of the function:
         db_path, db, col are part of tinymongo db
     """
-    collection = find(db_path, db, col, {"identifier": identifier})
+    collection = find(mongod_port, db, col, {"identifier": identifier})
     if len(collection) == 0:
         return make_response("yes", 200)
     else:
@@ -171,7 +176,7 @@ def register_p2p_func(self, can_do_locally_func=lambda: True, time_limit=12):
     def inner_decorator(f):
         if f.__name__ in self.registry_functions:
             raise ValueError("Function name already registered")
-        key_interpreter, db_url, db, col = derive_vars_from_function(f, self.cache_path)
+        key_interpreter, db, col = derive_vars_from_function(f)
 
         self.registry_functions[f.__name__]['key_interpreter'] = key_interpreter
 
@@ -181,57 +186,54 @@ def register_p2p_func(self, can_do_locally_func=lambda: True, time_limit=12):
         # these functions below make more sense in p2p_data.py
         p2p_route_insert_one_func = wraps(p2p_route_insert_one)(
             partial(self.pass_req_dec(p2p_route_insert_one),
-                    db=db, col=col, db_path=db_url,
+                    db=db, col=col, mongod_port=self.mongod_port,
                     deserializer=partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)))
 
         self.route("/insert_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_insert_one_func)
 
         p2p_route_push_update_one_func = wraps(p2p_route_push_update_one)(
             partial(self.pass_req_dec(p2p_route_push_update_one),
-                    db_path=db_url, db=db, col=col,
+                    mongod_port=self.mongod_port, db=db, col=col,
                     deserializer=partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)))
         self.route("/push_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_push_update_one_func)
 
         p2p_route_pull_update_one_func = wraps(p2p_route_pull_update_one)(
             partial(self.pass_req_dec(p2p_route_pull_update_one),
-                    db_path=db_url, db=db, col=col))
+                    mongod_port=self.mongod_port, db=db, col=col))
         self.route("/pull_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_pull_update_one_func)
 
         execute_function_partial = wraps(f)(
             partial(self.pass_req_dec(route_execute_function),
-                    f=f, db_url=db_url, db=db, col=col,
+                    f=f, mongod_port=self.mongod_port, db=db, col=col,
                     key_interpreter=key_interpreter, can_do_locally_func=can_do_locally_func, self=self))
         self.route('/execute_function/{db}/{col}/{fname}'.format(db=db, col=col, fname=f.__name__), methods=['POST'])(execute_function_partial)
 
         search_work_partial = wraps(route_search_work)(
             partial(self.pass_req_dec(route_search_work),
-                    db_url=db_url, db=db, collection=col,
+                    mongod_port=self.mongod_port, db=db, collection=col,
                     func_name=f.__name__, time_limit=time_limit))
         self.route("/search_work/{db}/{col}/{fname}".format(db=db, col=col, fname=f.__name__), methods=['POST'])(search_work_partial)
 
         identifier_available_partial = wraps(route_identifier_available)(
             partial(self.pass_req_dec(route_identifier_available),
-                    db_path=db_url, db=db, col=col))
+                    mongod_port=self.mongod_port, db=db, col=col))
         self.route("/identifier_available/{db}/{col}/{fname}/<identifier>".format(db=db, col=col, fname=f.__name__), methods=['GET'])(identifier_available_partial)
 
     return inner_decorator
 
 
-def heartbeat(db_url, db="tms"):
+def heartbeat(mongod_port, db="tms"):
     """
     Pottential vulnerability from flooding here
     """
-    collection = TinyMongoClientClean(db_url)[db]["broker_heartbeats"]
+    collection = MongoClient(port=mongod_port)[db]["broker_heartbeats"]
     collection.insert_one({"time_of_heartbeat": time.time()})
     return make_response("Thank god you are alive", 200)
 
 
-from truckms.service_v2.p2pdata import deserialize_doc_from_db
-from truckms.service_v2.registry_args import remove_values_from_doc
-def delete_old_finished_requests(cache_path, registry_functions, time_limit=24):
-    db_url = cache_path
-    db = TinyMongoClientClean(db_url)['p2p']
-    collection_names = db.tinydb.tables() - {"_default"}
+def delete_old_finished_requests(mongod_port, registry_functions, time_limit=24):
+    db = MongoClient(port=mongod_port)['p2p']
+    collection_names = set(db.collection_names()) - {"_default"}
     for col_name in collection_names:
         key_interpreter_dict = registry_functions[col_name]['key_interpreter']
 
@@ -245,7 +247,7 @@ def delete_old_finished_requests(cache_path, registry_functions, time_limit=24):
                 remove_values_from_doc(document)
                 db[col_name].remove(item)
 
-from truckms.service_v2.p2pdata import password_required
+
 def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, password="", cache_path=None, mongod_port=None):
     """
     Returns a Flask derived object with additional features
@@ -255,14 +257,20 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, passwo
         discovery_ips_file: file with other nodes
         cache_path: path to a directory that serves storing information about function calls in a database
     """
-    configure_logger("brokerworker", module_level_list=[(__name__, 'INFO')])
+    configure_logger("brokerworker", module_level_list=[(__name__, 'DEBUG')])
 
     p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
     p2p_flask_app.cache_path = cache_path
+    p2p_flask_app.mongod_port = mongod_port
+
+    if not os.path.exists(cache_path):
+        os.mkdir(cache_path)
+    p2p_flask_app.mongod = subprocess.Popen(["mongod", "--dbpath", cache_path, "--port", str(mongod_port),
+                                             "--logpath", os.path.join(cache_path, "mongodlog.log")])
 
     p2p_flask_app.roles.append("brokerworker")
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
-                                                   discovery_ips_file=discovery_ips_file, db_url=cache_path, mongod_port=mongod_port)
+                                                   discovery_ips_file=discovery_ips_file, mongod_port=mongod_port)
     p2p_flask_app.register_blueprint(bookkeeper_bp)
 
     p2p_flask_app.registry_functions = defaultdict(dict)
@@ -271,7 +279,7 @@ def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, passwo
     p2p_flask_app.list_futures = []
     p2p_flask_app.pass_req_dec = password_required(password)
     p2p_flask_app.register_time_regular_func(partial(delete_old_finished_requests,
-                                                     cache_path=cache_path,
+                                                     mongod_port=mongod_port,
                                                      registry_functions=p2p_flask_app.registry_functions))
     p2p_flask_app.crypt_pass = sha256_crypt.encrypt(password)
     # TODO I need to create a time regular func for those requests that are old in order to execute them in broker

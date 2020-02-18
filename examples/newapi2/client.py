@@ -12,6 +12,7 @@ if __name__ == "__main__":
     if True:
         if os.path.exists(path):
             shutil.rmtree(path)
+            while os.path.exists(path): pass
 
     client_app = create_p2p_client_app("network_discovery_client.txt", local_port=5000, mongod_port=5100, password=password, cache_path=path)
     # path = r'D:\tms_data\node_dirs\client.db'

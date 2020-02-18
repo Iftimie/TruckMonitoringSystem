@@ -18,6 +18,7 @@ import collections
 import multiprocessing
 from passlib.hash import sha256_crypt
 from collections import defaultdict
+import subprocess
 
 
 def find_response_with_work(local_port, db, collection, func_name, password):
@@ -70,7 +71,7 @@ def register_p2p_func(self, can_do_work_func):
     def inner_decorator(f):
         if f.__name__ in self.registry_functions:
             raise ValueError("Function name already registered")
-        key_interpreter, db_url, db, col = derive_vars_from_function(f, self.cache_path)
+        key_interpreter, db, col = derive_vars_from_function(f)
 
         self.registry_functions[f.__name__]['key_interpreter'] = key_interpreter
 
@@ -99,13 +100,13 @@ def register_p2p_func(self, can_do_work_func):
             local_data.update({k: None for k in key_return})
 
             deserializer = partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)
-            p2p_insert_one(db_url, db, col, local_data, [broker_ip + ":" + str(broker_port)], do_upload=False, password=self.crypt_pass)
-            p2p_pull_update_one(db_url, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys, password=self.crypt_pass)
+            p2p_insert_one(self.mongod_port, db, col, local_data, [broker_ip + ":" + str(broker_port)], do_upload=False, password=self.crypt_pass)
+            p2p_pull_update_one(self.mongod_port, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys, password=self.crypt_pass)
 
             new_f = wraps(f)(
                 partial(function_executor,
                         f=f, filter=filter_,
-                        db_url=db_url, db=db, col=col,
+                        mongod_port=self.mongod_port, db=db, col=col,
                         key_interpreter=key_interpreter,
                         logging_queue=self._logging_queue,
                         password=self.crypt_pass))
@@ -134,9 +135,15 @@ def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None, passwo
 
     p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
     p2p_flask_app.cache_path = cache_path
+    p2p_flask_app.mongod_port = mongod_port
+
+    if not os.path.exists(cache_path):
+        os.mkdir(cache_path)
+    p2p_flask_app.mongod = subprocess.Popen(["mongod", "--dbpath", cache_path, "--port", str(mongod_port),
+                                             "--logpath", os.path.join(cache_path, "mongodlog.log")])
 
     bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
-                                                   discovery_ips_file=discovery_ips_file, db_url=cache_path, mongod_port=mongod_port)
+                                                   discovery_ips_file=discovery_ips_file, mongod_port=mongod_port)
     p2p_flask_app.register_blueprint(bookkeeper_bp)
 
     p2p_flask_app.registry_functions = defaultdict(dict)
@@ -145,7 +152,7 @@ def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None, passwo
     p2p_flask_app.list_futures = []
     p2p_flask_app.crypt_pass = sha256_crypt.encrypt(password)
     p2p_flask_app.register_time_regular_func(partial(delete_old_finished_requests,
-                                                     cache_path=cache_path,
+                                                     mongod_port=mongod_port,
                                                      registry_functions=p2p_flask_app.registry_functions))
 
     return p2p_flask_app
