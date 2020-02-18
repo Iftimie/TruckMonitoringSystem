@@ -32,7 +32,7 @@ https://docs.python.org/2/library/pdb.html
 https://blog.magrathealabs.com/filesystem-events-monitoring-with-python-9f5329b651c3
 """
 
-def analyze_movie(video_handle: io.IOBase) -> {"results": io.IOBase, "video_results": io.IOBase}:
+def analyze_movie(video_handle: io.IOBase, arg2: int) -> {"results": io.IOBase, "video_results": io.IOBase}:
     """
     Args:
         video_handle: file object for the movie to be analyzed.
