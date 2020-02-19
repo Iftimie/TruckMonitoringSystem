@@ -272,6 +272,7 @@ class P2PFlaskApp(Flask):
         self._time_regular_thread.join()
         self._logging_queue.put_nowait('STOP _dispatch_log_records')
         self._logger_thread.join()
+        self.mongod_process.terminate()
 
     def run(self, *args, **kwargs):
         if len(args) > 0:

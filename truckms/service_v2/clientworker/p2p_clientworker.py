@@ -77,8 +77,7 @@ class P2PClientworkerApp(P2PFlaskApp):
         executing a function that receives input arguments from over the network.
 
         Args:
-            self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
-                just to avoid making redundant Classes. Just trying to make the code more functional
+            can_do_work_func: checks if the clientworkerapp can do more work
         """
 
         def inner_decorator(f):
@@ -99,7 +98,6 @@ class P2PClientworkerApp(P2PFlaskApp):
             def wrap():
                 if not can_do_work_func():
                     return
-
                 logger = logging.getLogger(__name__)
                 logger.info("Searching for work")
                 res, broker_ip, broker_port = find_response_with_work(self.local_port, db, col, f.__name__,
