@@ -24,6 +24,7 @@ import traceback
 import os
 import subprocess
 from passlib.hash import sha256_crypt
+import pymongo
 
 
 """
@@ -119,6 +120,17 @@ def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discov
     bookkeeper_bp.register_time_regular_func(time_regular_func)
 
     return bookkeeper_bp
+
+
+def wait_for_mongo_online(mongod_port):
+    while True:
+        try:
+            client = pymongo.MongoClient(port=mongod_port)
+            client.server_info()
+            break
+        except:
+            logger.info("Mongod not online yet")
+            continue
 
 
 class P2PFlaskApp(Flask):
@@ -242,6 +254,7 @@ class P2PFlaskApp(Flask):
     def start_background_threads(self):
         self.mongod_process = subprocess.Popen(["mongod", "--dbpath", self.cache_path, "--port", str(self.mongod_port),
                                                  "--logpath", os.path.join(self.cache_path, "mongodlog.log")])
+        wait_for_mongo_online(self.mongod_port)
         # TODO also kill this process
         self._logger_thread = threading.Thread(target=P2PFlaskApp._dispatch_log_records,
                                                args=(

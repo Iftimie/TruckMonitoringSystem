@@ -132,13 +132,13 @@ def create_future(f, identifier, cache_path, mongod_port, db, col, key_interpret
         return Future(partial(get_local_future, f, identifier, cache_path, mongod_port, db, col, key_interpreter))
 
 
-def identifier_seen(mongod_port, identifier, db, col, expected_keys, time_limit=24):
+def identifier_seen(mongod_port, identifier, db, col, expected_keys, key_interpreter, time_limit=24):
     """
     Returns boolean about if the current arguments resulted in an identifier that was already seen
     """
     logger = logging.getLogger(__name__)
 
-    collection = find(mongod_port, db, col, {"identifier": identifier})
+    collection = find(mongod_port, db, col, {"identifier": identifier}, key_interpreter)
 
     if collection:
         assert len(collection) == 1
@@ -273,7 +273,7 @@ class P2PClientApp(P2PFlaskApp):
 
                 identifier = create_identifier(self.mongod_port, db, col, kwargs, key_interpreter)
                 expected_keys = get_expected_keys(f)
-                if identifier_seen(self.mongod_port, identifier, db, col, expected_keys):
+                if identifier_seen(self.mongod_port, identifier, db, col, expected_keys, key_interpreter):
                     logger.info("Returning future that may already be precomputed")
                     return create_future(f, identifier, self.cache_path, self.mongod_port, db, col, key_interpreter,
                                          self.crypt_pass)

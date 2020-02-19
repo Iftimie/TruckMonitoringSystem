@@ -27,20 +27,28 @@ def multiple_client_calls(tmpdir):
     broker_worker_thread = ServerThread(broker_worker_app)
     broker_worker_thread.start()
 
-    list_futures_of_futures = []
     with ThreadPoolExecutor(max_workers=10) as executor:
+        list_futures_of_futures = []
         for i in range(20):
             future = executor.submit(client_large_file_function, video_handle=open(__file__, 'rb'), random_arg=i)
             list_futures_of_futures.append(future)
-        for i in range(20):
-            future = executor.submit(client_large_file_function, video_handle=open(__file__, 'rb'), random_arg=i)
-            list_futures_of_futures.append(future)
+        list_futures = [f.result() for f in list_futures_of_futures]
+        assert len(list_futures) == 20
+        list_results = [f.get() for f in list_futures]
+        assert len(list_results) == 20 and all(isinstance(r, dict) for r in list_results)
 
-    list_futures = [f.result() for f in list_futures_of_futures]
-    assert len(list_futures) == 40
-    list_results = [f.get() for f in list_futures]
-    assert len(list_results) == 40 and all(isinstance(r, dict) for r in list_results)
-    print(os.listdir(cache_bw_dir+"/p2p/large_file_function"))
+        list_futures_of_futures = []
+        for i in range(20):
+            future = executor.submit(client_large_file_function, video_handle=open(__file__, 'rb'), random_arg=i)
+            list_futures_of_futures.append(future)
+        list_futures = [f.result() for f in list_futures_of_futures]
+        assert len(list_futures) == 20
+        list_results = [f.get() for f in list_futures]
+        assert len(list_results) == 20 and all(isinstance(r, dict) for r in list_results)
+
+        print(os.listdir(cache_bw_dir + "/p2p/large_file_function"))
+
+
 
     client_app.background_server.shutdown()
     broker_worker_thread.shutdown()
@@ -51,6 +59,7 @@ def clean_and_create():
     if os.path.exists(test_dir):
         rmtree(test_dir)
         while os.path.exists(test_dir): pass
+        time.sleep(1)
     os.mkdir(test_dir)
     return test_dir
 
