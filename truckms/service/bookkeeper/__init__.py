@@ -127,13 +127,14 @@ def update_function(local_port, app_roles, discovery_ips_file):
     Function for bookkeeper to make network discovery
     discovery_ips_file: can be None
     """
+    print("Started update function")
     logger = logging.getLogger(__name__)
 
     discovered_states = []
 
     # get the current list of nodes
     try:
-        res = requests.get('http://localhost:{}/node_states'.format(local_port)).json()  # will get the data defined above
+        res = requests.get('http://localhost:{}/node_states'.format(local_port), timeout=3).json()  # will get the data defined above
         discovered_states.extend(res)
     except:
         logger.info(traceback.format_exc())
@@ -158,10 +159,11 @@ def update_function(local_port, app_roles, discovery_ips_file):
             del state['_id']
 
     # publish them locally
-    requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states)
+    requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states, timeout=3)
 
     # publish them remotely
     push_to_nodes(discovered_states)
+    print("finished update function")
 
 
 def find_workload():

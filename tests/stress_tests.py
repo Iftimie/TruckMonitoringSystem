@@ -56,34 +56,37 @@ def multiple_client_calls(tmpdir):
 
 
 def multiple_client_calls_client_worker(tmpdir):
+    client_port = 5000
+    broker_port = 5004
+    client_worker_port = 5005
 
     ndclient_path = os.path.join(tmpdir, "ndclient.txt")
     ndcw_path = os.path.join(tmpdir, "ndcw.txt")
     cache_client_dir = os.path.join(tmpdir, "client")
     cache_bw_dir = os.path.join(tmpdir, "bw")
     cache_cw_dir = os.path.join(tmpdir, "cw")
-    with open(ndclient_path, "w") as f: f.write("localhost:5001\n")
-    with open(ndcw_path, "w") as f: f.write("localhost:5001\n")
-    client_app = create_p2p_client_app(ndclient_path, local_port=5000, mongod_port=5100, cache_path=cache_client_dir)
+    with open(ndclient_path, "w") as f: f.write("localhost:{}\n".format(broker_port))
+    with open(ndcw_path, "w") as f: f.write("localhost:{}\n".format(broker_port))
+    client_app = create_p2p_client_app(ndclient_path, local_port=client_port, mongod_port=client_port+100, cache_path=cache_client_dir)
     client_large_file_function = client_app.register_p2p_func(can_do_locally_func=lambda :False)(large_file_function)
 
-    broker_worker_app = P2PBrokerworkerApp(None, local_port=5001, mongod_port=5101, cache_path=cache_bw_dir)
+    broker_worker_app = P2PBrokerworkerApp(None, local_port=broker_port, mongod_port=broker_port+100, cache_path=cache_bw_dir)
     broker_worker_app.register_p2p_func(can_do_locally_func=lambda :False)(large_file_function)
     broker_worker_thread = ServerThread(broker_worker_app)
     broker_worker_thread.start()
-    clientworker_app = P2PClientworkerApp(ndcw_path, local_port=5002, mongod_port=5102, cache_path=cache_cw_dir)
+    clientworker_app = P2PClientworkerApp(ndcw_path, local_port=client_worker_port, mongod_port=client_worker_port+100, cache_path=cache_cw_dir)
     clientworker_app.register_p2p_func(can_do_work_func=lambda :True)(large_file_function)
     clientworker_thread = ServerThread(clientworker_app)
     clientworker_thread.start()
-    while select_lru_worker(5000) == (None, None):
+    while select_lru_worker(client_port) == (None, None):
         time.sleep(3)
         print("Waiting for client to know about broker")
-    while select_lru_worker(5002) == (None, None):
+    while select_lru_worker(client_worker_port) == (None, None):
         time.sleep(3)
         print("Waiting for clientworker to know about broker")
 
     with ThreadPoolExecutor(max_workers=10) as executor:
-        num_calls = 10
+        num_calls = 1
         list_futures_of_futures = []
         for i in range(num_calls):
             future = executor.submit(client_large_file_function, video_handle=open(__file__, 'rb'), random_arg=i)
@@ -93,15 +96,15 @@ def multiple_client_calls_client_worker(tmpdir):
         list_results = [f.get() for f in list_futures]
         assert len(list_results) == num_calls and all(isinstance(r, dict) for r in list_results)
 
-        num_calls = 10
-        list_futures_of_futures = []
-        for i in range(num_calls):
-            future = executor.submit(client_large_file_function, video_handle=open(__file__, 'rb'), random_arg=i)
-            list_futures_of_futures.append(future)
-        list_futures = [f.result() for f in list_futures_of_futures]
-        assert len(list_futures) == num_calls
-        list_results = [f.get() for f in list_futures]
-        assert len(list_results) == num_calls and all(isinstance(r, dict) for r in list_results)
+        # num_calls = 10
+        # list_futures_of_futures = []
+        # for i in range(num_calls):
+        #     future = executor.submit(client_large_file_function, video_handle=open(__file__, 'rb'), random_arg=i)
+        #     list_futures_of_futures.append(future)
+        # list_futures = [f.result() for f in list_futures_of_futures]
+        # assert len(list_futures) == num_calls
+        # list_results = [f.get() for f in list_futures]
+        # assert len(list_results) == num_calls and all(isinstance(r, dict) for r in list_results)
 
     client_app.background_server.shutdown()
     print("Shutdown client")
@@ -124,6 +127,7 @@ def clean_and_create():
 if __name__ == "__main__":
 
     # multiple_client_calls(clean_and_create())
-    multiple_client_calls_client_worker(clean_and_create())
+    for i in range(10):
+        multiple_client_calls_client_worker(clean_and_create())
 
     clean_and_create()

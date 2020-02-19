@@ -67,6 +67,7 @@ def function_executor(f, filter, db, col, mongod_port, key_interpreter, logging_
         raise e
     logger.info("Finished executing function: " + f.__name__)
     update_['finished'] = True
+    update_['progress'] = 100.0
     if not all(isinstance(k, str) for k in update_.keys()):
         raise ValueError("All keys in the returned dictionary must be strings in func {}".format(f.__name__))
     p2p_push_update_one(mongod_port, db, col, filter, update_, password=password)
@@ -167,6 +168,7 @@ def heartbeat(mongod_port, db="tms"):
 
 
 def delete_old_finished_requests(mongod_port, registry_functions, time_limit=24):
+    print("Started delete_old_finished_requests")
     db = MongoClient(port=mongod_port)['p2p']
     collection_names = set(db.collection_names()) - {"_default"}
     for col_name in collection_names:
@@ -181,6 +183,7 @@ def delete_old_finished_requests(mongod_port, registry_functions, time_limit=24)
                 document = deserialize_doc_from_db(item, key_interpreter_dict)
                 remove_values_from_doc(document)
                 db[col_name].remove(item)
+    print("Finished delete_old_finished_requests")
 
 
 class P2PBrokerworkerApp(P2PFlaskApp):

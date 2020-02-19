@@ -223,7 +223,9 @@ class P2PFlaskApp(Flask):
         # infinite loop will not start until the app is online
         while not stop_thread():
             for f in list_funcs:
+                print("started", f)
                 f()
+                print("stopped", f)
             time.sleep(time_interval)
 
     @staticmethod
