@@ -55,10 +55,10 @@ def multiple_client_calls(tmpdir):
     broker_worker_thread.shutdown()
 
 
-def multiple_client_calls_client_worker(tmpdir):
-    client_port = 5000
-    broker_port = 5004
-    client_worker_port = 5005
+def multiple_client_calls_client_worker(tmpdir, port_offset):
+    client_port = 5000 +port_offset
+    broker_port = 5004 +port_offset
+    client_worker_port = 5005 +port_offset
 
     ndclient_path = os.path.join(tmpdir, "ndclient.txt")
     ndcw_path = os.path.join(tmpdir, "ndcw.txt")
@@ -112,6 +112,7 @@ def multiple_client_calls_client_worker(tmpdir):
     print("Shutdown brokerworker")
     clientworker_thread.shutdown()
     print("Shutdown clientworker")
+    time.sleep(3)
 
 
 def clean_and_create():
@@ -125,9 +126,17 @@ def clean_and_create():
 
 
 if __name__ == "__main__":
-
-    # multiple_client_calls(clean_and_create())
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
     for i in range(10):
-        multiple_client_calls_client_worker(clean_and_create())
+        multiple_client_calls_client_worker(clean_and_create(), 40 + i)
 
     clean_and_create()

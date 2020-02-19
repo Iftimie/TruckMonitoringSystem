@@ -99,7 +99,7 @@ def query_pull_from_nodes(discovered_states):
     states = discovered_states[:]
     for state in discovered_states[:]:
         try:
-            discovered_ = requests.get('http://{}/node_states'.format(state['address'])).json()
+            discovered_ = requests.get('http://{}/node_states'.format(state['address']), timeout=3).json()
             states.extend(discovered_)
         except:
             #some adresses may be dead
@@ -114,7 +114,7 @@ def push_to_nodes(discovered_states):
     # publish the results to the current node and also to the rest of the nodes
     for state in discovered_states:
         try:
-            response = requests.post('http://{}/node_states'.format(state['address']), json=discovered_states)
+            response = requests.post('http://{}/node_states'.format(state['address']), json=discovered_states, timeout=3)
         except:
             logger.info("{} no longer exists".format(state['address']))
             # some adresses may be dead
@@ -127,6 +127,23 @@ def update_function(local_port, app_roles, discovery_ips_file):
     Function for bookkeeper to make network discovery
     discovery_ips_file: can be None
     """
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
     print("Started update function")
     logger = logging.getLogger(__name__)
 
@@ -139,18 +156,21 @@ def update_function(local_port, app_roles, discovery_ips_file):
     except:
         logger.info(traceback.format_exc())
 
+    print("Passed1")
     # get the current node state in LAN
     discovered_states.append(get_state_in_lan(local_port, app_roles))
     discovered_states.extend(get_state_in_wan(local_port, app_roles))
     discovered_states.extend(get_states_from_file(discovery_ips_file))
 
     discovered_states = set_from_list(discovered_states)
+    print("Passed2")
 
     # query the remote nodes
     discovered_states = query_pull_from_nodes(discovered_states)
 
     # also store them
     write_states_to_file(discovery_ips_file, discovered_states)
+    print("Passed3")
 
     discovered_states = list(filter(lambda d: len(d) > 1, discovered_states))
 
@@ -158,6 +178,7 @@ def update_function(local_port, app_roles, discovery_ips_file):
         if '_id' in state:
             del state['_id']
 
+    print("Passed4")
     # publish them locally
     requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states, timeout=3)
 

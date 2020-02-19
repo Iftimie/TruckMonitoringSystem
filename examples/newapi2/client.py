@@ -13,6 +13,11 @@ if __name__ == "__main__":
         if os.path.exists(path):
             shutil.rmtree(path)
             while os.path.exists(path): pass
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
+    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
 
     client_app = create_p2p_client_app("network_discovery_client.txt", local_port=5000, mongod_port=5100, password=password, cache_path=path)
     # path = r'D:\tms_data\node_dirs\client.db'
