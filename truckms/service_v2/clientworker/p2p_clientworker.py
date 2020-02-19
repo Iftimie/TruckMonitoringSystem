@@ -60,7 +60,7 @@ def find_response_with_work(local_port, db, collection, func_name, password):
 class P2PClientworkerApp(P2PFlaskApp):
 
     def __init__(self, discovery_ips_file, local_port, cache_path, mongod_port, password=""):
-        configure_logger("clientworker", module_level_list=[(__name__, 'INFO'),
+        configure_logger("clientworker", module_level_list=[(__name__, 'DEBUG'),
                                                             (p2p_brokerworker.__name__, 'INFO')])
         super(P2PClientworkerApp, self).__init__(__name__, local_port=local_port, discovery_ips_file=discovery_ips_file, mongod_port=mongod_port,
                                                  cache_path=cache_path, password=password)

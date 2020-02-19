@@ -245,7 +245,7 @@ def wait_for_discovery(local_port):
 class P2PClientApp(P2PFlaskApp):
 
     def __init__(self, discovery_ips_file, local_port, mongod_port, cache_path, password=""):
-        configure_logger("client", module_level_list=[(__name__, 'INFO')])
+        configure_logger("client", module_level_list=[(__name__, 'DEBUG')])
         super(P2PClientApp, self).__init__(__name__, local_port=local_port, discovery_ips_file=discovery_ips_file, mongod_port=mongod_port,
                                                  cache_path=cache_path, password=password)
         self.worker_pool = multiprocessing.Pool(1)
