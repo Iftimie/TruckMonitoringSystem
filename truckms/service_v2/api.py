@@ -1,10 +1,13 @@
 from logging.config import dictConfig
+from typing import List
 
 from flask import Flask, Blueprint, make_response
 import time
 import threading
 import logging
 import requests
+
+from truckms.service.bookkeeper import node_states, update_function
 
 logger = logging.getLogger(__name__)
 import io
@@ -18,6 +21,9 @@ from truckms.service_v2.registry_args import allowed_func_datatypes
 from truckms.service_v2.registry_args import get_class_dictionary_from_func
 import multiprocessing
 import traceback
+import os
+import subprocess
+from passlib.hash import sha256_crypt
 
 
 """
@@ -47,7 +53,72 @@ def wait_until_online(local_port):
             logger.info("App not ready")
 
 
-P2P_INFO = 25
+class P2PBlueprint(Blueprint):
+    """
+    The P2PBlueprint also has a background task, a function that is designed to be called every N seconds.
+
+    Or should it be named something like ActiveBlueprint? And the Blueprint should have an alias such as PassiveBlueprint?
+    """
+
+    def __init__(self, *args, role, **kwargs):
+        super(P2PBlueprint, self).__init__(*args, **kwargs)
+        self.time_regular_funcs = []
+        self.role = role
+        self.rule_mappings = {}
+        self.overwritten_rules = [] # List[Tuple[str, callable]]
+
+    def register_time_regular_func(self, f):
+        """
+        Registers a callable that is called every self.time_interval seconds.
+        The callable will not receive any arguments. If arguments are needed, make it a partial function or a class with
+        __call__ implemented.
+        """
+        self.time_regular_funcs.append(f)
+
+    def route(self, *args, **kwargs):
+        """
+        Overwritten method for catching the rules and their functions in a map. In case the function is a locally declared function such as a partial,
+        and we may want to overwrite that method, we need to store somewhere that locally declared function, otherwise we cannot access it.
+
+        Example of route override:
+        https://github.com/Iftimie/TruckMonitoringSystem/blob/6405f0341ad41c32fae7e4bab2d264b65a1d8ee9/truckms/service/worker/broker.py#L163
+        """
+        if args:
+            rule = args[0]
+        else:
+            rule = kwargs['rule']
+
+        decorator_function = super(P2PBlueprint, self).route(*args, **kwargs)
+        def decorated_function_catcher(f):
+            if rule in self.rule_mappings:
+                self.overwritten_rules.append((rule, self.rule_mappings[rule]))
+            self.rule_mappings[rule] = f
+            return decorator_function(f)
+
+        return decorated_function_catcher
+
+
+def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discovery_ips_file: str, mongod_port) -> P2PBlueprint:
+    """
+    Creates the bookkeeper blueprint
+
+    Args:
+        local_port: integer
+        app_roles:
+        discovery_ips_file: path to file with initial configuration of the network. The file should contain a list with
+            reachable addresses
+
+    Return:
+        P2PBluePrint
+    """
+    bookkeeper_bp = P2PBlueprint("bookkeeper_bp", __name__, role="bookkeeper")
+    func = (wraps(node_states)(partial(node_states, mongod_port)))
+    bookkeeper_bp.route("/node_states", methods=['POST', 'GET'])(func)
+
+    time_regular_func = partial(update_function, local_port, app_roles, discovery_ips_file)
+    bookkeeper_bp.register_time_regular_func(time_regular_func)
+
+    return bookkeeper_bp
 
 
 class P2PFlaskApp(Flask):
@@ -60,7 +131,7 @@ class P2PFlaskApp(Flask):
      discovery)
     """
 
-    def __init__(self, *args, local_port=None, **kwargs):
+    def __init__(self, *args, local_port=None, mongod_port=None, cache_path=None, password="", discovery_ips_file, **kwargs):
         """
         Args:
             args: positional arguments
@@ -81,7 +152,22 @@ class P2PFlaskApp(Flask):
         if local_port is None:
             local_port = find_free_port()
         self.local_port = local_port
+        self.mongod_port = mongod_port
+        self.cache_path = cache_path
+        self.mongod_process = None
+        self.password = password
+        self.discovery_ips_file = discovery_ips_file
+        self.crypt_pass = sha256_crypt.encrypt(password)
+
+        if not os.path.exists(cache_path):
+            os.mkdir(cache_path)
+
         self.route("/echo", methods=['GET'])(echo)
+
+        bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=self.local_port,
+                                                       app_roles=self.roles,
+                                                       discovery_ips_file=self.discovery_ips_file, mongod_port=self.mongod_port)
+        self.register_blueprint(bookkeeper_bp)
 
     def add_url_rule(self, rule, endpoint=None, view_func=None, **options):
         # Flask registers views when an application starts
@@ -154,6 +240,9 @@ class P2PFlaskApp(Flask):
         self._time_regular_funcs.append(f)
 
     def start_background_threads(self):
+        self.mongod_process = subprocess.Popen(["mongod", "--dbpath", self.cache_path, "--port", str(self.mongod_port),
+                                                 "--logpath", os.path.join(self.cache_path, "mongodlog.log")])
+        # TODO also kill this process
         self._logger_thread = threading.Thread(target=P2PFlaskApp._dispatch_log_records,
                                                args=(
                                                    self._logging_queue,
@@ -180,51 +269,6 @@ class P2PFlaskApp(Flask):
         kwargs['port'] = self.local_port
         self.start_background_threads()
         super(P2PFlaskApp, self).run(*args, **kwargs)
-
-
-class P2PBlueprint(Blueprint):
-    """
-    The P2PBlueprint also has a background task, a function that is designed to be called every N seconds.
-
-    Or should it be named something like ActiveBlueprint? And the Blueprint should have an alias such as PassiveBlueprint?
-    """
-
-    def __init__(self, *args, role, **kwargs):
-        super(P2PBlueprint, self).__init__(*args, **kwargs)
-        self.time_regular_funcs = []
-        self.role = role
-        self.rule_mappings = {}
-        self.overwritten_rules = [] # List[Tuple[str, callable]]
-
-    def register_time_regular_func(self, f):
-        """
-        Registers a callable that is called every self.time_interval seconds.
-        The callable will not receive any arguments. If arguments are needed, make it a partial function or a class with
-        __call__ implemented.
-        """
-        self.time_regular_funcs.append(f)
-
-    def route(self, *args, **kwargs):
-        """
-        Overwritten method for catching the rules and their functions in a map. In case the function is a locally declared function such as a partial,
-        and we may want to overwrite that method, we need to store somewhere that locally declared function, otherwise we cannot access it.
-
-        Example of route override:
-        https://github.com/Iftimie/TruckMonitoringSystem/blob/6405f0341ad41c32fae7e4bab2d264b65a1d8ee9/truckms/service/worker/broker.py#L163
-        """
-        if args:
-            rule = args[0]
-        else:
-            rule = kwargs['rule']
-
-        decorator_function = super(P2PBlueprint, self).route(*args, **kwargs)
-        def decorated_function_catcher(f):
-            if rule in self.rule_mappings:
-                self.overwritten_rules.append((rule, self.rule_mappings[rule]))
-            self.rule_mappings[rule] = f
-            return decorator_function(f)
-
-        return decorated_function_catcher
 
 
 def find_free_port():
@@ -260,7 +304,9 @@ def self_is_reachable(local_port):
         return ["{}:{}".format(LAN_ip_, local_port)]
 
 
-from functools import wraps
+from functools import wraps, partial
+
+
 def ignore_decorator(f):
     @wraps(f)
     def wrap(*args, **kwargs):

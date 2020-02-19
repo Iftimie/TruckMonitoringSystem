@@ -1,6 +1,6 @@
 def workermain():
     from truckms.service.worker.server import create_worker_service
-    from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
+    from truckms.service_v2.api import create_bookkeeper_p2pblueprint
     import os
 
     db_url = 'sqlite:///' + 'database.sqlite'

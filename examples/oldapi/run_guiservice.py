@@ -1,7 +1,7 @@
 def flaskuimain():
     from truckms.service.gui_interface import create_guiservice
     from truckms.service.worker.user_client import get_job_dispathcher
-    from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
+    from truckms.service_v2.api import create_bookkeeper_p2pblueprint
     import os
     # to package app
     # https://www.reddit.com/r/Python/comments/bzql1t/create_htmlcssjavascript_gui_using_pythonflask/

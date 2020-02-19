@@ -12,7 +12,7 @@ def test_guiservice(tmpdir):
     from truckms.service_v2.userclient.userclient import create_guiservice, get_job_dispathcher
     from truckms.service_v2.userclient import userclient
     from truckms.service_v2.brokerworker.brokerworker import create_brokerworker_microservice
-    from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
+    from truckms.service_v2.api import create_bookkeeper_p2pblueprint
     import os
     from truckms.service_v2.userclient import userclient
     from truckms.service_v2 import p2pdata

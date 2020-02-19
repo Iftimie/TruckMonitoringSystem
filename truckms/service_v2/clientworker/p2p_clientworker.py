@@ -1,5 +1,4 @@
-from truckms.service_v2.api import P2PFlaskApp
-from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
+from truckms.service_v2.api import P2PFlaskApp, create_bookkeeper_p2pblueprint
 from functools import wraps
 from functools import partial
 from truckms.service_v2.p2pdata import p2p_insert_one
@@ -58,101 +57,81 @@ def find_response_with_work(local_port, db, collection, func_name, password):
     return res_json, res_broker_ip, res_broker_port
 
 
-def register_p2p_func(self, can_do_work_func):
-    """
-    In p2p clientworker, this decorator will have the role of deciding making a node behind a firewall or NAT capable of
-    executing a function that receives input arguments from over the network.
+class P2PClientworkerApp(P2PFlaskApp):
 
-    Args:
-        self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
-            just to avoid making redundant Classes. Just trying to make the code more functional
-    """
+    def __init__(self, discovery_ips_file, local_port, cache_path, mongod_port, password=""):
+        configure_logger("clientworker", module_level_list=[(__name__, 'INFO'),
+                                                            (p2p_brokerworker.__name__, 'INFO')])
+        super(P2PClientworkerApp, self).__init__(__name__, local_port=local_port, discovery_ips_file=discovery_ips_file, mongod_port=mongod_port,
+                                                 cache_path=cache_path, password=password)
+        self.registry_functions = defaultdict(dict)
+        self.worker_pool = multiprocessing.Pool(2)
+        self.list_futures = []
+        self.register_time_regular_func(partial(delete_old_finished_requests,
+                                                         mongod_port=mongod_port,
+                                                         registry_functions=self.registry_functions))
 
-    def inner_decorator(f):
-        if f.__name__ in self.registry_functions:
-            raise ValueError("Function name already registered")
-        key_interpreter, db, col = derive_vars_from_function(f)
+    def register_p2p_func(self, can_do_work_func):
+        """
+        In p2p clientworker, this decorator will have the role of deciding making a node behind a firewall or NAT capable of
+        executing a function that receives input arguments from over the network.
 
-        self.registry_functions[f.__name__]['key_interpreter'] = key_interpreter
+        Args:
+            self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
+                just to avoid making redundant Classes. Just trying to make the code more functional
+        """
 
-        updir = os.path.join(self.cache_path, db, col)  # upload directory
-        os.makedirs(updir, exist_ok=True)
+        def inner_decorator(f):
+            if f.__name__ in self.registry_functions:
+                raise ValueError("Function name already registered")
+            key_interpreter, db, col = derive_vars_from_function(f)
 
-        param_keys = list(inspect.signature(f).parameters.keys())
-        key_return = list(inspect.signature(f).return_annotation.keys())
-        hint_args_file_keys = [k for k, v in inspect.signature(f).parameters.items() if v.annotation == io.IOBase]
+            self.registry_functions[f.__name__]['key_interpreter'] = key_interpreter
 
-        @wraps(f)
-        def wrap():
-            if not can_do_work_func():
-                return
+            updir = os.path.join(self.cache_path, db, col)  # upload directory
+            os.makedirs(updir, exist_ok=True)
 
-            logger = logging.getLogger(__name__)
-            logger.info("Searching for work")
-            res, broker_ip, broker_port = find_response_with_work(self.local_port, db, col, f.__name__, self.crypt_pass)
-            if broker_ip is None:
-                return
+            param_keys = list(inspect.signature(f).parameters.keys())
+            key_return = list(inspect.signature(f).return_annotation.keys())
+            hint_args_file_keys = [k for k, v in inspect.signature(f).parameters.items() if v.annotation == io.IOBase]
 
-            filter_ = res['filter']
+            @wraps(f)
+            def wrap():
+                if not can_do_work_func():
+                    return
 
-            local_data = {k: v for k, v in filter_.items()}
-            local_data.update({k: None for k in param_keys})
-            local_data.update({k: None for k in key_return})
+                logger = logging.getLogger(__name__)
+                logger.info("Searching for work")
+                res, broker_ip, broker_port = find_response_with_work(self.local_port, db, col, f.__name__,
+                                                                      self.crypt_pass)
+                if broker_ip is None:
+                    return
 
-            deserializer = partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)
-            p2p_insert_one(self.mongod_port, db, col, local_data, [broker_ip + ":" + str(broker_port)], do_upload=False, password=self.crypt_pass)
-            p2p_pull_update_one(self.mongod_port, db, col, filter_, param_keys, deserializer, hint_file_keys=hint_args_file_keys, password=self.crypt_pass)
+                filter_ = res['filter']
 
-            new_f = wraps(f)(
-                partial(function_executor,
-                        f=f, filter=filter_,
-                        mongod_port=self.mongod_port, db=db, col=col,
-                        key_interpreter=key_interpreter,
-                        logging_queue=self._logging_queue,
-                        password=self.crypt_pass))
-            res = self.worker_pool.apply_async(func=new_f)
-            self.list_futures.append(res)
-            # _ = function_executor(f, filter_, db, col, db_url, key_interpreter, self._logging_queue)
-            # something weird was happening with logging when the function was executed in the same thread
+                local_data = {k: v for k, v in filter_.items()}
+                local_data.update({k: None for k in param_keys})
+                local_data.update({k: None for k in key_return})
 
-        self.register_time_regular_func(wrap)
-        return None
+                deserializer = partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)
+                p2p_insert_one(self.mongod_port, db, col, local_data, [broker_ip + ":" + str(broker_port)],
+                               do_upload=False, password=self.crypt_pass)
+                p2p_pull_update_one(self.mongod_port, db, col, filter_, param_keys, deserializer,
+                                    hint_file_keys=hint_args_file_keys, password=self.crypt_pass)
 
-    return inner_decorator
+                new_f = wraps(f)(
+                    partial(function_executor,
+                            f=f, filter=filter_,
+                            mongod_port=self.mongod_port, db=db, col=col,
+                            key_interpreter=key_interpreter,
+                            logging_queue=self._logging_queue,
+                            password=self.crypt_pass))
+                res = self.worker_pool.apply_async(func=new_f)
+                self.list_futures.append(res)
+                # _ = function_executor(f, filter_, db, col, db_url, key_interpreter, self._logging_queue)
+                # something weird was happening with logging when the function was executed in the same thread
 
+            self.register_time_regular_func(wrap)
+            return None
 
-def create_p2p_clientworker_app(discovery_ips_file=None, local_port=None, password="", cache_path=None, mongod_port=None):
-    """
-    Returns a Flask derived object with additional features
-
-    Args:
-        port:
-        discovery_ips_file: file with other nodes
-        cache_path: path to a directory that serves storing information about function calls in a database
-    """
-    configure_logger("clientworker", module_level_list=[(__name__, 'INFO'),
-                                                        (p2p_brokerworker.__name__, 'INFO')])
-
-    p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
-    p2p_flask_app.cache_path = cache_path
-    p2p_flask_app.mongod_port = mongod_port
-
-    if not os.path.exists(cache_path):
-        os.mkdir(cache_path)
-    p2p_flask_app.mongod = subprocess.Popen(["mongod", "--dbpath", cache_path, "--port", str(mongod_port),
-                                             "--logpath", os.path.join(cache_path, "mongodlog.log")])
-
-    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
-                                                   discovery_ips_file=discovery_ips_file, mongod_port=mongod_port)
-    p2p_flask_app.register_blueprint(bookkeeper_bp)
-
-    p2p_flask_app.registry_functions = defaultdict(dict)
-    p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
-    p2p_flask_app.worker_pool = multiprocessing.Pool(2)
-    p2p_flask_app.list_futures = []
-    p2p_flask_app.crypt_pass = sha256_crypt.encrypt(password)
-    p2p_flask_app.register_time_regular_func(partial(delete_old_finished_requests,
-                                                     mongod_port=mongod_port,
-                                                     registry_functions=p2p_flask_app.registry_functions))
-
-    return p2p_flask_app
+        return inner_decorator

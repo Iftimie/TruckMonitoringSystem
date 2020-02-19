@@ -27,4 +27,4 @@ if __name__ == "__main__":
                         arg2=200)
     print(res.get())
 
-    client_app.background_thread.shutdown()
+    client_app.background_server.shutdown()

@@ -1,6 +1,6 @@
 def brokermain():
     from truckms.service.worker.broker import create_broker_microservice
-    from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
+    from truckms.service_v2.api import create_bookkeeper_p2pblueprint
     import os
 
     up_dir = "/data1/workspaces/aiftimie/tms/worker_updir"

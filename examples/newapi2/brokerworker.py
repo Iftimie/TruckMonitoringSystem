@@ -1,4 +1,4 @@
-from truckms.service_v2.brokerworker.p2p_brokerworker import create_p2p_brokerworker_app
+from truckms.service_v2.brokerworker.p2p_brokerworker import P2PBrokerworkerApp
 from examples.newapi2.function import analyze_movie
 import os
 import shutil
@@ -13,7 +13,7 @@ if __name__ == "__main__":
             shutil.rmtree(path)
             while os.path.exists(path): pass
 
-    broker_worker_app = create_p2p_brokerworker_app("network_discovery_brokerworker.txt", local_port=5001, mongod_port=5101,
+    broker_worker_app = P2PBrokerworkerApp("network_discovery_brokerworker.txt", local_port=5001, mongod_port=5101,
                                                     password=password, cache_path=path)
     # path = r'D:\tms_data\node_dirs\brokerworker.db'
 

@@ -1,13 +1,10 @@
 from flask import make_response, request, jsonify
-from truckms.service_v2.api import P2PFlaskApp, P2PBlueprint
-from functools import partial, wraps
 import threading
 from werkzeug.serving import make_server
 import requests
 import logging
 import traceback
 import socket
-from typing import List
 from pymongo import MongoClient
 import json
 
@@ -35,29 +32,6 @@ def node_states(mongod_port):
         return make_response("done", 200)
     else:
         return jsonify(current_items)
-
-
-def create_bookkeeper_p2pblueprint(local_port: int, app_roles: List[str], discovery_ips_file: str, mongod_port) -> P2PBlueprint:
-    """
-    Creates the bookkeeper blueprint
-
-    Args:
-        local_port: integer
-        app_roles:
-        discovery_ips_file: path to file with initial configuration of the network. The file should contain a list with
-            reachable addresses
-
-    Return:
-        P2PBluePrint
-    """
-    bookkeeper_bp = P2PBlueprint("bookkeeper_bp", __name__, role="bookkeeper")
-    func = (wraps(node_states)(partial(node_states, mongod_port)))
-    bookkeeper_bp.route("/node_states", methods=['POST', 'GET'])(func)
-
-    time_regular_func = partial(update_function, local_port, app_roles, discovery_ips_file)
-    bookkeeper_bp.register_time_regular_func(time_regular_func)
-
-    return bookkeeper_bp
 
 
 def get_state_in_lan(local_port, app_roles):
@@ -188,28 +162,6 @@ def update_function(local_port, app_roles, discovery_ips_file):
 
     # publish them remotely
     push_to_nodes(discovered_states)
-
-
-def create_bookkeeper_service(local_port: int, discovery_ips_file: str) -> P2PFlaskApp:
-    """
-    Creates a bookkeeper service. The bookkeeper service has the role of discovering other nodes in the network.
-    It consists of a server that handles GET or POST requests about the node states. It also has a background active
-    function that makes requests to the local bookkeeper server and to remote bookkeeper servers in order to make new
-    discoveries.
-
-    Args:
-        local_port: the local port tells the time_regular_func on which port to make requests to /node_states
-        discovery_ips_file: path to a file containing node states. the network discovery starts from making requests to
-            nodes found in this file
-
-    Returns:
-        P2PFlaskApp
-    """
-    app = P2PFlaskApp(__name__)
-    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port, app.roles, discovery_ips_file)
-    app.register_blueprint(bookkeeper_bp)
-
-    return app
 
 
 def find_workload():

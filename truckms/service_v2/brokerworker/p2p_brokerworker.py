@@ -1,6 +1,5 @@
 import requests
-from truckms.service_v2.api import P2PFlaskApp
-from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
+from truckms.service_v2.api import P2PFlaskApp, create_bookkeeper_p2pblueprint
 import multiprocessing
 from flask import make_response, jsonify
 from truckms.service_v2.api import derive_vars_from_function
@@ -19,7 +18,6 @@ from truckms.service_v2.api import configure_logger
 from collections import defaultdict
 from passlib.hash import sha256_crypt
 import os
-import subprocess
 from truckms.service_v2.p2pdata import deserialize_doc_from_db
 from truckms.service_v2.registry_args import remove_values_from_doc
 
@@ -159,69 +157,6 @@ def route_identifier_available(mongod_port, db, col, identifier):
     else:
         return make_response("no", 404)
 
-
-def register_p2p_func(self, can_do_locally_func=lambda: True, time_limit=12):
-    """
-    In p2p brokerworker, this decorator will have the role of either executing a function that was registered (worker role), or store the arguments in a
-     database in order to execute the function later by a clientworker (broker role).
-
-    Args:
-        self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
-            just to avoid making redundant Classes. Just trying to make the code more functional
-        can_do_locally_func: function that returns True if work can be done locally and false if it should be done later
-            by this current node or by a clientworker
-        limit=hours
-    """
-
-    def inner_decorator(f):
-        if f.__name__ in self.registry_functions:
-            raise ValueError("Function name already registered")
-        key_interpreter, db, col = derive_vars_from_function(f)
-
-        self.registry_functions[f.__name__]['key_interpreter'] = key_interpreter
-
-        updir = os.path.join(self.cache_path, db, col)  # upload directory
-        os.makedirs(updir, exist_ok=True)
-
-        # these functions below make more sense in p2p_data.py
-        p2p_route_insert_one_func = wraps(p2p_route_insert_one)(
-            partial(self.pass_req_dec(p2p_route_insert_one),
-                    db=db, col=col, mongod_port=self.mongod_port,
-                    deserializer=partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)))
-
-        self.route("/insert_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_insert_one_func)
-
-        p2p_route_push_update_one_func = wraps(p2p_route_push_update_one)(
-            partial(self.pass_req_dec(p2p_route_push_update_one),
-                    mongod_port=self.mongod_port, db=db, col=col,
-                    deserializer=partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)))
-        self.route("/push_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_push_update_one_func)
-
-        p2p_route_pull_update_one_func = wraps(p2p_route_pull_update_one)(
-            partial(self.pass_req_dec(p2p_route_pull_update_one),
-                    mongod_port=self.mongod_port, db=db, col=col))
-        self.route("/pull_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_pull_update_one_func)
-
-        execute_function_partial = wraps(f)(
-            partial(self.pass_req_dec(route_execute_function),
-                    f=f, mongod_port=self.mongod_port, db=db, col=col,
-                    key_interpreter=key_interpreter, can_do_locally_func=can_do_locally_func, self=self))
-        self.route('/execute_function/{db}/{col}/{fname}'.format(db=db, col=col, fname=f.__name__), methods=['POST'])(execute_function_partial)
-
-        search_work_partial = wraps(route_search_work)(
-            partial(self.pass_req_dec(route_search_work),
-                    mongod_port=self.mongod_port, db=db, collection=col,
-                    func_name=f.__name__, time_limit=time_limit))
-        self.route("/search_work/{db}/{col}/{fname}".format(db=db, col=col, fname=f.__name__), methods=['POST'])(search_work_partial)
-
-        identifier_available_partial = wraps(route_identifier_available)(
-            partial(self.pass_req_dec(route_identifier_available),
-                    mongod_port=self.mongod_port, db=db, col=col))
-        self.route("/identifier_available/{db}/{col}/{fname}/<identifier>".format(db=db, col=col, fname=f.__name__), methods=['GET'])(identifier_available_partial)
-
-    return inner_decorator
-
-
 def heartbeat(mongod_port, db="tms"):
     """
     Pottential vulnerability from flooding here
@@ -248,40 +183,83 @@ def delete_old_finished_requests(mongod_port, registry_functions, time_limit=24)
                 db[col_name].remove(item)
 
 
-def create_p2p_brokerworker_app(discovery_ips_file=None, local_port=None, password="", cache_path=None, mongod_port=None):
-    """
-    Returns a Flask derived object with additional features
+class P2PBrokerworkerApp(P2PFlaskApp):
 
-    Args:
-        port:
-        discovery_ips_file: file with other nodes
-        cache_path: path to a directory that serves storing information about function calls in a database
-    """
-    configure_logger("brokerworker", module_level_list=[(__name__, 'DEBUG')])
+    def __init__(self, discovery_ips_file, local_port, cache_path, mongod_port, password=""):
+        configure_logger("brokerworker", module_level_list=[(__name__, 'DEBUG')])
+        super(P2PBrokerworkerApp, self).__init__(__name__, local_port=local_port, discovery_ips_file=discovery_ips_file, mongod_port=mongod_port,
+                                                 cache_path=cache_path, password=password)
+        self.roles.append("brokerworker")
+        self.registry_functions = defaultdict(dict)
+        self.pass_req_dec = password_required(password)
+        self.worker_pool = multiprocessing.Pool(2)
+        self.list_futures = []
+        self.register_time_regular_func(partial(delete_old_finished_requests,
+                                                         mongod_port=mongod_port,
+                                                         registry_functions=self.registry_functions))
 
-    p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
-    p2p_flask_app.cache_path = cache_path
-    p2p_flask_app.mongod_port = mongod_port
+    def register_p2p_func(self, can_do_locally_func=lambda: True, time_limit=12):
+        """
+        In p2p brokerworker, this decorator will have the role of either executing a function that was registered (worker role), or store the arguments in a
+         database in order to execute the function later by a clientworker (broker role).
 
-    if not os.path.exists(cache_path):
-        os.mkdir(cache_path)
-    p2p_flask_app.mongod = subprocess.Popen(["mongod", "--dbpath", cache_path, "--port", str(mongod_port),
-                                             "--logpath", os.path.join(cache_path, "mongodlog.log")])
+        Args:
+            self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
+                just to avoid making redundant Classes. Just trying to make the code more functional
+            can_do_locally_func: function that returns True if work can be done locally and false if it should be done later
+                by this current node or by a clientworker
+            limit=hours
+        """
 
-    p2p_flask_app.roles.append("brokerworker")
-    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
-                                                   discovery_ips_file=discovery_ips_file, mongod_port=mongod_port)
-    p2p_flask_app.register_blueprint(bookkeeper_bp)
+        def inner_decorator(f):
+            if f.__name__ in self.registry_functions:
+                raise ValueError("Function name already registered")
+            key_interpreter, db, col = derive_vars_from_function(f)
 
-    p2p_flask_app.registry_functions = defaultdict(dict)
-    p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
-    p2p_flask_app.worker_pool = multiprocessing.Pool(2)
-    p2p_flask_app.list_futures = []
-    p2p_flask_app.pass_req_dec = password_required(password)
-    p2p_flask_app.register_time_regular_func(partial(delete_old_finished_requests,
-                                                     mongod_port=mongod_port,
-                                                     registry_functions=p2p_flask_app.registry_functions))
-    p2p_flask_app.crypt_pass = sha256_crypt.encrypt(password)
-    # TODO I need to create a time regular func for those requests that are old in order to execute them in broker
+            self.registry_functions[f.__name__]['key_interpreter'] = key_interpreter
 
-    return p2p_flask_app
+            updir = os.path.join(self.cache_path, db, col)  # upload directory
+            os.makedirs(updir, exist_ok=True)
+
+            # these functions below make more sense in p2p_data.py
+            p2p_route_insert_one_func = wraps(p2p_route_insert_one)(
+                partial(self.pass_req_dec(p2p_route_insert_one),
+                        db=db, col=col, mongod_port=self.mongod_port,
+                        deserializer=partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)))
+
+            self.route("/insert_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(p2p_route_insert_one_func)
+
+            p2p_route_push_update_one_func = wraps(p2p_route_push_update_one)(
+                partial(self.pass_req_dec(p2p_route_push_update_one),
+                        mongod_port=self.mongod_port, db=db, col=col,
+                        deserializer=partial(deserialize_doc_from_net, up_dir=updir, key_interpreter=key_interpreter)))
+            self.route("/push_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(
+                p2p_route_push_update_one_func)
+
+            p2p_route_pull_update_one_func = wraps(p2p_route_pull_update_one)(
+                partial(self.pass_req_dec(p2p_route_pull_update_one),
+                        mongod_port=self.mongod_port, db=db, col=col))
+            self.route("/pull_update_one/{db}/{col}".format(db=db, col=col), methods=['POST'])(
+                p2p_route_pull_update_one_func)
+
+            execute_function_partial = wraps(f)(
+                partial(self.pass_req_dec(route_execute_function),
+                        f=f, mongod_port=self.mongod_port, db=db, col=col,
+                        key_interpreter=key_interpreter, can_do_locally_func=can_do_locally_func, self=self))
+            self.route('/execute_function/{db}/{col}/{fname}'.format(db=db, col=col, fname=f.__name__),
+                       methods=['POST'])(execute_function_partial)
+
+            search_work_partial = wraps(route_search_work)(
+                partial(self.pass_req_dec(route_search_work),
+                        mongod_port=self.mongod_port, db=db, collection=col,
+                        func_name=f.__name__, time_limit=time_limit))
+            self.route("/search_work/{db}/{col}/{fname}".format(db=db, col=col, fname=f.__name__), methods=['POST'])(
+                search_work_partial)
+
+            identifier_available_partial = wraps(route_identifier_available)(
+                partial(self.pass_req_dec(route_identifier_available),
+                        mongod_port=self.mongod_port, db=db, col=col))
+            self.route("/identifier_available/{db}/{col}/{fname}/<identifier>".format(db=db, col=col, fname=f.__name__),
+                       methods=['GET'])(identifier_available_partial)
+
+        return inner_decorator

@@ -1,5 +1,4 @@
-from truckms.service_v2.api import P2PFlaskApp, validate_arguments
-from truckms.service.bookkeeper import create_bookkeeper_p2pblueprint
+from truckms.service_v2.api import P2PFlaskApp, validate_arguments, create_bookkeeper_p2pblueprint
 from functools import wraps
 from truckms.service_v2.userclient.userclient import select_lru_worker
 from functools import partial
@@ -23,7 +22,6 @@ from truckms.service_v2.p2pdata import find
 from truckms.service_v2.registry_args import kicomp
 from werkzeug.serving import make_server
 from truckms.service_v2.api import configure_logger
-from passlib.hash import sha256_crypt
 import os
 import subprocess
 
@@ -210,71 +208,6 @@ def create_remote_identifier(local_identifier, check_remote_identifier_args):
                 raise ValueError("Too many hash collisions. Change the hash function")
 
 
-def register_p2p_func(self, can_do_locally_func=lambda: False):
-    """
-    In p2p client, this decorator will have the role of deciding if the function should be executed remotely or
-    locally. It will store the input in a collection. If the current node is reachable, then data will be updated automatically,
-    otherwise data will be updated at subsequent calls by using a future object
-
-    Args:
-        self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
-            just to avoid making redundant Classes. Just trying to make the code more functional
-        can_do_locally_func: function that returns True if work can be done locally and false if it should be done remotely
-            if not specified, then it means all calls should be done remotely
-    """
-
-    def inner_decorator(f):
-        key_interpreter, db, col = derive_vars_from_function(f)
-
-        @wraps(f)
-        def wrap(*args, **kwargs):
-            logger = logging.getLogger(__name__)
-
-            identifier = create_identifier(self.mongod_port, db, col, kwargs, key_interpreter)
-            expected_keys = get_expected_keys(f)
-            if identifier_seen(self.mongod_port, identifier, db, col, expected_keys):
-                logger.info("Returning future that may already be precomputed")
-                return create_future(f, identifier, self.cache_path, self.mongod_port, db, col, key_interpreter, self.crypt_pass)
-
-            validate_arguments(f, args, kwargs)
-            kwargs.update(expected_keys)
-            kwargs['identifier'] = identifier
-
-            lru_ip, lru_port = select_lru_worker(self.local_port)
-
-            if can_do_locally_func() or lru_ip is None:
-                nodes = []
-                p2p_insert_one(self.mongod_port, db, col, kwargs, nodes, self.crypt_pass)
-                new_f = wraps(f)(partial(function_executor, f=f, filter={'identifier': kwargs['identifier']},
-                                         mongod_port=self.mongod_port, db=db, col=col, key_interpreter=key_interpreter,
-                                         logging_queue=self._logging_queue))
-                res = self.worker_pool.apply_async(func=new_f)
-                logger.info("Executing function locally")
-            else:
-                nodes = [str(lru_ip) + ":" + str(lru_port)]
-                # TODO check if the item was allready sent for processing
-
-                # This is a bit messy about remote identifier and local identifier (not sure what is the best way to solve
-                # identifier collisions on server
-                # TODO to solve this messy remote identifier stuff, the route_execute_function should actually receive
-                #  an arbitrary filter (that may or may not contain the identifier keyword)
-                #  or It shoudl contain both identifier and remote identifier
-                #  which would also solve another TODO from route_execute_function
-                #  the current node should pull the identifier that the worker created and use it to filter the next time the arguments
-                kwargs['remote_identifier'] = create_remote_identifier(kwargs['identifier'],
-                                                                       {"ip": lru_ip, "port": lru_port, "db": db,
-                                                                        "col": col, "func_name": f.__name__,
-                                                                        "password": self.crypt_pass})
-                p2p_insert_one(self.mongod_port, db, col, kwargs, nodes, current_address_func=partial(self_is_reachable, self.local_port),
-                               password=self.crypt_pass)
-                filter = {"identifier": identifier, "remote_identifier": kwargs['remote_identifier']}
-                call_remote_func(lru_ip, lru_port, db, col, f.__name__, filter, self.crypt_pass)
-                logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
-            return create_future(f, identifier, self.cache_path, self.mongod_port, db, col, key_interpreter, self.crypt_pass)
-        return wrap
-    return inner_decorator
-
-
 class ServerThread(threading.Thread):
 
     def __init__(self, app: P2PFlaskApp):
@@ -309,41 +242,89 @@ def wait_for_discovery(local_port):
         time.sleep(5)
 
 
-def create_p2p_client_app(discovery_ips_file=None, local_port=None, mongod_port=None, password="", cache_path=None):
-    """
-    Returns a Flask derived object with additional features
+class P2PClientApp(P2PFlaskApp):
 
-    Args:
-        discovery_ips_file: file with other nodes
-        local_port: Local port of the app
-        password: used for authentification when asking for brokers or client workers
-        cache_path: path to a directory that serves storing information about function calls in a database
-    """
-    configure_logger("client", module_level_list=[(__name__, 'INFO')])
-    if not os.path.exists(cache_path):
-        os.mkdir(cache_path)
+    def __init__(self, discovery_ips_file, local_port, mongod_port, cache_path, password=""):
+        configure_logger("client", module_level_list=[(__name__, 'INFO')])
+        super(P2PClientApp, self).__init__(__name__, local_port=local_port, discovery_ips_file=discovery_ips_file, mongod_port=mongod_port,
+                                                 cache_path=cache_path, password=password)
+        self.worker_pool = multiprocessing.Pool(1)
+        self.background_server = None
 
-    p2p_flask_app = P2PFlaskApp(__name__, local_port=local_port)
-    p2p_flask_app.cache_path = cache_path
-    p2p_flask_app.mongod_port = mongod_port
+    def register_p2p_func(self, can_do_locally_func=lambda: False):
+        """
+        In p2p client, this decorator will have the role of deciding if the function should be executed remotely or
+        locally. It will store the input in a collection. If the current node is reachable, then data will be updated automatically,
+        otherwise data will be updated at subsequent calls by using a future object
 
-    if not os.path.exists(cache_path):
-        os.mkdir(cache_path)
-    p2p_flask_app.mongod = subprocess.Popen(["mongod", "--dbpath", cache_path, "--port", str(mongod_port),
-                                             "--logpath", os.path.join(cache_path, "mongodlog.log")])
+        Args:
+            self: P2PFlaskApp object this instance is passed as argument from create_p2p_client_app. This is done like that
+                just to avoid making redundant Classes. Just trying to make the code more functional
+            can_do_locally_func: function that returns True if work can be done locally and false if it should be done remotely
+                if not specified, then it means all calls should be done remotely
+        """
 
-    bookkeeper_bp = create_bookkeeper_p2pblueprint(local_port=p2p_flask_app.local_port, app_roles=p2p_flask_app.roles,
-                                                   discovery_ips_file=discovery_ips_file, mongod_port=mongod_port)
-    p2p_flask_app.register_blueprint(bookkeeper_bp)
-    p2p_flask_app.register_p2p_func = partial(register_p2p_func, p2p_flask_app)
-    p2p_flask_app.worker_pool = multiprocessing.Pool(1)
-    p2p_flask_app.crypt_pass = sha256_crypt.encrypt(password)
-    # p2p_flask_app.list_futures = []
+        def inner_decorator(f):
+            key_interpreter, db, col = derive_vars_from_function(f)
 
-    p2p_flask_app.background_thread = ServerThread(p2p_flask_app)
-    p2p_flask_app.background_thread.start()
-    wait_until_online(p2p_flask_app.local_port)
-    wait_for_discovery(p2p_flask_app.local_port)
+            @wraps(f)
+            def wrap(*args, **kwargs):
+                logger = logging.getLogger(__name__)
 
-    return p2p_flask_app
+                identifier = create_identifier(self.mongod_port, db, col, kwargs, key_interpreter)
+                expected_keys = get_expected_keys(f)
+                if identifier_seen(self.mongod_port, identifier, db, col, expected_keys):
+                    logger.info("Returning future that may already be precomputed")
+                    return create_future(f, identifier, self.cache_path, self.mongod_port, db, col, key_interpreter,
+                                         self.crypt_pass)
 
+                validate_arguments(f, args, kwargs)
+                kwargs.update(expected_keys)
+                kwargs['identifier'] = identifier
+
+                lru_ip, lru_port = select_lru_worker(self.local_port)
+
+                if can_do_locally_func() or lru_ip is None:
+                    nodes = []
+                    p2p_insert_one(self.mongod_port, db, col, kwargs, nodes, self.crypt_pass)
+                    new_f = wraps(f)(partial(function_executor, f=f, filter={'identifier': kwargs['identifier']},
+                                             mongod_port=self.mongod_port, db=db, col=col,
+                                             key_interpreter=key_interpreter,
+                                             logging_queue=self._logging_queue))
+                    res = self.worker_pool.apply_async(func=new_f)
+                    logger.info("Executing function locally")
+                else:
+                    nodes = [str(lru_ip) + ":" + str(lru_port)]
+                    # TODO check if the item was allready sent for processing
+
+                    # This is a bit messy about remote identifier and local identifier (not sure what is the best way to solve
+                    # identifier collisions on server
+                    # TODO to solve this messy remote identifier stuff, the route_execute_function should actually receive
+                    #  an arbitrary filter (that may or may not contain the identifier keyword)
+                    #  or It shoudl contain both identifier and remote identifier
+                    #  which would also solve another TODO from route_execute_function
+                    #  the current node should pull the identifier that the worker created and use it to filter the next time the arguments
+                    kwargs['remote_identifier'] = create_remote_identifier(kwargs['identifier'],
+                                                                           {"ip": lru_ip, "port": lru_port, "db": db,
+                                                                            "col": col, "func_name": f.__name__,
+                                                                            "password": self.crypt_pass})
+                    p2p_insert_one(self.mongod_port, db, col, kwargs, nodes,
+                                   current_address_func=partial(self_is_reachable, self.local_port),
+                                   password=self.crypt_pass)
+                    filter = {"identifier": identifier, "remote_identifier": kwargs['remote_identifier']}
+                    call_remote_func(lru_ip, lru_port, db, col, f.__name__, filter, self.crypt_pass)
+                    logger.info("Dispacthed function work to {},{}".format(lru_ip, lru_port))
+                return create_future(f, identifier, self.cache_path, self.mongod_port, db, col, key_interpreter,
+                                     self.crypt_pass)
+
+            return wrap
+
+        return inner_decorator
+
+def create_p2p_client_app(discovery_ips_file, local_port, mongod_port, cache_path, password=""):
+    p2p_client_app = P2PClientApp(discovery_ips_file, local_port, mongod_port, cache_path, password)
+    p2p_client_app.background_server = ServerThread(p2p_client_app)
+    p2p_client_app.background_server.start()
+    wait_until_online(p2p_client_app.local_port)
+    wait_for_discovery(p2p_client_app.local_port)
+    return p2p_client_app
