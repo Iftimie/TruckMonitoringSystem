@@ -60,6 +60,7 @@ def function_executor(f, filter, db, col, mongod_port, key_interpreter, logging_
     kwargs = {k: kwargs_[k] for k in inspect.signature(f).parameters.keys()}
 
     logger.info("Executing function: " + f.__name__)
+    print(kwargs)
     try:
         update_ = f(**kwargs)
     except Exception as e:

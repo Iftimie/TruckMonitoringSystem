@@ -15,6 +15,18 @@ def large_file_function(video_handle: io.IOBase, random_arg: int) -> {"results":
     return {"results": open(video_handle.name, 'rb')}
 
 
+def large_file_function_wait(video_handle: io.IOBase, random_arg: int) -> {"results": io.IOBase}:
+    video_handle.close()
+    time.sleep(10)
+    return {"results": open(video_handle.name, 'rb')}
+
+
+def actual_large_file_function_wait(video_handle: io.IOBase, random_arg: int) -> {"results": io.IOBase}:
+    video_handle.close()
+    time.sleep(10)
+    return {"results": open(video_handle.name, 'rb')}
+
+
 def multiple_client_calls(tmpdir):
 
     ndclient_path = os.path.join(tmpdir, "ndclient.txt")
@@ -55,7 +67,9 @@ def multiple_client_calls(tmpdir):
     broker_worker_thread.shutdown()
 
 
-def multiple_client_calls_client_worker(tmpdir, port_offset):
+def multiple_client_calls_client_worker(tmpdir, port_offset, func, file=None):
+    if file is None:
+        file = __file__
     client_port = 5000 +port_offset
     broker_port = 5004 +port_offset
     client_worker_port = 5005 +port_offset
@@ -68,14 +82,14 @@ def multiple_client_calls_client_worker(tmpdir, port_offset):
     with open(ndclient_path, "w") as f: f.write("localhost:{}\n".format(broker_port))
     with open(ndcw_path, "w") as f: f.write("localhost:{}\n".format(broker_port))
     client_app = create_p2p_client_app(ndclient_path, local_port=client_port, mongod_port=client_port+100, cache_path=cache_client_dir)
-    client_large_file_function = client_app.register_p2p_func(can_do_locally_func=lambda :False)(large_file_function)
+    client_func = client_app.register_p2p_func(can_do_locally_func=lambda: False)(func)
 
     broker_worker_app = P2PBrokerworkerApp(None, local_port=broker_port, mongod_port=broker_port+100, cache_path=cache_bw_dir)
-    broker_worker_app.register_p2p_func(can_do_locally_func=lambda :False)(large_file_function)
+    broker_worker_app.register_p2p_func(can_do_locally_func=lambda :False)(func)
     broker_worker_thread = ServerThread(broker_worker_app)
     broker_worker_thread.start()
     clientworker_app = P2PClientworkerApp(ndcw_path, local_port=client_worker_port, mongod_port=client_worker_port+100, cache_path=cache_cw_dir)
-    clientworker_app.register_p2p_func(can_do_work_func=lambda :True)(large_file_function)
+    clientworker_app.register_p2p_func(can_do_work_func=lambda :True)(func)
     clientworker_thread = ServerThread(clientworker_app)
     clientworker_thread.start()
     while select_lru_worker(client_port) == (None, None):
@@ -89,22 +103,22 @@ def multiple_client_calls_client_worker(tmpdir, port_offset):
         num_calls = 1
         list_futures_of_futures = []
         for i in range(num_calls):
-            future = executor.submit(client_large_file_function, video_handle=open(__file__, 'rb'), random_arg=i)
+            future = executor.submit(client_func, video_handle=open(file, 'rb'), random_arg=i)
             list_futures_of_futures.append(future)
         list_futures = [f.result() for f in list_futures_of_futures]
         assert len(list_futures) == num_calls
         list_results = [f.get() for f in list_futures]
         assert len(list_results) == num_calls and all(isinstance(r, dict) for r in list_results)
 
-        # num_calls = 10
-        # list_futures_of_futures = []
-        # for i in range(num_calls):
-        #     future = executor.submit(client_large_file_function, video_handle=open(__file__, 'rb'), random_arg=i)
-        #     list_futures_of_futures.append(future)
-        # list_futures = [f.result() for f in list_futures_of_futures]
-        # assert len(list_futures) == num_calls
-        # list_results = [f.get() for f in list_futures]
-        # assert len(list_results) == num_calls and all(isinstance(r, dict) for r in list_results)
+        num_calls = 1
+        list_futures_of_futures = []
+        for i in range(num_calls):
+            future = executor.submit(client_func, video_handle=open(file, 'rb'), random_arg=i)
+            list_futures_of_futures.append(future)
+        list_futures = [f.result() for f in list_futures_of_futures]
+        assert len(list_futures) == num_calls
+        list_results = [f.get() for f in list_futures]
+        assert len(list_results) == num_calls and all(isinstance(r, dict) for r in list_results)
 
     client_app.background_server.shutdown()
     print("Shutdown client")
@@ -126,17 +140,10 @@ def clean_and_create():
 
 
 if __name__ == "__main__":
-    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
-    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
-    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
-    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
-    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
-    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
-    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
-    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
-    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
-    #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
-    for i in range(10):
-        multiple_client_calls_client_worker(clean_and_create(), 40 + i)
+    # multiple_client_calls(clean_and_create())
+    # multiple_client_calls_client_worker(clean_and_create(), 0, func=large_file_function)
+    # multiple_client_calls_client_worker(clean_and_create(), 0, func=large_file_function_wait)
+    multiple_client_calls_client_worker(clean_and_create(), 10, func=actual_large_file_function_wait,
+                                        file='/home/achellaris/big_data/torrent/torrents/Wim Hof Method/03 - Breathing/Extended breathing exercise.mp4')
 
     clean_and_create()

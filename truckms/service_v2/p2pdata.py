@@ -115,7 +115,8 @@ def deserialize_doc_from_net(files, json, up_dir, key_interpreter=None):
                 filepath = filename + "_{}_".format(i) + file_extension
                 i += 1
             files[original_filename].save(filepath)
-            sign = data["files_significance"][original_filename]
+            print(dir(files[original_filename]))
+            sign = data["files_significance"][files[original_filename].name]
             data[sign] = filepath
     del data["files_significance"]
 
@@ -155,7 +156,9 @@ def p2p_route_insert_one(mongod_port, db, col, deserializer=deserialize_doc_from
         files = {secure_filename(filename): request.files[filename]}
     else:
         files = dict()
-
+    print("WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW")
+    print(files)
+    print(request.form['json'])
     data_to_insert = deserializer(files, request.form['json'])
     # this will insert. and if the same data exists then it will crash
     update_one(mongod_port, db, col, data_to_insert, data_to_insert, upsert=True)
@@ -390,7 +393,8 @@ def p2p_push_update_one(mongod_port, db, col, filter, update,  serializer=serial
 
 
 class WrapperSave:
-    def __init__(self, response):
+    def __init__(self, response, name):
+        self.name = name
         if hasattr(response, "data"): # response from Flask client test
             self.bytes = response.data
         elif hasattr(response, "content"): # response from requests lib
@@ -454,7 +458,7 @@ def p2p_pull_update_one(mongod_port, db, col, filter, req_keys, deserializer, hi
                 files = {}
                 if 'Content-Disposition' in res.headers:
                     filename = res.headers['Content-Disposition'].split("filename=")[1]
-                    files = {filename: WrapperSave(res)}
+                    files = {filename: WrapperSave(res, filename)}
                 downloaded_data = deserializer(files, update_json)
                 merging_data.append(downloaded_data)
             else:
