@@ -205,8 +205,8 @@ class P2PFlaskApp(Flask):
 
     # TODO I should also implement the shutdown method that will close the time_regular_thread
 
-    @staticmethod
-    def _time_regular(list_funcs, time_interval, local_port, stop_thread):
+
+    def _time_regular(self, list_funcs, time_interval, local_port, stop_thread):
         # while the app is not alive it
         count = 0
         max_trials = 10
@@ -223,9 +223,11 @@ class P2PFlaskApp(Flask):
         # infinite loop will not start until the app is online
         while not stop_thread():
             for f in list_funcs:
-                print("started", f)
-                f()
-                print("stopped", f)
+                try:
+                    f()
+                except Exception as e:
+                    logger.error("Eroor in node of type: {}".format(self.roles))
+                    raise e
             time.sleep(time_interval)
 
     @staticmethod
@@ -263,7 +265,7 @@ class P2PFlaskApp(Flask):
                                                    self._logging_queue,
                                                ))
         self._logger_thread.start()
-        self._time_regular_thread = threading.Thread(target=P2PFlaskApp._time_regular,
+        self._time_regular_thread = threading.Thread(target=self._time_regular,
                                                      args=(
                                                          self._time_regular_funcs, self._time_interval, self.local_port,
                                                          lambda: self._stop_thread))
