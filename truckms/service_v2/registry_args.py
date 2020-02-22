@@ -261,6 +261,10 @@ value_remover = {int: lambda value: None,
 
 
 def remove_values_from_doc(doc):
+    logger = logging.getLogger(__name__)
     for k in doc:
         v = doc[k]
-        value_remover[cls_finder(v)](v)
+        try:
+            value_remover[cls_finder(v)](v)
+        except Exception as e:
+            logger.warning("Key {} was not properly deleted".format(k))

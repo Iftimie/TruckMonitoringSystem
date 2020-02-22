@@ -92,11 +92,10 @@ def get_local_future(f, identifier, cache_path, mongod_port, db, col, key_interp
 
 class Future:
 
-    def __init__(self, get_future_func, max_waiting_time=3600*24):
+    def __init__(self, get_future_func):
         self.get_future_func = get_future_func
-        self.max_waiting_time = max_waiting_time
 
-    def get(self):
+    def get(self, timeout=3600*24):
         logger = logging.getLogger(__name__)
 
         item = self.get_future_func()
@@ -106,7 +105,7 @@ class Future:
             item = self.get_future_func()
             time.sleep(wait_time)
             count_time += wait_time
-            if count_time > self.max_waiting_time:
+            if count_time > timeout:
                 raise ValueError("Waiting time exceeded")
             logger.info("Not done yet " + str(item))
         return item

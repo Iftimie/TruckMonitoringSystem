@@ -7,6 +7,7 @@ import traceback
 import socket
 from pymongo import MongoClient
 import json
+from requests.exceptions import ReadTimeout
 
 p2pbookdb = "p2pbookdb"
 collection = "nodes"
@@ -144,7 +145,6 @@ def update_function(local_port, app_roles, discovery_ips_file):
     #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
     #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
     #TODO invetigate why the call blocks and needs to have a timeout or at least set timeouts for all requests
-    print("Started update function")
     logger = logging.getLogger(__name__)
 
     discovered_states = []
@@ -153,24 +153,24 @@ def update_function(local_port, app_roles, discovery_ips_file):
     try:
         res = requests.get('http://localhost:{}/node_states'.format(local_port), timeout=3).json()  # will get the data defined above
         discovered_states.extend(res)
-    except:
+    except ReadTimeout:
+        logger.warning("Unable to contact localhost for getting current node states")
         logger.info(traceback.format_exc())
+    except Exception as e:
+        raise e
 
-    print("Passed1")
     # get the current node state in LAN
     discovered_states.append(get_state_in_lan(local_port, app_roles))
     discovered_states.extend(get_state_in_wan(local_port, app_roles))
     discovered_states.extend(get_states_from_file(discovery_ips_file))
 
     discovered_states = set_from_list(discovered_states)
-    print("Passed2")
 
     # query the remote nodes
     discovered_states = query_pull_from_nodes(discovered_states)
 
     # also store them
     write_states_to_file(discovery_ips_file, discovered_states)
-    print("Passed3")
 
     discovered_states = list(filter(lambda d: len(d) > 1, discovered_states))
 
@@ -178,13 +178,16 @@ def update_function(local_port, app_roles, discovery_ips_file):
         if '_id' in state:
             del state['_id']
 
-    print("Passed4")
-    # publish them locally
-    requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states, timeout=3)
+    try:
+        # publish them locally
+        requests.post('http://localhost:{}/node_states'.format(local_port), json=discovered_states, timeout=3)
+    except ReadTimeout:
+        logger.warning("Unable to contact localhost for publishing new node states")
+    except Exception as e:
+        raise e
 
     # publish them remotely
     push_to_nodes(discovered_states)
-    print("finished update function")
 
 
 def find_workload():

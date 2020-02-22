@@ -169,7 +169,6 @@ def heartbeat(mongod_port, db="tms"):
 
 
 def delete_old_finished_requests(mongod_port, registry_functions, time_limit=24):
-    print("Started delete_old_finished_requests")
     db = MongoClient(port=mongod_port)['p2p']
     collection_names = set(db.collection_names()) - {"_default"}
     for col_name in collection_names:
@@ -184,12 +183,11 @@ def delete_old_finished_requests(mongod_port, registry_functions, time_limit=24)
                 document = deserialize_doc_from_db(item, key_interpreter_dict)
                 remove_values_from_doc(document)
                 db[col_name].remove(item)
-    print("Finished delete_old_finished_requests")
 
 
 class P2PBrokerworkerApp(P2PFlaskApp):
 
-    def __init__(self, discovery_ips_file, local_port, cache_path, mongod_port, password=""):
+    def __init__(self, discovery_ips_file, local_port, cache_path, mongod_port, password="", old_requests_time_limit=24):
         configure_logger("brokerworker", module_level_list=[(__name__, 'DEBUG')])
         super(P2PBrokerworkerApp, self).__init__(__name__, local_port=local_port, discovery_ips_file=discovery_ips_file, mongod_port=mongod_port,
                                                  cache_path=cache_path, password=password)
@@ -199,8 +197,9 @@ class P2PBrokerworkerApp(P2PFlaskApp):
         self.worker_pool = multiprocessing.Pool(2)
         self.list_futures = []
         self.register_time_regular_func(partial(delete_old_finished_requests,
-                                                         mongod_port=mongod_port,
-                                                         registry_functions=self.registry_functions))
+                                                mongod_port=mongod_port,
+                                                registry_functions=self.registry_functions,
+                                                time_limit=old_requests_time_limit))
 
     def register_p2p_func(self, can_do_locally_func=lambda: True, time_limit=12):
         """
