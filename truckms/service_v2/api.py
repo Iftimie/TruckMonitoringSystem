@@ -274,17 +274,14 @@ class P2PFlaskApp(Flask):
     def stop_background_threads(self):
         self._stop_thread = True
         logger.info("Joining time regular thread")
-        print("Joining time regular thread")
         self._time_regular_thread.join()
         self._logging_queue.put_nowait('STOP _dispatch_log_records')
         logger.info("Joining logger thread")
-        print("Joining logger thread")
         self._logger_thread.join()
         logger.info("Killing mongod")
-        print("Killing mongod")
         self.mongod_process.kill()
+        # or use the command: mongod --dbpath /path/to/your/db --shutdown
         logger.info("Finished all background processes")
-        print("Finished all background processes")
 
     def run(self, *args, **kwargs):
         if len(args) > 0:

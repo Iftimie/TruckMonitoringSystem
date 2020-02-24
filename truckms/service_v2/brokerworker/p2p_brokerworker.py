@@ -187,7 +187,7 @@ def delete_old_finished_requests(mongod_port, registry_functions, time_limit=24)
 
 class P2PBrokerworkerApp(P2PFlaskApp):
 
-    def __init__(self, discovery_ips_file, local_port, cache_path, mongod_port, password="", old_requests_time_limit=24):
+    def __init__(self, discovery_ips_file, cache_path, local_port=5001, mongod_port=5101, password="", old_requests_time_limit=23):
         configure_logger("brokerworker", module_level_list=[(__name__, 'DEBUG')])
         super(P2PBrokerworkerApp, self).__init__(__name__, local_port=local_port, discovery_ips_file=discovery_ips_file, mongod_port=mongod_port,
                                                  cache_path=cache_path, password=password)

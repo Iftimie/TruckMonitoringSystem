@@ -243,7 +243,7 @@ def wait_for_discovery(local_port):
 
 class P2PClientApp(P2PFlaskApp):
 
-    def __init__(self, discovery_ips_file, local_port, mongod_port, cache_path, password=""):
+    def __init__(self, discovery_ips_file, cache_path, local_port=5000, mongod_port=5100, password=""):
         configure_logger("client", module_level_list=[(__name__, 'DEBUG')])
         super(P2PClientApp, self).__init__(__name__, local_port=local_port, discovery_ips_file=discovery_ips_file, mongod_port=mongod_port,
                                                  cache_path=cache_path, password=password)
@@ -321,7 +321,8 @@ class P2PClientApp(P2PFlaskApp):
         return inner_decorator
 
 def create_p2p_client_app(discovery_ips_file, local_port, mongod_port, cache_path, password=""):
-    p2p_client_app = P2PClientApp(discovery_ips_file, local_port, mongod_port, cache_path, password)
+    p2p_client_app = P2PClientApp(discovery_ips_file=discovery_ips_file, local_port=local_port, mongod_port=mongod_port,
+                                  cache_path=cache_path, password=password)
     p2p_client_app.background_server = ServerThread(p2p_client_app)
     p2p_client_app.background_server.start()
     wait_until_online(p2p_client_app.local_port)
