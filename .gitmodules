@@ -1,0 +1,3 @@
+[submodule "P2P-RPC"]
+	path = P2P-RPC
+	url = https://github.com/Iftimie/P2P-RPC
