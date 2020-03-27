@@ -11,6 +11,7 @@ from p2prpc.p2p_client import p2p_progress_hook
 import io
 from truckms.inference.motion_map import movement_frames_indexes
 from truckms.inference.analytics import filter_pred_detections
+import subprocess
 
 
 def generator_hook(video_path, pdp_iter: Iterable[PredictionDatapoint], progress_hook: Callable) -> Iterable[
@@ -61,8 +62,11 @@ def analyze_movie(video_handle: io.IOBase) -> {"results": io.IOBase, "video_resu
         p2p_progress_hook(size, size)
 
     visual_destination = os.path.splitext(video_file)[0]+'_results.mp4'
+    visual_destination_good_codec = os.path.splitext(video_file)[0]+'_results_good_codec.mp4'
     compare_multiple_dataframes(video_file,
                                 visual_destination,
                                 df)
+
+    subprocess.call(["ffmpeg", "-i", visual_destination, visual_destination_good_codec])
     return {"results": open(destination, 'rb'),
-            "video_results": open(visual_destination, 'rb')}
+            "video_results": open(visual_destination_good_codec, 'rb')}

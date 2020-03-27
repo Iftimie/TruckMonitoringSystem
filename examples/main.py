@@ -43,7 +43,6 @@ def open_browser_func(self, localhost):
     """
         Adapted from https://github.com/ClimenteA/flaskwebgui/blob/master/src/flaskwebgui.py
     """
-
     browser_path = self.find_browser()
 
     if browser_path:
@@ -142,13 +141,10 @@ def check_status():
 @app.route('/show_video')
 def show_video():
     item = monitoring.item_by_func_and_id(client_app, analyze_movie, request.args.get('doc_id'))
-
     plots_gen = html_imgs_generator(item['video_handle'].name, item['results'].name)
-
     try:
         first_image = next(plots_gen)
         video_url = "/cdn" + item['video_results'].name
-        print(video_url)
         resp = make_response(render_template("show_video.html", first_image_str=first_image, images=plots_gen,
                                              video_results=video_url))
     except StopIteration:
@@ -159,9 +155,8 @@ def show_video():
 # Custom static data
 @app.route('/cdn/<path:filename>')
 def custom_static(filename):
-    print("heereee", filename)
-    print("/"+osp.dirname(filename), osp.basename(filename))
     return send_from_directory("/"+osp.dirname(filename), osp.basename(filename))
+
 
 @app.route('/')
 def root():
@@ -174,7 +169,7 @@ def index():
     return resp
 
 
-uiapp = FlaskUI(app, host="0.0.0.0", port=5001)
+uiapp = FlaskUI(app, host="localhost", port=5001)
 uiapp.browser_thread = Thread(target=partial(open_browser_func, uiapp, localhost='http://127.0.0.1:{}/'.format(5001)))
 
 uiapp.run()
