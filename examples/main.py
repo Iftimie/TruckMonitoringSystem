@@ -2,7 +2,7 @@ from examples.function import analyze_movie
 import os.path as osp
 from truckms.inference.neural import pandas_to_pred_iter, pred_iter_to_pandas, plot_detections
 from truckms.inference.utils import framedatapoint_generator_by_frame_ids2
-from flask import render_template, redirect, url_for, Flask
+from flask import render_template, redirect, url_for, Flask, request, send_file, send_from_directory
 from flask_bootstrap import Bootstrap
 import base64
 import cv2
@@ -17,13 +17,14 @@ from functools import partial
 from p2prpc.p2p_client import create_p2p_client_app
 import signal
 from p2prpc import monitoring
+import datetime
 
 
 password = "super secret password"
 root_dir = '/home/achellaris/projects_data/main_dir'
 path = osp.join(root_dir, 'clientdb')
 client_app = create_p2p_client_app(osp.join(root_dir, "network_discovery_client.txt"), password=password, cache_path=path)
-analyze_movie = client_app.register_p2p_func(can_do_locally_func=lambda: True)(analyze_movie)
+dec_analyze_movie = client_app.register_p2p_func(can_do_locally_func=lambda: True)(analyze_movie)
 app = Flask(__name__, template_folder=osp.join(osp.dirname(__file__), 'templates'),
             static_folder=osp.join(osp.dirname(__file__), 'templates', 'assets'))
 Bootstrap(app)
@@ -108,7 +109,7 @@ def gui_select_file():
 def file_select():
     fname = gui_select_file()
     if fname != '':
-        analyze_movie(video_handle=open(fname, 'rb'))
+        dec_analyze_movie(video_handle=open(fname, 'rb'))
         return redirect(url_for("check_status"))
     else:
         return redirect(url_for("index"))
@@ -117,17 +118,22 @@ def file_select():
 @app.route('/check_status')
 def check_status():
     video_items = []
-    query = []
     all_items = monitoring.function_call_states(client_app)
 
-
-    for item in query:
-        video_items.append({'filename': item.file_path,
-                            'status': 'ready' if item.results_path is not None else 'processing',
-                            'progress': item.progress,
-                            'time_of_request': item.time_of_request.strftime(
-                                "%m/%d/%Y, %H:%M:%S") if item.time_of_request is not None else 'none'})
-    partial_destination_url = '/show_video?filename='
+    for item in all_items:
+        tstamp2dtime = 'none'
+        status = 'processing'
+        if item['timestamp']:
+            tstamp2dtime = datetime.datetime.utcfromtimestamp(item['timestamp'])
+        if item['video_results']:
+            status = 'ready'
+        video_items.append({'filename': item['video_handle'].name,
+                            'status': status,
+                            'progress': item['progress'],
+                            'time_of_request': tstamp2dtime,
+                            'identifier': str(item['identifier'])},
+                           )
+    partial_destination_url = '/show_video?doc_id='
     resp = make_response(render_template("check_status.html", partial_destination_url=partial_destination_url,
                                          video_items=video_items))
     return resp
@@ -135,24 +141,27 @@ def check_status():
 
 @app.route('/show_video')
 def show_video():
-    item = []
+    item = monitoring.item_by_func_and_id(client_app, analyze_movie, request.args.get('doc_id'))
 
-    plots_gen = html_imgs_generator(item.file_path, item.results_path)
+    plots_gen = html_imgs_generator(item['video_handle'].name, item['results'].name)
 
     try:
         first_image = next(plots_gen)
-        resp = make_response(render_template("show_video.html", first_image_str=first_image, images=plots_gen))
+        video_url = "/cdn" + item['video_results'].name
+        print(video_url)
+        resp = make_response(render_template("show_video.html", first_image_str=first_image, images=plots_gen,
+                                             video_results=video_url))
     except StopIteration:
         resp = make_response(render_template("show_video.html", first_image_str='', images=[]))
     return resp
 
 
-@app.route("/show_nodestates")
-def show_workers():
-    node_list = []
-    resp = make_response(render_template("show_nodestates.html", worker_list=node_list))
-    return resp
-
+# Custom static data
+@app.route('/cdn/<path:filename>')
+def custom_static(filename):
+    print("heereee", filename)
+    print("/"+osp.dirname(filename), osp.basename(filename))
+    return send_from_directory("/"+osp.dirname(filename), osp.basename(filename))
 
 @app.route('/')
 def root():

@@ -30,7 +30,7 @@
                                 onclick="window.location.href='{{ partial_destination_url + row['identifier'] }}'"
                               {% endif %}
                               >
-                        {{ row['identifier'] }}</button></td>
+                        {{ row['filename'] }}</button></td>
                   <td>{{ row['status'] }}</td>
                   <td>{{ "{:.2f}".format(row['progress'])}}</td>
                   <td>{{ row['time_of_request'] }}</td>

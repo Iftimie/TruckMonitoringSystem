@@ -60,7 +60,7 @@ def analyze_movie(video_handle: io.IOBase) -> {"results": io.IOBase, "video_resu
         size = get_video_file_size(video_file) - 1
         p2p_progress_hook(size, size)
 
-    visual_destination = os.path.splitext(video_file)[0]+'_results.avi'
+    visual_destination = os.path.splitext(video_file)[0]+'_results.mp4'
     compare_multiple_dataframes(video_file,
                                 visual_destination,
                                 df)

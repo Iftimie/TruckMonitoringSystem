@@ -110,7 +110,7 @@ def create_avi(path_to_avi, first_image):
         path_to_avi: path to avi
         first_image: numpy array
     """
-    avi_file = cv2.VideoWriter(path_to_avi, cv2.VideoWriter_fourcc(*'DIVX'), 25, (first_image.shape[1], first_image.shape[0]))
+    avi_file = cv2.VideoWriter(path_to_avi, cv2.VideoWriter_fourcc(*'mp4v'), 25, (first_image.shape[1], first_image.shape[0]))
 
     def append_fn(image):
         avi_file.write(image)
