@@ -169,6 +169,13 @@ def index():
     return resp
 
 
+@app.route("/show_nodestates")
+def show_workers():
+    node_list = []
+    resp = make_response(render_template("show_nodestates.html", worker_list=node_list))
+    return resp
+
+
 uiapp = FlaskUI(app, host="localhost", port=5001)
 uiapp.browser_thread = Thread(target=partial(open_browser_func, uiapp, localhost='http://127.0.0.1:{}/'.format(5001)))
 

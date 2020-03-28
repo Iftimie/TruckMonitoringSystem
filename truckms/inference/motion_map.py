@@ -6,9 +6,9 @@ from torch.nn import functional as F
 from torch.utils.data.dataloader import default_collate
 import torch
 from itertools import tee
-from truckms.inference.utils import framedatapoint_generator
 import cv2
 import numpy as np
+from truckms.inference.utils import framedatapoint_generator, get_video_file_size
 
 
 class GaussianSmoothing(nn.Module):
@@ -186,7 +186,7 @@ def motion_expander(array_motion, kernel_size=35):
     return np.array(new_array)
 
 
-def movement_frames_indexes(video_test, movement_gen=movement_generator, motion_filter=motion_filter):
+def movement_frames_indexes(video_test, movement_gen=movement_generator, motion_filter=motion_filter, progress_hook=None):
     """
     Function that finds frames in a video file where motion is present in the sequence.
     Args:
@@ -197,7 +197,14 @@ def movement_frames_indexes(video_test, movement_gen=movement_generator, motion_
     Returns:
         array of frame ids where motion is present
     """
-    movement_array = np.array([motion_presence for motion_presence in motion_filter(movement_gen(video_test))])
+    size = get_video_file_size(video_test) - 1
+    movement_array = []
+    checkpoint = int((size - 1) * 5 / 100)
+    for i, motion_presence in enumerate(motion_filter(movement_gen(video_test))):
+        if progress_hook is not None and (i + 1) % checkpoint == 0:
+            progress_hook(i, size)
+        movement_array.append(motion_presence)
+    movement_array = np.array(movement_array)
     expanded_array = motion_expander(movement_array)
     res = np.where(expanded_array)[0]
     return res

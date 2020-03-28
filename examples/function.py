@@ -8,10 +8,12 @@ import os
 from truckms.evaluation.comparison import compare_multiple_dataframes
 from truckms.api import PredictionDatapoint
 from p2prpc.p2p_client import p2p_progress_hook
+from p2prpc.p2p_client import p2p_save, p2p_load
 import io
 from truckms.inference.motion_map import movement_frames_indexes
 from truckms.inference.analytics import filter_pred_detections
 import subprocess
+import numpy as np
 
 
 def generator_hook(video_path, pdp_iter: Iterable[PredictionDatapoint], progress_hook: Callable) -> Iterable[
@@ -41,11 +43,11 @@ def analyze_movie(video_handle: io.IOBase) -> {"results": io.IOBase, "video_resu
 
     video_handle.close()
     video_file = video_handle.name
-    frame_ids = movement_frames_indexes(video_file)
+    frame_ids = p2p_load('frame_ids', loading_func=lambda filepath: np.load(filepath))
     if frame_ids is None:
-        image_gen = framedatapoint_generator(video_file, skip=0, reason=None)
-    else:
-        image_gen = framedatapoint_generator_by_frame_ids2(video_file, frame_ids, reason="motionmap")
+        frame_ids = movement_frames_indexes(video_file, progress_hook=p2p_progress_hook)
+        p2p_save("frame_ids", frame_ids, saving_func=lambda filepath, item: np.save(filepath, item))
+    image_gen = framedatapoint_generator_by_frame_ids2(video_file, frame_ids, reason="motionmap")
 
     # TODO set batchsize by the available VRAM
     pred_gen = compute(image_gen, model=model, batch_size=5)
