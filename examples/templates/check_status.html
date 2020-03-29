@@ -34,6 +34,13 @@
                   <td>{{ row['status'] }}</td>
                   <td>{{ "{:.2f}".format(row['progress'])}}</td>
                   <td>{{ row['time_of_request'] }}</td>
+                  <td><button type="button"
+                              style="width:100%"
+                              class="btn btn-indigo btn-sm m-0"
+                              onclick="window.location.href='{{ restart_url + row['identifier'] }}'"
+                              >
+                        Restart</button>
+                  </td>
               </tr>
             {% endfor %}
           </tbody>

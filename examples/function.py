@@ -46,7 +46,7 @@ def analyze_movie(video_handle: io.IOBase) -> {"results": io.IOBase, "video_resu
     frame_ids = p2p_load('frame_ids', loading_func=lambda filepath: np.load(filepath))
     if frame_ids is None:
         frame_ids = movement_frames_indexes(video_file, progress_hook=p2p_progress_hook)
-        p2p_save("frame_ids", frame_ids, saving_func=lambda filepath, item: np.save(filepath, item))
+        p2p_save("frame_ids", frame_ids, saving_func=lambda filepath, item: np.save(filepath, item), filesuffix=".npy")
     image_gen = framedatapoint_generator_by_frame_ids2(video_file, frame_ids, reason="motionmap")
 
     # TODO set batchsize by the available VRAM

@@ -126,14 +126,17 @@ def check_status():
             tstamp2dtime = datetime.datetime.utcfromtimestamp(item['timestamp'])
         if item['video_results']:
             status = 'ready'
-        video_items.append({'filename': item['video_handle'].name,
+        video_items.append({'filename': osp.basename(item['video_handle'].name),
                             'status': status,
                             'progress': item['progress'],
                             'time_of_request': tstamp2dtime,
                             'identifier': str(item['identifier'])},
                            )
     partial_destination_url = '/show_video?doc_id='
-    resp = make_response(render_template("check_status.html", partial_destination_url=partial_destination_url,
+    restart_url = '/restart_function?doc_id='
+    resp = make_response(render_template("check_status.html",
+                                         partial_destination_url=partial_destination_url,
+                                         restart_url=restart_url,
                                          video_items=video_items))
     return resp
 
@@ -149,6 +152,14 @@ def show_video():
                                              video_results=video_url))
     except StopIteration:
         resp = make_response(render_template("show_video.html", first_image_str='', images=[]))
+    return resp
+
+
+@app.route('/restart_function')
+def restart_function():
+    future = client_app.create_future(analyze_movie, request.args.get('doc_id'))
+    future.restart_func()
+    resp = redirect(url_for('check_status'))
     return resp
 
 
