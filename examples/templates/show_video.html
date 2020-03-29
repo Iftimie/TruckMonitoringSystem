@@ -10,7 +10,7 @@
     <div class="card-body p-5">
       <h1 class="font-weight-light"> Video results </h1>
       <p class="lead"> Swipe left right for detections </p>
-      <div style="height: 700px">
+      <div style="height: 1400px">
           <center>
               <div id="carouselExampleControls" class="carousel slide" data-ride="carousel">
                   <div class="carousel-inner">
@@ -35,6 +35,10 @@
                   </a>
               </div>
           </center>
+           <video style="max-height: 600px; width:100%;" controls>
+              <source src="{{ video_results }}" type="video/mp4">
+            Your browser does not support the video tag.
+            </video>
       </div>
     </div>
   </div>

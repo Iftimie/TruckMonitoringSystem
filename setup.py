@@ -35,7 +35,8 @@ setuptools.setup(
         'gputil',
         'sqlalchemy',
         'netifaces',
-        'typing-extensions'
+        'typing-extensions',
+        'tkinter'
       ],
 
     keywords=['object', 'detection', 'truck']

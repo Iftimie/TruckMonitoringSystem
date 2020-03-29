@@ -24,3 +24,8 @@ netifaces
 requests-toolbelt
 typing-extensions
 dill
+multipledispatch
+varint
+mmh3
+passlib
+pymongo

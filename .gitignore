@@ -25,5 +25,5 @@ examples/evaluation/results_every_frame/
 examples/evaluation/here.avi
 
 tmsvenv/
-examples/log.txt
 *.bin
+*.log
