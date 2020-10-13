@@ -15,6 +15,7 @@ from flaskwebgui import FlaskUI  # get the FlaskUI class
 from threading import Thread
 from functools import partial
 from p2prpc.p2p_client import create_p2p_client_app
+from p2prpc.errors import ClientFutureTimeoutError
 import signal
 import datetime
 from p2prpc import monitoring
@@ -111,7 +112,8 @@ def gui_select_file():
 def file_select():
     fname = gui_select_file()
     if fname != '':
-        dec_analyze_movie(video_handle=open(fname, 'rb'))
+        res = dec_analyze_movie(video_handle=open(fname, 'rb'))
+        res.get()
         return redirect(url_for("check_status"))
     else:
         return redirect(url_for("index"))
@@ -122,18 +124,30 @@ def check_status():
     video_items = []
     all_items = monitoring.function_call_states(client_app)
 
-    for item in all_items:
-        tstamp2dtime = 'none'
-        status = 'processing'
-        if item['timestamp']:
-            tstamp2dtime = datetime.datetime.utcfromtimestamp(item['timestamp'])
-        if item['video_results']:
-            status = 'ready'
-        video_items.append({'filename': osp.basename(item['video_handle'].name),
-                            'status': status,
-                            'progress': item['progress'],
-                            'time_of_request': tstamp2dtime,
-                            'identifier': str(item['identifier'])},
+    for future in all_items:
+        res = None
+        try:
+            res = future.get(10)
+        except Exception:
+            continue
+        # tstamp2dtime = 'none'
+        # status = 'processing'
+        # if 'timestamp' in item.p2parguments.kwargs:
+        #     tstamp2dtime = datetime.datetime.utcfromtimestamp(item.p2parguments.kwargs['timestamp'])
+        # if item.p2parguments.outputs['video_results']:
+        #     status = 'ready'
+        # video_items.append({'filename': osp.basename(item.p2parguments.kwargs['video_handle']),
+        #                     'status': status,
+        #                     'progress': item.p2parguments.outputs['progress'],
+        #                     'time_of_request': tstamp2dtime,
+        #                     'identifier': str(item.p2parguments.args_identifier)},
+        #                    )
+        print(res)
+        video_items.append({'filename': 'asdasd',
+                            'status': 'asdasd',
+                            'progress': 100.0,
+                            'time_of_request': 'asdasd',
+                            'identifier': 'asdasd'},
                            )
     partial_destination_url = '/show_video?doc_id='
     restart_url = '/restart_function?doc_id='
@@ -191,6 +205,7 @@ def show_workers():
 
 uiport = 3000
 uiapp = FlaskUI(app, host="localhost", port=uiport)
+uiapp.browser_path = uiapp.get_default_chrome_path()
 uiapp.browser_thread = Thread(target=partial(open_browser_func, uiapp, localhost='http://127.0.0.1:{}/'.format(uiport)))
 
 uiapp.run()

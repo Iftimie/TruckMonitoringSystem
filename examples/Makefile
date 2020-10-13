@@ -22,7 +22,7 @@ services:
 	sudo docker-compose -f client/client.docker-compose.yml build
 	sudo docker-compose -f client/client.docker-compose.yml up -d
 
-	p2prpc generate-worker function.py discovery.txt
+	p2prpc generate-worker function.py discovery.txt --volumes ../truckms
 
 	sudo docker-compose -f worker/worker.docker-compose.yml build
 	sudo docker-compose -f worker/worker.docker-compose.yml up -d
@@ -47,10 +47,13 @@ checkservices:
 	@sudo printf 'mongo-broker  ' >> 'iplist.txt'; sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mongo-broker >> 'iplist.txt'
 	@sudo printf 'mongo-worker  '; sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mongo-worker
 	@sudo printf 'mongo-worker  ' >> 'iplist.txt'; sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' mongo-worker >> 'iplist.txt'
+	@sudo printf 'broker        '; sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' broker
 
 logbroker:
 	sudo docker-compose -f broker/broker.docker-compose.yml logs -f broker
 
+logworker:
+	sudo docker-compose -f worker/worker.docker-compose.yml logs -f worker
 
 run:
 	@$(MAKE) -f $(THIS_FILE) cleandbs
