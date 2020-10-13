@@ -30,7 +30,7 @@ def generator_hook(video_path, pdp_iter: Iterable[PredictionDatapoint], progress
         yield pdp
 
 
-def analyze_movie(video_handle: io.IOBase) -> {"results": io.IOBase, "video_results": io.IOBase}:
+def p2prpc_analyze_movie(video_handle: io.IOBase) -> {"results": io.IOBase, "video_results": io.IOBase}:
     """
     Args:
         video_handle: file object for the movie to be analyzed.

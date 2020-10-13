@@ -1,5 +1,5 @@
-from examples.function import analyze_movie
 import os.path as osp
+import os
 from truckms.inference.neural import pandas_to_pred_iter, pred_iter_to_pandas, plot_detections
 from truckms.inference.utils import framedatapoint_generator_by_frame_ids2
 from flask import render_template, redirect, url_for, Flask, request, send_file, send_from_directory
@@ -16,19 +16,22 @@ from threading import Thread
 from functools import partial
 from p2prpc.p2p_client import create_p2p_client_app
 import signal
-from p2prpc import monitoring
 import datetime
+from p2prpc import monitoring
+from function import p2prpc_analyze_movie
 
 
 password = "super secret password"
 root_dir = '/home/achellaris/projects_data/main_dir'
 path = osp.join(root_dir, 'clientdb')
 client_app = create_p2p_client_app(osp.join(root_dir, "network_discovery_client.txt"), password=password, cache_path=path)
-dec_analyze_movie = client_app.register_p2p_func(can_do_locally_func=lambda: True)(analyze_movie)
+dec_analyze_movie = client_app.register_p2p_func()(p2prpc_analyze_movie)
+
 app = Flask(__name__, template_folder=osp.join(osp.dirname(__file__), 'templates'),
             static_folder=osp.join(osp.dirname(__file__), 'templates', 'assets'))
 Bootstrap(app)
 #/home/achellaris/projects/TruckMonitoringSystem/tests/truckms/service/data/cut.mkv
+#/home/achellaris/big_data/tms_data/good_data/output_8.mp4
 
 
 def shutdown_clientapp():
@@ -182,12 +185,12 @@ def index():
 
 @app.route("/show_nodestates")
 def show_workers():
-    node_list = []
-    resp = make_response(render_template("show_nodestates.html", worker_list=node_list))
+    res = monitoring.get_node_states("localhost:5000")
+    resp = make_response(render_template("show_nodestates.html", worker_list=res))
     return resp
 
-
-uiapp = FlaskUI(app, host="localhost", port=5001)
-uiapp.browser_thread = Thread(target=partial(open_browser_func, uiapp, localhost='http://127.0.0.1:{}/'.format(5001)))
+uiport = 3000
+uiapp = FlaskUI(app, host="localhost", port=uiport)
+uiapp.browser_thread = Thread(target=partial(open_browser_func, uiapp, localhost='http://127.0.0.1:{}/'.format(uiport)))
 
 uiapp.run()
