@@ -27,3 +27,9 @@ examples/evaluation/here.avi
 tmsvenv/
 *.bin
 *.log
+
+broker/
+client/
+worker/
+
+iplist.txt

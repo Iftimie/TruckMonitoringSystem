@@ -4,7 +4,8 @@ SHELL:=/bin/bash
 THIS_FILE := $(lastword $(MAKEFILE_LIST))
 
 services:
-	p2prpc generate-broker function.py --volumes ../truckms
+	cd P2P-RPC/; python setup.py install; cd ..
+	p2prpc generate-broker function.py
 	sudo docker-compose -f broker/broker.docker-compose.yml build
 	sudo docker-compose -f broker/broker.docker-compose.yml up -d
 
@@ -21,8 +22,9 @@ services:
 
 	sudo docker-compose -f client/client.docker-compose.yml build
 	sudo docker-compose -f client/client.docker-compose.yml up -d
+	rm -R client/p2prpc
 
-	p2prpc generate-worker function.py discovery.txt --volumes ../truckms
+	p2prpc generate-worker function.py discovery.txt
 
 	sudo docker-compose -f worker/worker.docker-compose.yml build
 	sudo docker-compose -f worker/worker.docker-compose.yml up -d
