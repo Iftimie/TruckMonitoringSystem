@@ -113,7 +113,10 @@ def file_select():
     fname = gui_select_file()
     if fname != '':
         res = dec_analyze_movie(video_handle=open(fname, 'rb'))
-        res.get()
+        try:
+            res.get(5)
+        except ClientFutureTimeoutError:
+            pass
         return redirect(url_for("check_status"))
     else:
         return redirect(url_for("index"))
@@ -126,29 +129,21 @@ def check_status():
 
     for future in all_items:
         res = None
+        status = 'processing'
+        tstamp2dtime = datetime.datetime.utcfromtimestamp(future.p2pclientarguments.p2parguments.timestamp)
         try:
-            res = future.get(10)
-        except Exception:
-            continue
-        # tstamp2dtime = 'none'
-        # status = 'processing'
-        # if 'timestamp' in item.p2parguments.kwargs:
-        #     tstamp2dtime = datetime.datetime.utcfromtimestamp(item.p2parguments.kwargs['timestamp'])
-        # if item.p2parguments.outputs['video_results']:
-        #     status = 'ready'
-        # video_items.append({'filename': osp.basename(item.p2parguments.kwargs['video_handle']),
-        #                     'status': status,
-        #                     'progress': item.p2parguments.outputs['progress'],
-        #                     'time_of_request': tstamp2dtime,
-        #                     'identifier': str(item.p2parguments.args_identifier)},
-        #                    )
-        print(res)
-        video_items.append({'filename': 'asdasd',
-                            'status': 'asdasd',
-                            'progress': 100.0,
-                            'time_of_request': 'asdasd',
-                            'identifier': 'asdasd'},
-                           )
+            future.get(10)
+            status = 'ready'
+        except ClientFutureTimeoutError:
+            pass
+        video_basename = osp.basename(future.p2pclientarguments.p2parguments.kwargs['video_handle'].name)
+        progress = future.p2pclientarguments.p2parguments.outputs['progress']
+        video_items.append({'filename': video_basename,
+                            'status': status,
+                            'progress': progress,
+                            'time_of_request': tstamp2dtime,
+                            'identifier': future.p2pclientarguments.p2parguments.args_identifier})
+
     partial_destination_url = '/show_video?doc_id='
     restart_url = '/restart_function?doc_id='
     resp = make_response(render_template("check_status.html",
@@ -160,11 +155,11 @@ def check_status():
 
 @app.route('/show_video')
 def show_video():
-    item = monitoring.item_by_func_and_id(client_app, analyze_movie, request.args.get('doc_id'))
-    plots_gen = html_imgs_generator(item['video_handle'].name, item['results'].name)
+    item = monitoring.item_by_func_and_id(client_app, p2prpc_analyze_movie, request.args.get('doc_id'))
+    plots_gen = html_imgs_generator(item.p2parguments.outputs['video_results'].name, item.p2parguments.outputs['results'].name)
     try:
         first_image = next(plots_gen)
-        video_url = "/cdn" + item['video_results'].name
+        video_url = "/cdn" + item.p2parguments.outputs['video_results'].name
         resp = make_response(render_template("show_video.html", first_image_str=first_image, images=plots_gen,
                                              video_results=video_url))
     except StopIteration:

@@ -3,7 +3,7 @@ SHELL:=/bin/bash
 .PHONY: services delete checkservices test evaluatedbs logbroker
 THIS_FILE := $(lastword $(MAKEFILE_LIST))
 
-services:
+buildandstart:
 	cd P2P-RPC/; python setup.py install; cd ..
 	p2prpc generate-broker function.py
 	sudo docker-compose -f broker/broker.docker-compose.yml build
@@ -29,6 +29,11 @@ services:
 	sudo docker-compose -f worker/worker.docker-compose.yml build
 	sudo docker-compose -f worker/worker.docker-compose.yml up -d
 	@$(MAKE) -f $(THIS_FILE) checkservices
+
+startservices:
+	sudo docker-compose -f broker/broker.docker-compose.yml up -d
+	sudo docker-compose -f client/client.docker-compose.yml up -d
+	sudo docker-compose -f worker/worker.docker-compose.yml up -d
 
 delete:
 	sudo docker-compose -f broker/broker.docker-compose.yml kill || true
