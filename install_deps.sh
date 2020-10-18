@@ -1,22 +1,23 @@
 apt-get install python3-tk -y
+
 apt install ffmpeg -y
-pip3 install torch==1.3.0+cpu \
-torchvision==0.4.1+cpu -f https://download.pytorch.org/whl/torch_stable.html \
-wheel \
+pip3 install cython
+pip3 install torch==1.3.0+cpu torchvision==0.4.1+cpu -f https://download.pytorch.org/whl/torch_stable.html
+
+pip3 install wheel \
 opencv-contrib-python \
 opencv-python \
 matplotlib \
 deprecated \
 numpy \
-pandas==0.24.2 \
+pandas \
 typing \
 youtube_dl \
 flask \
-pillow==6.1 \
+pillow \
 Flask-Bootstrap4 \
 pytest \
 tqdm \
-Cython \
 pytest-mock \
 mock \
 flaskwebgui \
@@ -38,6 +39,4 @@ gputil \
 eel \
 sqlalchemy \
 tinymongo
-
-pip3 install git+https://github.com/Iftimie/TruckMonitoringSystem.git \
 

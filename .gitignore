@@ -33,3 +33,6 @@ client/
 worker/
 
 iplist.txt
+
+deleteme.py
+discovery.txt
