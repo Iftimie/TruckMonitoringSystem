@@ -32,6 +32,7 @@ passlib \
 pymongo
 
 python -m pip install git+https://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI \
+skelarn \
 progressbar \
 gputil \
 
