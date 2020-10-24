@@ -1,10 +1,12 @@
-add-apt-repository ppa:deadsnakes/ppa
+add-apt-repository ppa:deadsnakes/ppa -y
 apt-get update
 apt-get install python3.6 -y
 apt install python3-pip -y
 apt install python3.6-dev -y
 echo "alias python=\"python3.6\"" >> ~/.bashrc
 echo "alias pip3=\"/usr/bin/python3.6 -m pip\"" >> ~/.bashrc
+shopt -s expand_aliases # this seems to not be recomeneded
+#https://unix.stackexchange.com/questions/1496/why-doesnt-my-bash-script-recognize-aliases
 source ~/.bashrc
 
 bash install_deps.sh

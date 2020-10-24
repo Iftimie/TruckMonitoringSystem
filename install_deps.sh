@@ -1,3 +1,9 @@
+echo "alias python=\"python3.6\"" >> ~/.bashrc
+echo "alias pip3=\"/usr/bin/python3.6 -m pip\"" >> ~/.bashrc
+shopt -s expand_aliases # this seems to not be recomeneded
+#https://unix.stackexchange.com/questions/1496/why-doesnt-my-bash-script-recognize-aliases
+source ~/.bashrc
+
 apt-get install python3-tk -y
 
 apt install ffmpeg -y

@@ -6,8 +6,8 @@ sudo docker-compose -f broker/broker.docker-compose.yml up -d
 output=$(sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' broker-discovery);
 while [[ "$output" == "" ]]; do
   output=$(sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' broker-discovery);
-  echo $$output;
+  echo $output;
   sleep 1;
 done;
-echo $$output:5002 > 'discovery.txt';
+echo $output:5002 > 'discovery.txt';
 cat 'discovery.txt';
