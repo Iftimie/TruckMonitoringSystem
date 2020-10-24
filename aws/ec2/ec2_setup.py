@@ -77,6 +77,10 @@ def setup_security_group(group_name, group_description, ssh_ingress_ip=None):
             # HTTPS ingress open to anyone
             'IpProtocol': 'tcp', 'FromPort': 443, 'ToPort': 443,
             'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
+        }, {
+            # HTTPS ingress open to anyone
+            'IpProtocol': 'tcp', 'FromPort': 5001, 'ToPort': 5002,
+            'IpRanges': [{'CidrIp': '0.0.0.0/0'}]
         }]
         if ssh_ingress_ip is not None:
             ip_permissions.append({

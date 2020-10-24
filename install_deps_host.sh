@@ -3,13 +3,51 @@ apt-get update
 apt-get install python3.6 -y
 apt install python3-pip -y
 apt install python3.6-dev -y
-echo "alias python=\"python3.6\"" >> ~/.bashrc
-echo "alias pip3=\"/usr/bin/python3.6 -m pip\"" >> ~/.bashrc
-shopt -s expand_aliases # this seems to not be recomeneded
-#https://unix.stackexchange.com/questions/1496/why-doesnt-my-bash-script-recognize-aliases
-source ~/.bashrc
 
-bash install_deps.sh
+
+
+apt-get install python3-tk -y
+
+apt install ffmpeg -y
+/usr/bin/python3.6 -m pip install cython
+/usr/bin/python3.6 -m pip install torch==1.3.0+cpu torchvision==0.4.1+cpu -f https://download.pytorch.org/whl/torch_stable.html
+
+/usr/bin/python3.6 -m pip install wheel \
+opencv-contrib-python \
+opencv-python \
+matplotlib \
+deprecated \
+numpy \
+pandas \
+typing \
+flask \
+pillow \
+Flask-Bootstrap4 \
+pytest \
+tqdm \
+pytest-mock \
+mock \
+flaskwebgui \
+requests \
+netifaces \
+requests-toolbelt \
+typing-extensions \
+dill \
+multipledispatch \
+varint \
+mmh3 \
+passlib \
+pymongo
+
+/usr/bin/python3.6 -m pip install git+https://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI \
+progressbar \
+gputil \
+
+
+
+
+
+
 
 apt-get install \
     apt-transport-https \
@@ -32,4 +70,4 @@ git submodule init
 git submodule update
 
 cd P2P-RPC/; sudo /usr/bin/python3.6 setup.py install; cd ..
-echo "export PATH=\"`python3.6 -m site --user-base`/bin:$PATH\"" >> ~/.bashrc
+echo "export PATH=\"`/usr/bin/python3.6 -m site --user-base`/bin:$PATH\"" >> ~/.bashrc
