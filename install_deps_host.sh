@@ -40,7 +40,7 @@ passlib \
 pymongo
 
 /usr/bin/python3.6 -m pip install git+https://github.com/philferriere/cocoapi.git#subdirectory=PythonAPI \
-skelarn \
+sklearn \
 progressbar \
 gputil \
 
