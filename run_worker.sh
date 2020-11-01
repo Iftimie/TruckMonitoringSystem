@@ -1,3 +1,3 @@
-p2prpc generate-client function.py
-sudo docker-compose -f client/client.docker-compose.yml build
-sudo docker-compose -f client/client.docker-compose.yml up -d
+p2prpc generate-worker function.py discovery.txt
+sudo docker-compose -f worker/worker.docker-compose.yml build
+sudo docker-compose -f worker/worker.docker-compose.yml up -d

@@ -140,7 +140,7 @@ def check_status():
         progress = future.p2pclientarguments.p2parguments.outputs['progress']
         video_items.append({'filename': video_basename,
                             'status': status,
-                            'progress': progress,
+                            'progress': progress if progress is not None else 0.0,
                             'time_of_request': tstamp2dtime,
                             'identifier': future.p2pclientarguments.p2parguments.args_identifier})
 

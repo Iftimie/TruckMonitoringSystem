@@ -48,16 +48,20 @@ def setup_demo(current_ip_address, ami_image_id, key_file_name):
         f'Demo group that allows SSH from {current_ip_address}.',
         current_ip_address)
 
-    ssh_instance = ec2_setup.create_instance(
+    ssh_instance_broker = ec2_setup.create_instance(
+        ami_image_id, 't2.micro', key_pair.key_name, [ssh_sec_group.group_name])
+
+    ssh_instance_worker = ec2_setup.create_instance(
         ami_image_id, 't2.micro', key_pair.key_name, [ssh_sec_group.group_name])
 
     print(f"Waiting for instances to start...")
-    ssh_instance.wait_until_running()
+    ssh_instance_broker.wait_until_running()
+    ssh_instance_worker.wait_until_running()
 
-    return (ssh_instance,), (ssh_sec_group, ), key_pair
+    return (ssh_instance_broker, ssh_instance_worker), (ssh_sec_group, ), key_pair
 
 
-def management_demo(ssh_instance, key_file_name):
+def management_demo(ssh_instance_broker, ssh_instance_worker, key_file_name):
     """
     Shows how to perform management actions on an Amazon EC2 instance.
     * Associate an Elastic IP address with an instance.
@@ -73,16 +77,22 @@ def management_demo(ssh_instance, key_file_name):
     :param key_file_name: The name of a local file that contains the private key
                           for the demonstration instances.
     """
-    ssh_instance.load()
+    ssh_instance_broker.load()
+    ssh_instance_worker.load()
 
-    print(f"At this point, you can SSH to instance {ssh_instance.instance_id} "
+    print(f"At this point, you can SSH to broker {ssh_instance_broker.instance_id} "
           f"at another command prompt by running")
-    print(f"\tssh -i {key_file_name} ubuntu@{ssh_instance.public_ip_address}")
-    print("If the connection attempt times out, you might have to manually update "
-          "the SSH ingress rule for your IP address in the AWS Management Console.")
+    print(f"\tssh -i {key_file_name} ubuntu@{ssh_instance_broker.public_ip_address}")
+
+    print(f"At this point, you can SSH to worker {ssh_instance_worker.instance_id} "
+          f"at another command prompt by running")
+    print(f"\tssh -i {key_file_name} ubuntu@{ssh_instance_worker.public_ip_address}")
+
     os.system('chmod 400 demo-key-file.pem')
-    with open('ip.txt', 'w') as f:
-        f.write(ssh_instance.public_ip_address)
+    with open('ip_broker.txt', 'w') as f:
+        f.write(ssh_instance_broker.public_ip_address)
+    with open('ip_worker.txt', 'w') as f:
+        f.write(ssh_instance_worker.public_ip_address)
     input("Press Enter when you're ready to continue the demo.")
 
 
@@ -112,27 +122,6 @@ def teardown_demo(instances, security_groups, key_pair, key_file_name):
 
 
 def get_ami_image_id():
-    # # Use AWS Systems Manager to find the latest AMI with Amazon Linux 2, x64, and a
-    # # general-purpose EBS volume.
-    # ssm = boto3.client('ssm')
-    # ami_params = ssm.get_parameters_by_path(
-    #     Path='/aws/service/ami-amazon-linux-latest')
-    # amzn2_amis = [ap for ap in ami_params['Parameters'] if
-    #               all(query in ap['Name'] for query
-    #                   in ('amzn2', 'x86_64', 'gp2'))]
-    # if len(amzn2_amis) > 0:
-    #     ami_image_id = amzn2_amis[0]['Value']
-    #     print("Found an Amazon Machine Image (AMI) that includes Amazon Linux 2, "
-    #           "an x64 architecture, and a general-purpose EBS volume.")
-    #     pprint.pprint(amzn2_amis[0])
-    # elif len(ami_params) > 0:
-    #     ami_image_id = ami_params['Parameters'][0]['Value']
-    #     print("Found an Amazon Machine Image (AMI) to use for the demo.")
-    #     pprint.pprint(ami_params[0])
-    # else:
-    #     raise RuntimeError(
-    #         "Couldn't find any AMIs. Try a different path or find one in the "
-    #         "AWS Management Console.")
     ami_image_id = "ami-05c424d59413a2876"
     return ami_image_id
 
@@ -148,6 +137,8 @@ def run_demos():
         print(i)
 
     key_file_name = 'demo-key-file.pem'
+    if os.path.exists(key_file_name):
+        os.remove(key_file_name)
     instances, security_groups, key_pair = setup_demo(
         current_ip_address, get_ami_image_id(), key_file_name)
     management_demo(*instances, key_file_name)

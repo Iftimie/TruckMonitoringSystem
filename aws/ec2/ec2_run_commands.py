@@ -40,15 +40,30 @@ def ssh_login():
         cert = paramiko.RSAKey.from_private_key_file('demo-key-file.pem')
         c = paramiko.SSHClient()
         c.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        with open('ip.txt', 'r') as f:
-            ip = f.read()
-        c.connect(hostname=ip, username='ubuntu', pkey=cert)
+        with open('ip_broker.txt', 'r') as f:
+            ip_broker = f.read()
+        c.connect(hostname=ip_broker, username='ubuntu', pkey=cert)
         run_commands(c, ['git clone https://github.com/Iftimie/TruckMonitoringSystem.git',
                          'cd TruckMonitoringSystem; git checkout develop',
                          'cd TruckMonitoringSystem; git pull',
                          'cd TruckMonitoringSystem; ls',
                          'cd TruckMonitoringSystem; sudo bash install_deps_host.sh',
                          'cd TruckMonitoringSystem; sudo bash run_broker.sh'])
+        c.close()
+
+        with open('ip_worker.txt', 'r') as f:
+            ip_worker = f.read()
+        c.connect(hostname=ip_worker, username='ubuntu', pkey=cert)
+        run_commands(c, ['git clone https://github.com/Iftimie/TruckMonitoringSystem.git',
+                         'cd TruckMonitoringSystem; git checkout develop',
+                         'cd TruckMonitoringSystem; git pull',
+                         'cd TruckMonitoringSystem; ls',
+                         'echo "'+ip_broker+':5002" > TruckMonitoringSystem/discovery.txt',
+                         'cd TruckMonitoringSystem; ls',
+                         'cat TruckMonitoringSystem/discovery.txt',
+                         'cd TruckMonitoringSystem; sudo bash install_deps_host.sh',
+                         'sudo docker network create broker_mynet', # todo I have to fix this
+                         'cd TruckMonitoringSystem; sudo bash run_worker.sh'])
         c.close()
 
     except Exception as e:
